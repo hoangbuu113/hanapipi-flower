@@ -1,0 +1,55 @@
+:root {
+  --line-height-display-large: 1.08;
+  --line-height-display-section: 1.12;
+  --line-height-display-small: 1.18;
+}
+
+body .home-hero__copy h1,
+body .shop-page__intro h1,
+body .product-detail__title-row h1,
+body .product-not-found h1,
+body .bouquet-intro h1,
+body .bouquet-step h1,
+body .finder-intro h1,
+body .finder-page h1,
+body .checkout-page__intro h1,
+body .checkout-empty h1,
+body .auth-panel h1,
+body .account-page__intro h1,
+body .success-page h1,
+body .discovery-intro h1,
+body .cart-page__intro h1,
+body .information-page__intro h1 {
+  line-height: var(--line-height-display-large);
+}
+
+body .section-heading__title,
+body .home-page h2,
+body .occasion-tile span {
+  line-height: var(--line-height-display-section);
+}
+
+body .product-information h2,
+body .product-related h2,
+body .shop-filter-sheet__header h2,
+body .checkout-section legend,
+body .checkout-summary h2,
+body .cart-page__summary h2,
+body .cart-drawer h2,
+body .delivery-selector h2,
+body .account-profile h2,
+body .account-orders h2,
+body .account-signin h2,
+body .account-orders__empty h3,
+body .information-page__sections h2,
+body .discovery-empty h2,
+body .cart-page__empty h2 {
+  line-height: var(--line-height-display-small);
+}
+
+@media (max-width: 719px) {
+  :root {
+    --line-height-display-large: 1.1;
+    --line-height-display-section: 1.14;
+  }
+}

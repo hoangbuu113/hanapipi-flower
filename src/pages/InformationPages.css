@@ -1,0 +1,80 @@
+.information-page {
+  padding: clamp(64px, 9vw, 120px) 0 clamp(88px, 11vw, 144px);
+}
+
+.information-page__intro {
+  max-width: 760px;
+}
+
+.information-page__intro h1 {
+  max-width: 12ch;
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: clamp(3.25rem, 6vw, 5.75rem);
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  line-height: 1.02;
+}
+
+.information-page__intro > p:last-child {
+  max-width: 570px;
+  margin: 24px 0 0;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.information-page__sections {
+  display: grid;
+  max-width: 900px;
+  margin-top: clamp(56px, 8vw, 96px);
+  border-top: 1px solid var(--border);
+}
+
+.information-page__sections section {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.55fr) minmax(0, 1fr);
+  gap: clamp(28px, 6vw, 80px);
+  padding-block: 30px;
+  border-bottom: 1px solid var(--border);
+}
+
+.information-page__sections h2 {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.information-page__sections p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.information-page__action {
+  margin-top: 36px;
+}
+
+@media (max-width: 719px) {
+  .information-page {
+    padding-top: 52px;
+  }
+
+  .information-page__intro h1 {
+    font-size: clamp(3rem, 13vw, 4.25rem);
+    line-height: 1.04;
+  }
+
+  .information-page__sections section {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding-block: 25px;
+  }
+
+  .information-page__sections h2 {
+    font-size: 25px;
+  }
+}

@@ -1,0 +1,18 @@
+.discovery-page { padding: clamp(56px, 8vw, 112px) 0 clamp(88px, 10vw, 144px); }
+.discovery-intro { max-width: 710px; }
+.discovery-intro h1, .cart-page__intro h1 { max-width: 13ch; margin: 0; font-family: var(--font-family-display); font-size: clamp(3.25rem, 6vw, 5.75rem); font-weight: 600; letter-spacing: -.018em; line-height: 1.01; }
+.discovery-intro > p:last-child { margin: 24px 0 0; color: var(--text-muted); font-size: 16px; }
+.search-input { display: flex; align-items: center; gap: 12px; max-width: 720px; margin-top: clamp(48px, 7vw, 88px); border-bottom: 1px solid var(--text-primary); padding-bottom: 12px; }
+.search-input svg { width: 21px; flex: 0 0 auto; }
+.search-input input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text-primary); font-family: var(--font-family-display); font-size: clamp(1.75rem, 3vw, 2.5rem); font-weight: 600; line-height: 1.2; }
+.search-input input::placeholder { color: #a39e94; }
+.search-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 22px; }
+.search-suggestions > span { margin-right: 4px; color: var(--text-muted); font-size: 12px; }
+.search-suggestions button { min-height: 44px; border: 1px solid var(--border); padding: 0 12px; background: transparent; font-size: 12px; }
+.discovery-result-count { margin: 42px 0 0; color: var(--text-muted); font-size: 12px; }
+.discovery-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 56px 24px; margin-top: 38px; }
+.discovery-grid .product-card__content h3 { font-family: var(--font-family-display); font-size: 20px; font-weight: 600; }
+.discovery-empty, .cart-page__empty { display: grid; min-height: 320px; place-content: center; justify-items: center; gap: 18px; margin-top: 48px; padding: 30px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: center; }
+.discovery-empty h2, .cart-page__empty h2 { max-width: 15ch; margin: 0; font-family: var(--font-family-display); font-size: 31px; font-weight: 600; line-height: 1.15; }
+.discovery-empty p, .cart-page__empty p { max-width: 410px; margin: 0; color: var(--text-muted); font-size: 14px; }
+@media (max-width: 719px) { .discovery-page { padding-top: 52px; } .discovery-intro h1, .cart-page__intro h1 { font-size: clamp(3rem, 13vw, 4.25rem); line-height: 1.04; } .search-input { margin-top: 52px; } .discovery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 12px; margin-top: 30px; } .discovery-grid .product-card__content h3 { font-size: 18px; } }
