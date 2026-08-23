@@ -14,6 +14,7 @@ import softPinkRosesImage from '../assets/hanapipi-photos/8ba5f461-1cd8-47ad-a09
 import bluePinkBouquetOne from '../assets/hanapipi-photos/8f4bc810-e1dd-4fa0-8094-9436d1872ec7.jfif'
 import sunflowerBouquet from '../assets/hanapipi-photos/9d055925-4c58-4c97-8bb4-88714cc1468a.jfif'
 import blushBouquetOne from '../assets/hanapipi-photos/ae7bf17a-f600-4378-9c5f-82004588994f.jfif'
+import noWateringFlowerImage from '../assets/hanapipi-photos/bcaa9546-c4be-416d-9bf7-454eb2fd3b8b.jfif'
 import redBouquetOne from '../assets/hanapipi-photos/c0a70a74-4bba-447a-a25c-a5c26bf8b669.jfif'
 import pastelCloudImage from '../assets/hanapipi-photos/c0b9c0a4-8fc4-482e-b2ca-cfe4707dab96.jfif'
 import bluePinkRibbonImage from '../assets/hanapipi-photos/c4ac4a4d-d91d-4a17-aaf0-29e95394caa2.jfif'
@@ -255,6 +256,40 @@ export const products = [
     status: 'Đặt trước',
     createdAt: '2026-08-23',
     relatedProductIds: ['nang-diu', 'happy-pastel', 'gentle-white-pink'],
+  }),
+  createProduct({
+    id: 'no-watering-flower',
+    slug: 'no-watering-flower',
+    name: 'Bông Hoa Không Cần Tưới',
+    price: productPrices['no-watering-flower'],
+    images: [
+      {
+        src: noWateringFlowerImage,
+        alt: 'Ảnh cận cảnh vui nhộn của cô gái đang cầm cọ trang điểm',
+        fit: 'contain',
+        position: 'center',
+      },
+    ],
+    shortDescription: 'Không cần tưới, chỉ cần được dỗ đúng lúc.',
+    description:
+      'Phiên bản giới hạn với biểu cảm khó đoán, năng lượng nhây tự nhiên và khả năng khiến người tặng tự giác xin lỗi dù chưa biết mình sai ở đâu.',
+    collection: 'Phiên bản chỉ có một',
+    moods: ['Đáng yêu', 'Tinh nghịch'],
+    occasions: ['Yêu thương', 'Tặng không cần dịp', 'Lời cảm ơn'],
+    colorPalette: ['Hồng phấn', 'Xám'],
+    flowerComposition: [
+      'Một biểu cảm phiên bản giới hạn',
+      'Một cây cọ trang điểm',
+      'Năng lượng nhây tự nhiên',
+    ],
+    careNote:
+      'Cho ăn đúng giờ, dỗ dành nhẹ nhàng và tuyệt đối không mở đầu bằng câu “Em giận à?”.',
+    deliveryNote:
+      'Chỉ giao cho người đủ can đảm nhận quà; lịch giao còn tùy tâm trạng của “bông hoa”.',
+    status: 'Đặt trước',
+    badges: ['Phiên bản 1/1'],
+    createdAt: '2026-08-23',
+    relatedProductIds: ['strawberry-bunny-gift', 'five-red-roses', 'soft-pink-roses'],
   }),
   createProduct({
     id: 'blush-atelier',
