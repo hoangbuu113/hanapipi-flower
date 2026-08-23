@@ -9,12 +9,12 @@ import './FlowerFinderPage.css'
 const questions = [
   { key: 'occasion', title: 'Bạn muốn gửi hoa cho dịp nào?', options: ['Sinh nhật', 'Yêu thương', 'Lời cảm ơn', 'Chia sẻ', 'Tặng không cần dịp'] },
   { key: 'mood', title: 'Bạn muốn bó hoa mang cảm xúc gì?', options: ['Dịu dàng', 'Tươi sáng', 'Thanh lịch', 'Ấm áp'] },
-  { key: 'color', title: 'Bạn yêu thích tông màu nào?', options: ['Kem và trắng', 'Hồng dịu', 'Cam đào', 'Tím khói', 'Xanh trắng'] },
+  { key: 'color', title: 'Bạn yêu thích tông màu nào?', options: ['Kem và trắng', 'Hồng dịu', 'Vàng ấm', 'Đỏ sâu', 'Xanh dịu'] },
   { key: 'budget', title: 'Ngân sách của bạn là bao nhiêu?', options: ['Dưới 600.000 ₫', '600.000 ₫ – 750.000 ₫', 'Từ 750.000 ₫'] },
 ]
 
 const moodMatches = { 'Dịu dàng': ['Dịu dàng', 'Nhẹ nhàng', 'Trong trẻo'], 'Tươi sáng': ['Rạng rỡ', 'Vui tươi', 'Năng lượng', 'Tươi mới'], 'Thanh lịch': ['Trong trẻo', 'Thanh mát', 'Bình yên', 'Sâu lắng'], 'Ấm áp': ['Ấm áp', 'Lãng mạn', 'Sâu lắng'] }
-const colorMatches = { 'Kem và trắng': ['Kem', 'Trắng', 'Trắng ngà'], 'Hồng dịu': ['Hồng phấn', 'Hồng nhạt'], 'Cam đào': ['Cam đào', 'Apricot', 'Vàng kem'], 'Tím khói': ['Hồng trầm', 'Đỏ rượu'], 'Xanh trắng': ['Xanh lá', 'Trắng'] }
+const colorMatches = { 'Kem và trắng': ['Trắng', 'Trắng ngà'], 'Hồng dịu': ['Hồng phấn'], 'Vàng ấm': ['Vàng ấm'], 'Đỏ sâu': ['Đỏ'], 'Xanh dịu': ['Xanh lam', 'Trắng'] }
 
 function FlowerFinderPage() {
   const [started, setStarted] = useState(false)

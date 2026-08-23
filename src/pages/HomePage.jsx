@@ -79,7 +79,12 @@ function HomePage() {
                 key={occasion.label}
                 to={`/shop?occasion=${encodeURIComponent(occasion.label)}`}
               >
-                <img alt={occasion.alt} loading="lazy" src={occasion.image} />
+                <img
+                  alt={occasion.alt}
+                  loading="lazy"
+                  src={occasion.image}
+                  style={{ objectPosition: occasion.position }}
+                />
                 <span>{occasion.label}</span>
                 <ArrowUpRight aria-hidden="true" />
               </Link>
@@ -114,11 +119,11 @@ function HomePage() {
         <Container className="home-seasonal__grid">
           <figure className="home-seasonal__media">
             <img
-              alt="Bình hoa theo mùa với tulip trắng và peony hồng nhạt"
+              alt="Bó hoa xanh lam và trắng với nơ xanh đặt trên nền cỏ"
               loading="lazy"
               src={homeImages.seasonal}
             />
-            <figcaption>Bộ sưu tập mùa mưa · Tháng 8–10</figcaption>
+            <figcaption>Bộ sưu tập xanh dịu · Theo mùa</figcaption>
           </figure>
           <div className="home-seasonal__copy">
             <p className="eyebrow">Từ những gì đang nở</p>
@@ -160,11 +165,11 @@ function HomePage() {
           </div>
           <figure className="home-craft__media">
             <img
-              alt="Người thợ hoa đang tỉ mỉ buộc tay một bó hoa tươi"
+              alt="Thiết kế hoa kem, đỏ trầm và xanh đang được hoàn thiện tại bàn hoa"
               loading="lazy"
               src={homeImages.craft}
             />
-            <figcaption>Mỗi bó hoa đều được hoàn thiện bằng tay tại tiệm.</figcaption>
+            <figcaption>Một thiết kế nhiều lớp đang được hoàn thiện tại bàn hoa.</figcaption>
           </figure>
         </Container>
       </section>
@@ -209,7 +214,12 @@ function HomePage() {
           <div className="social-mosaic">
             {socialMoments.map((moment) => (
               <figure className="social-mosaic__item" key={moment.caption}>
-                <img alt={moment.alt} loading="lazy" src={moment.image} />
+                <img
+                  alt={moment.alt}
+                  loading="lazy"
+                  src={moment.image}
+                  style={{ objectPosition: moment.position }}
+                />
                 <figcaption>{moment.caption}</figcaption>
               </figure>
             ))}

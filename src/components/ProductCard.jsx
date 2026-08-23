@@ -17,6 +17,10 @@ function ProductCard({ product, priority = false }) {
             alt={product.images[0].alt}
             loading={priority ? 'eager' : 'lazy'}
             src={product.images[0].src}
+            style={{
+              objectFit: product.images[0].fit ?? 'cover',
+              objectPosition: product.images[0].position,
+            }}
           />
           {badge && <span className="product-card__badge">{badge}</span>}
         </div>

@@ -15,8 +15,8 @@ const defaultFilters = {
 }
 
 const filterOptions = {
-  occasion: ['Sinh nhật', 'Yêu thương', 'Lời cảm ơn', 'Khởi đầu mới', 'Chia sẻ', 'Tặng không cần dịp'],
-  color: ['Hồng phấn', 'Cam đào', 'Trắng', 'Xanh lá', 'Hồng trầm'],
+  occasion: ['Sinh nhật', 'Yêu thương', 'Kỷ niệm', 'Lời cảm ơn', 'Chúc mừng', 'Khởi đầu mới', 'Chia sẻ', 'Tặng không cần dịp'],
+  color: ['Hồng phấn', 'Vàng ấm', 'Trắng', 'Trắng ngà', 'Xanh lam', 'Xanh lá', 'Đỏ'],
   status: ['Có sẵn', 'Theo mùa', 'Đặt trước'],
 }
 

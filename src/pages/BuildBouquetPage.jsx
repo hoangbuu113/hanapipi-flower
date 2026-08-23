@@ -75,7 +75,7 @@ function BuildBouquetPage() {
       <div className="bouquet-actions"><button className="button button--text" disabled={step === 1} type="button" onClick={() => { setStep((current) => current - 1); setError('') }}><ArrowLeft aria-hidden="true" /> Quay lại</button>{step < 6 ? <button className="button button--primary" type="button" onClick={nextStep}>Tiếp tục <ArrowRight aria-hidden="true" /></button> : <button className="button button--primary" type="button" onClick={addBouquet}>Thêm bó hoa vào giỏ hàng</button>}</div>
       {added && <p className="bouquet-added" role="status">Đã thêm bó hoa theo ý bạn vào giỏ hàng. <Link to="/cart">Xem giỏ hàng</Link></p>}
     </section>
-    <aside className="bouquet-preview"><img alt="Bó hoa tông hồng phấn trong bình gốm, hình ảnh gợi ý" src={bouquetPreviewImage} /><p>Hình ảnh mang tính gợi ý cho phong cách bạn đã chọn.</p><div><span>Giá ước tính</span><strong aria-live="polite">{estimate ? formatCurrency(estimate) : 'Chọn kích thước để xem giá'}</strong></div></aside>
+    <aside className="bouquet-preview"><img alt="Bó hoa hồng dịu và trắng ngà, hình ảnh gợi ý" src={bouquetPreviewImage} style={{ objectPosition: 'center 45%' }} /><p>Hình ảnh mang tính gợi ý cho phong cách bạn đã chọn.</p><div><span>Giá ước tính</span><strong aria-live="polite">{estimate ? formatCurrency(estimate) : 'Chọn kích thước để xem giá'}</strong></div></aside>
   </div></Container></main>
 }
 

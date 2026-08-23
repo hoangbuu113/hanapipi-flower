@@ -1,4 +1,5 @@
-import previewImage from '../assets/hero-bouquet.jpg'
+import previewImage from '../assets/hanapipi-photos/ae7bf17a-f600-4378-9c5f-82004588994f.jfif'
+import { bouquetPrices } from './prices'
 
 export const bouquetPreviewImage = previewImage
 
@@ -19,19 +20,19 @@ export const bouquetOptions = {
     { id: 'green-white', label: 'Xanh trắng', colors: ['#718374', '#ecf0e8', '#d2ddd0'] },
   ],
   sizes: [
-    { id: 'small', label: 'Nhỏ', price: 520000 },
-    { id: 'standard', label: 'Tiêu chuẩn', price: 720000 },
-    { id: 'large', label: 'Lớn', price: 980000 },
+    { id: 'small', label: 'Nhỏ', price: bouquetPrices.sizes.small },
+    { id: 'standard', label: 'Tiêu chuẩn', price: bouquetPrices.sizes.standard },
+    { id: 'large', label: 'Lớn', price: bouquetPrices.sizes.large },
   ],
   flowers: [
-    { id: 'garden-rose', label: 'Hồng garden', description: 'Cánh dày, hương thơm nhẹ.', price: 60000 },
-    { id: 'ranunculus', label: 'Mao lương', description: 'Nhiều lớp cánh mềm mại.', price: 80000 },
-    { id: 'tulip', label: 'Tulip', description: 'Dáng hoa trong trẻo, hiện đại.', price: 70000 },
-    { id: 'lisianthus', label: 'Cát tường', description: 'Nhẹ nhàng và có độ rủ tự nhiên.', price: 50000 },
+    { id: 'garden-rose', label: 'Hồng garden', description: 'Cánh dày, hương thơm nhẹ.', price: bouquetPrices.flowers['garden-rose'] },
+    { id: 'ranunculus', label: 'Mao lương', description: 'Nhiều lớp cánh mềm mại.', price: bouquetPrices.flowers.ranunculus },
+    { id: 'tulip', label: 'Tulip', description: 'Dáng hoa trong trẻo, hiện đại.', price: bouquetPrices.flowers.tulip },
+    { id: 'lisianthus', label: 'Cát tường', description: 'Nhẹ nhàng và có độ rủ tự nhiên.', price: bouquetPrices.flowers.lisianthus },
   ],
   wrappings: [
-    { id: 'ivory', label: 'Giấy ivory mờ', note: 'Không thêm phí', price: 0 },
-    { id: 'blush-ribbon', label: 'Ruy băng hồng phấn', note: '+30.000 ₫', price: 30000 },
-    { id: 'linen', label: 'Vải linen tự nhiên', note: '+50.000 ₫', price: 50000 },
+    { id: 'ivory', label: 'Giấy ivory mờ', note: 'Không thêm phí', price: bouquetPrices.wrappings.ivory },
+    { id: 'blush-ribbon', label: 'Ruy băng hồng phấn', note: '+30.000 ₫', price: bouquetPrices.wrappings['blush-ribbon'] },
+    { id: 'linen', label: 'Vải linen tự nhiên', note: '+50.000 ₫', price: bouquetPrices.wrappings.linen },
   ],
 }

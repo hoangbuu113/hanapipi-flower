@@ -1,76 +1,52 @@
-import birthdayImage from '../assets/occasion-birthday.jpg'
-import craftImage from '../assets/florist-craft.jpg'
 import heroImage from '../assets/hero-bouquet.jpg'
-import seasonalImage from '../assets/seasonal-collection.jpg'
-import giftingImage from '../assets/social-gifting.jpg'
-import windowImage from '../assets/social-window.jpg'
-import whiteImage from '../assets/occasion-white.jpg'
+import redRoseMoment from '../assets/hanapipi-photos/11e6ab96-b808-4da3-81cd-737f39fc97c3.jfif'
+import birthdayImage from '../assets/hanapipi-photos/41cd6826-4f50-40cd-9b08-32438e216342.jfif'
+import playfulGiftImage from '../assets/hanapipi-photos/42fdaebb-daa5-4b66-87cd-56b4666bd3ba.jfif'
+import pastelImage from '../assets/hanapipi-photos/45c02138-3e6c-42f9-ac5c-40f748c868d2.jfif'
+import thankYouImage from '../assets/hanapipi-photos/4e295c8e-4bd7-489b-8bbc-3485e350a064.jfif'
+import seasonalImage from '../assets/hanapipi-photos/60e6dad8-bd92-4b9b-83bb-466ef6035ee6.jfif'
+import bluePinkImage from '../assets/hanapipi-photos/8f4bc810-e1dd-4fa0-8094-9436d1872ec7.jfif'
+import sunflowerImage from '../assets/hanapipi-photos/9d055925-4c58-4c97-8bb4-88714cc1468a.jfif'
+import loveImage from '../assets/hanapipi-photos/c0a70a74-4bba-447a-a25c-a5c26bf8b669.jfif'
+import freshStartImage from '../assets/hanapipi-photos/d48f02bc-4b0f-422d-8d00-01349439972e.jfif'
+import craftImage from '../assets/hanapipi-photos/fa411ea3-dd3e-4e6a-b4ee-f7dd36ef7f06.jfif'
 
 export const occasions = [
   {
-    alt: 'Bó hoa cam đào nhẹ nhàng trên bàn gỗ cho dịp sinh nhật',
+    alt: 'Bó hoa tông hồng sáng và trắng kem cho dịp sinh nhật',
     image: birthdayImage,
     label: 'Sinh nhật',
+    position: 'center 44%',
   },
   {
-    alt: 'Bó hoa hồng phấn và kem trong ánh nắng cửa sổ',
-    image: heroImage,
+    alt: 'Bó hoa hồng đỏ đậm cỡ lớn cho lời yêu thương',
+    image: loveImage,
     label: 'Yêu thương',
+    position: 'center 42%',
   },
   {
-    alt: 'Khoảnh khắc tặng hoa cùng hộp quà và thiệp viết tay',
-    image: giftingImage,
+    alt: 'Bó hoa hồng phấn và trắng trong lớp giấy xanh cho lời cảm ơn',
+    image: thankYouImage,
     label: 'Lời cảm ơn',
+    position: 'center 44%',
   },
   {
-    alt: 'Bó hoa trắng tinh tế trong không gian đá sáng',
-    image: whiteImage,
+    alt: 'Bó hoa trắng và hồng phấn nhỏ gọn cho một khởi đầu mới',
+    image: freshStartImage,
     label: 'Khởi đầu mới',
+    position: 'center 43%',
   },
   {
-    alt: 'Người thợ hoa buộc tay bó hoa tươi',
-    image: craftImage,
+    alt: 'Bó hoa hồng phấn và xanh dịu để sẻ chia một lời nhắn',
+    image: pastelImage,
     label: 'Chia sẻ',
+    position: 'center 43%',
   },
   {
-    alt: 'Bình hoa theo mùa bên khung cửa sổ đầy nắng',
-    image: windowImage,
+    alt: 'Bó quà nhỏ với dâu tây và hoa trắng cho một ngày bất chợt',
+    image: playfulGiftImage,
     label: 'Tặng không cần dịp',
-  },
-]
-
-export const bestSellers = [
-  {
-    alt: 'Bó Nắng Dịu với hoa cam đào và kem',
-    badge: 'Bán chạy',
-    description: 'Cam đào, kem và nét xanh nhẹ.',
-    image: birthdayImage,
-    name: 'Nắng Dịu',
-    price: 590000,
-  },
-  {
-    alt: 'Bó Dư Âm Hồng với hoa hồng phấn và hoa trắng',
-    badge: null,
-    description: 'Hồng phấn, trắng ngà, đầy dư âm.',
-    image: heroImage,
-    name: 'Dư Âm Hồng',
-    price: 680000,
-  },
-  {
-    alt: 'Bó Mây Trắng với tulip và hoa trắng theo mùa',
-    badge: 'Theo mùa',
-    description: 'Tulip trắng và sắc xanh thanh mát.',
-    image: whiteImage,
-    name: 'Mây Trắng',
-    price: 620000,
-  },
-  {
-    alt: 'Bó Vườn Sớm Mai với hoa hồng nhạt và foliage',
-    badge: null,
-    description: 'Sớm mai dịu dàng, tự nhiên và tươi mới.',
-    image: windowImage,
-    name: 'Vườn Sớm Mai',
-    price: 750000,
+    position: 'center 44%',
   },
 ]
 
@@ -94,34 +70,40 @@ export const testimonials = [
 
 export const socialMoments = [
   {
-    alt: 'Bó hoa hồng phấn bên cửa sổ',
-    caption: 'Một lời chúc sinh nhật dịu dàng.',
-    image: heroImage,
+    alt: 'Bó năm bông hồng đỏ được gói đơn giản trước khung cửa',
+    caption: 'Năm bông hồng cho một lời nhắn ngắn.',
+    image: redRoseMoment,
+    position: 'center 40%',
   },
   {
-    alt: 'Hoa tươi gói giấy bên món quà nhỏ',
-    caption: 'Gửi cả điều khó nói.',
-    image: giftingImage,
+    alt: 'Bó quà với dâu tây, hoa trắng và nơ đỏ',
+    caption: 'Một món quà vui cho ngày bất chợt.',
+    image: playfulGiftImage,
+    position: 'center 44%',
   },
   {
-    alt: 'Bình hoa tươi bên cửa sổ',
-    caption: 'Một góc nhà đầy hoa.',
-    image: windowImage,
+    alt: 'Bó hoa xanh lam và trắng đặt trên nền cỏ',
+    caption: 'Sắc xanh dịu trong ánh sáng tự nhiên.',
+    image: seasonalImage,
+    position: 'center 50%',
   },
   {
-    alt: 'Người thợ hoa đang buộc tay bó hoa',
-    caption: 'Từ những cành hoa được chọn kỹ.',
+    alt: 'Thiết kế hoa kem, đỏ trầm và xanh đang được hoàn thiện',
+    caption: 'Một thiết kế nhiều lớp tại bàn hoa.',
     image: craftImage,
+    position: 'center 43%',
   },
   {
-    alt: 'Bó hoa sắc cam đào ấm áp',
-    caption: 'Chút nắng cho ngày mới.',
-    image: birthdayImage,
+    alt: 'Bó ba bông hướng dương cùng hoa nhỏ màu trắng',
+    caption: 'Chút nắng cho một ngày mới.',
+    image: sunflowerImage,
+    position: 'center 45%',
   },
   {
-    alt: 'Bó hoa trắng tinh tế',
-    caption: 'Nhẹ nhàng cho một khởi đầu.',
-    image: whiteImage,
+    alt: 'Bó hoa xanh lam, hồng phấn và trắng ngà',
+    caption: 'Những sắc độ dịu dàng được đặt cạnh nhau.',
+    image: bluePinkImage,
+    position: 'center 44%',
   },
 ]
 

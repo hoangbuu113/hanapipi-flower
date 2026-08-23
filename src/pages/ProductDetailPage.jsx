@@ -54,7 +54,14 @@ function ProductDetailPage() {
         <section className="product-detail" aria-labelledby="product-title">
           <div className="product-gallery">
             <figure className="product-gallery__main">
-              <img alt={product.images[activeImageIndex].alt} src={product.images[activeImageIndex].src} />
+              <img
+                alt={product.images[activeImageIndex].alt}
+                src={product.images[activeImageIndex].src}
+                style={{
+                  objectFit: product.images[activeImageIndex].fit ?? 'cover',
+                  objectPosition: product.images[activeImageIndex].position,
+                }}
+              />
             </figure>
             <div aria-label="Chọn hình ảnh bó hoa" className="product-gallery__thumbnails">
               {product.images.map((image, index) => (
@@ -66,7 +73,11 @@ function ProductDetailPage() {
                   type="button"
                   onClick={() => setActiveImageIndex(index)}
                 >
-                  <img alt="" src={image.src} />
+                  <img
+                    alt=""
+                    src={image.src}
+                    style={{ objectFit: image.fit ?? 'cover', objectPosition: image.position }}
+                  />
                 </button>
               ))}
             </div>
@@ -152,12 +163,12 @@ function ProductDetailPage() {
           <div>
             <p className="eyebrow">Để hoa ở lại lâu hơn</p>
             <h2>Chăm sóc hoa</h2>
-            <p>Đặt hoa nơi thoáng mát, thay nước mỗi ngày và cắt vát gốc hoa khoảng 1–2 cm.</p>
+            <p>{product.careNote}</p>
           </div>
           <div>
             <p className="eyebrow">Gửi đi thật chỉn chu</p>
             <h2>Giao hoa</h2>
-            <p>Có thể giao trong ngày tại khu vực được hỗ trợ.</p>
+            <p>{product.deliveryNote}</p>
             <p>Đặt trước 14:00 để được ưu tiên giao trong ngày.</p>
             <p>Bạn có thể chọn ngày và khung giờ giao trong giỏ hàng.</p>
           </div>

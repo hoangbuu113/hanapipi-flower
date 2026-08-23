@@ -26,7 +26,7 @@ function CartItems() {
         if (item.custom) {
           return (
             <article className="cart-item" key={item.key}>
-              <div className="cart-item__image"><img alt="Hình gợi ý bó hoa theo ý bạn" loading="lazy" src={bouquetPreviewImage} /></div>
+              <div className="cart-item__image"><img alt="Bó hoa hồng dịu và trắng ngà, hình ảnh gợi ý" loading="lazy" src={bouquetPreviewImage} /></div>
               <div className="cart-item__details">
                 <div className="cart-item__top"><div><h3>{item.name}</h3><p>{item.style} · {item.palette} · {item.size}</p><p>{item.flowers.join(', ')} · {item.wrapping}</p>{item.message && <p>“{item.message}”</p>}</div><strong>{formatCurrency(item.unitPrice * item.quantity)}</strong></div>
                 <div className="cart-item__actions"><div className="cart-item__stepper"><button aria-label="Giảm số lượng bó hoa theo ý bạn" type="button" onClick={() => updateQuantity(item.key, item.quantity - 1)}><Minus aria-hidden="true" /></button><output>{item.quantity}</output><button aria-label="Tăng số lượng bó hoa theo ý bạn" type="button" onClick={() => updateQuantity(item.key, item.quantity + 1)}><Plus aria-hidden="true" /></button></div><button className="cart-item__remove" type="button" onClick={() => removeFromCart(item.key)}>Xóa</button></div>
@@ -40,7 +40,7 @@ function CartItems() {
         const wrapping = product.wrappingOptions?.find((option) => option.id === item.wrappingId)
         return (
           <article className="cart-item" key={item.key}>
-            <Link aria-label={`Xem ${product.name}`} to={`/product/${product.slug}`}><img alt={product.images[0].alt} loading="lazy" src={product.images[0].src} /></Link>
+            <Link aria-label={`Xem ${product.name}`} to={`/product/${product.slug}`}><img alt={product.images[0].alt} loading="lazy" src={product.images[0].src} style={{ objectFit: product.images[0].fit ?? 'cover', objectPosition: product.images[0].position }} /></Link>
             <div className="cart-item__details">
               <div className="cart-item__top"><div><h3>{product.name}</h3><p>{size?.label}{wrapping ? ` · ${wrapping.label}` : ''}</p></div><strong>{formatCurrency(item.unitPrice * item.quantity)}</strong></div>
               <div className="cart-item__actions">

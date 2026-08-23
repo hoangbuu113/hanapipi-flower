@@ -236,6 +236,7 @@
   width: 100%;
   min-height: 520px;
   object-fit: cover;
+  object-position: center 50%;
 }
 
 .home-seasonal__copy {
@@ -291,6 +292,7 @@
   width: 100%;
   min-height: 600px;
   object-fit: cover;
+  object-position: center 43%;
 }
 
 .home-testimonials {
