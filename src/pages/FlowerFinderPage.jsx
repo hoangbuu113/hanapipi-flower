@@ -1,15 +1,13 @@
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, Check, MessageCircle } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Container from '../components/Container'
 import ProductCard from '../components/ProductCard'
 import { products } from '../data/products'
-import { getConciergeAdvice } from '../services/conciergeService'
-import { formatCurrency } from '../utils/formatCurrency'
+import { openConcierge } from '../utils/conciergeEvents'
 import {
   buildRecommendationCopy,
   criteriaFromStepAnswers,
-  getGroundedCandidates,
   rankProducts,
 } from '../utils/conciergeGrounding'
 import './FlowerFinderPage.css'
@@ -20,228 +18,6 @@ const questions = [
   { key: 'color', title: 'Bạn yêu thích tông màu nào?', options: ['Kem và trắng', 'Hồng dịu', 'Vàng ấm', 'Đỏ sâu', 'Xanh dịu'] },
   { key: 'budget', title: 'Ngân sách của bạn là bao nhiêu?', options: ['Dưới 600.000 ₫', '600.000 ₫ – 750.000 ₫', 'Từ 750.000 ₫'] },
 ]
-
-const guidanceTopics = ['Người nhận', 'Dịp tặng', 'Cảm xúc', 'Màu yêu thích', 'Ngân sách', 'Thời điểm giao']
-
-function FinderModeControl({ mode, onChange }) {
-  return (
-    <div aria-label="Cách tìm hoa" className="finder-mode-control" role="group">
-      <button
-        aria-pressed={mode === 'concierge'}
-        className={mode === 'concierge' ? 'is-active' : ''}
-        type="button"
-        onClick={() => onChange('concierge')}
-      >
-        Tư vấn theo lời bạn
-      </button>
-      <button
-        aria-pressed={mode === 'steps'}
-        className={mode === 'steps' ? 'is-active' : ''}
-        type="button"
-        onClick={() => onChange('steps')}
-      >
-        Chọn từng bước
-      </button>
-    </div>
-  )
-}
-
-function RecommendationCard({ recommendation }) {
-  const { fitTags, product, reason } = recommendation
-  const image = product.images[0]
-
-  return (
-    <article className="concierge-result-card">
-      <Link
-        aria-label={`Xem bó hoa ${product.name}`}
-        className="concierge-result-card__media"
-        to={`/product/${product.slug}`}
-      >
-        <img
-          alt={image.alt}
-          loading="lazy"
-          src={image.src}
-          style={{ objectFit: image.fit ?? 'cover', objectPosition: image.position }}
-        />
-      </Link>
-      <div className="concierge-result-card__content">
-        <div className="concierge-result-card__heading">
-          <h3>{product.name}</h3>
-          <strong>{formatCurrency(product.price)}</strong>
-        </div>
-        <p>{reason}</p>
-        {fitTags.length > 0 && (
-          <ul aria-label="Điểm phù hợp" className="concierge-fit-tags">
-            {fitTags.map((tag) => <li key={tag}>{tag}</li>)}
-          </ul>
-        )}
-        <Link className="button button--secondary" to={`/product/${product.slug}`}>
-          Xem bó hoa <ArrowRight aria-hidden="true" />
-        </Link>
-      </div>
-    </article>
-  )
-}
-
-function ConciergeFinder({ onChooseSteps }) {
-  const [message, setMessage] = useState('')
-  const [inputError, setInputError] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [result, setResult] = useState(null)
-  const textareaRef = useRef(null)
-
-  async function findFlowers(nextMessage) {
-    const trimmedMessage = nextMessage.trim()
-    if (!trimmedMessage) {
-      setInputError('Hãy chia sẻ đôi điều về món quà bạn muốn gửi.')
-      setResult(null)
-      textareaRef.current?.focus()
-      return
-    }
-
-    setInputError('')
-    const grounding = getGroundedCandidates(trimmedMessage, products)
-    if (grounding.clarification) {
-      setResult({ ...grounding.clarification, status: 'clarification' })
-      return
-    }
-    if (grounding.candidates.length === 0) {
-      setResult({ status: 'no-results' })
-      return
-    }
-
-    setIsLoading(true)
-    setResult(null)
-    const advice = await getConciergeAdvice({
-      catalogue: products,
-      criteria: grounding.criteria,
-      message: trimmedMessage,
-      rankedCandidates: grounding.candidates,
-    })
-    setResult(advice)
-    setIsLoading(false)
-  }
-
-  function handleSubmit(event) {
-    event.preventDefault()
-    void findFlowers(message)
-  }
-
-  function handleClarification(option) {
-    const nextMessage = `${message.trim()} Bổ sung: ${option}.`.trim()
-    setMessage(nextMessage)
-    void findFlowers(nextMessage)
-  }
-
-  function adjustNeeds() {
-    setResult(null)
-    textareaRef.current?.focus()
-  }
-
-  return (
-    <section className="concierge-panel" aria-labelledby="concierge-title">
-      <header className="concierge-panel__intro">
-        <p className="eyebrow">Một gợi ý vừa vặn, bắt đầu từ lời bạn</p>
-        <h1 id="concierge-title">Kể chúng tôi nghe về món quà bạn muốn gửi.</h1>
-        <p>
-          Chia sẻ vài ý chính, Hanapipi Flower sẽ đối chiếu với bộ sưu tập hiện có để chọn những gợi ý gần nhất.
-        </p>
-      </header>
-
-      <form className="concierge-form" noValidate onSubmit={handleSubmit}>
-        <label htmlFor="concierge-message">Điều bạn đang tìm kiếm</label>
-        <textarea
-          aria-describedby={`concierge-guidance concierge-count${inputError ? ' concierge-error' : ''}`}
-          aria-invalid={Boolean(inputError)}
-          id="concierge-message"
-          maxLength={500}
-          placeholder="Mình muốn tặng bạn gái nhân dịp kỷ niệm, thích hoa trắng hồng và ngân sách khoảng 800.000 ₫."
-          ref={textareaRef}
-          rows={6}
-          value={message}
-          onChange={(event) => {
-            setMessage(event.target.value)
-            if (inputError) setInputError('')
-          }}
-        />
-        <div className="concierge-form__meta">
-          <p id="concierge-guidance">Không cần chia sẻ tên, số điện thoại hoặc địa chỉ.</p>
-          <span id="concierge-count">{message.length}/500</span>
-        </div>
-        <div className="concierge-topics" aria-label="Những điều có thể nhắc đến">
-          <span>Bạn có thể nhắc đến</span>
-          <ul>
-            {guidanceTopics.map((topic) => <li key={topic}>{topic}</li>)}
-          </ul>
-        </div>
-        {inputError && <p className="finder-error" id="concierge-error" role="alert">{inputError}</p>}
-        <button className="button button--primary" disabled={isLoading} type="submit">
-          Tìm bó hoa phù hợp <ArrowRight aria-hidden="true" />
-        </button>
-      </form>
-
-      {isLoading && (
-        <div aria-live="polite" className="concierge-loading" role="status">
-          <span aria-hidden="true" />
-          <p>Đang đối chiếu với bộ sưu tập Hanapipi Flower…</p>
-        </div>
-      )}
-
-      {result?.status === 'clarification' && (
-        <section aria-labelledby="concierge-clarification-title" className="concierge-clarification">
-          <p className="eyebrow">Thêm một chi tiết nhỏ</p>
-          <h2 id="concierge-clarification-title">{result.question ?? result.clarifyingQuestion?.question}</h2>
-          <div className="concierge-clarification__options">
-            {(result.options ?? result.clarifyingQuestion?.options ?? []).map((option) => (
-              <button className="button button--secondary" key={option} type="button" onClick={() => handleClarification(option)}>
-                {option}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {result?.status === 'no-results' && (
-        <section aria-labelledby="concierge-empty-title" className="concierge-empty">
-          <p className="eyebrow">Chưa tìm thấy lựa chọn vừa vặn</p>
-          <h2 id="concierge-empty-title">Thử nới khoảng ngân sách hoặc chọn thêm một tông màu.</h2>
-          <div className="concierge-result-actions">
-            <button className="button button--secondary" type="button" onClick={adjustNeeds}>Điều chỉnh nhu cầu</button>
-            <button className="button button--text" type="button" onClick={onChooseSteps}>Chọn từng bước</button>
-          </div>
-        </section>
-      )}
-
-      {result?.status === 'recommendations' && (
-        <section aria-labelledby="concierge-results-title" className="concierge-results">
-          <header className="concierge-results__header">
-            <div>
-              <p className="eyebrow">
-                {result.source === 'deterministic'
-                  ? 'Gợi ý từ bộ lọc Hanapipi Flower.'
-                  : 'Gợi ý từ Hanapipi AI'}
-              </p>
-              <h2 id="concierge-results-title">{result.intro || 'Những lựa chọn dành cho bạn'}</h2>
-            </div>
-            <div className="concierge-result-actions">
-              <button className="button button--text" type="button" onClick={adjustNeeds}>Điều chỉnh nhu cầu</button>
-              <button className="button button--text" type="button" onClick={onChooseSteps}>Chọn từng bước</button>
-            </div>
-          </header>
-          {result.notice && <p className="concierge-fallback-notice" role="status">{result.notice}</p>}
-          <div className="concierge-results__grid">
-            {result.recommendations.map((recommendation) => (
-              <RecommendationCard key={recommendation.productId} recommendation={recommendation} />
-            ))}
-          </div>
-          <p className="concierge-disclosure">
-            Hoa có thể được thay thế tương đương theo mùa. Thời gian giao sẽ được xác nhận theo địa chỉ ở bước thanh toán.
-          </p>
-        </section>
-      )}
-    </section>
-  )
-}
 
 function StepFinder() {
   const [started, setStarted] = useState(false)
@@ -349,18 +125,16 @@ function StepFinder() {
 }
 
 function FlowerFinderPage() {
-  const [mode, setMode] = useState('concierge')
-
   return (
     <main className="finder-page">
       <Container>
-        <div className="finder-mode-header">
-          <span>Hai cách tìm hoa</span>
-          <FinderModeControl mode={mode} onChange={setMode} />
-        </div>
-        {mode === 'concierge'
-          ? <ConciergeFinder onChooseSteps={() => setMode('steps')} />
-          : <StepFinder />}
+        <StepFinder />
+        <aside className="finder-concierge-cta" aria-label="Tư vấn bằng ngôn ngữ tự nhiên">
+          <p>Bạn muốn hỏi tự nhiên hơn?</p>
+          <button className="button button--text" type="button" onClick={(event) => openConcierge(event.currentTarget)}>
+            <MessageCircle aria-hidden="true" /> Mở Hanapipi tư vấn
+          </button>
+        </aside>
       </Container>
     </main>
   )

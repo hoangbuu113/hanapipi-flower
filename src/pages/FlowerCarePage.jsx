@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import Container from '../components/Container'
+import { flowerCareKnowledge } from '../data/supportKnowledge'
 import './InformationPages.css'
 
 function FlowerCarePage() {
@@ -13,27 +14,12 @@ function FlowerCarePage() {
         </header>
 
         <div className="information-page__sections">
-          <section>
-            <h2>Khi vừa nhận hoa</h2>
-            <p>
-              Dùng kéo sạch cắt vát gốc khoảng 1–2 cm, bỏ những lá nằm dưới mặt nước và
-              đặt hoa vào bình đã được rửa sạch.
-            </p>
-          </section>
-          <section>
-            <h2>Chăm hoa mỗi ngày</h2>
-            <p>
-              Thay nước sạch hằng ngày, rửa lại bình và cắt thêm một đoạn ngắn ở gốc nếu
-              cành hoa bắt đầu mềm.
-            </p>
-          </section>
-          <section>
-            <h2>Chọn vị trí phù hợp</h2>
-            <p>
-              Giữ hoa ở nơi thoáng mát, tránh nắng trực tiếp, luồng gió mạnh và đặt xa
-              trái cây đang chín.
-            </p>
-          </section>
+          {flowerCareKnowledge.sections.map((section) => (
+            <section key={section.title}>
+              <h2>{section.title}</h2>
+              <p>{section.text}</p>
+            </section>
+          ))}
         </div>
 
         <Link className="button button--secondary information-page__action" to="/shop">

@@ -1,45 +1,60 @@
-import { buildRecommendationCopy } from '../utils/conciergeGrounding.js'
+import {
+  compactProductKnowledge,
+  getSupportLink,
+} from '../data/supportKnowledge.js'
+import { createLocalConciergeResponse } from '../utils/conciergeFallback.js'
 import { validateConciergeResponse } from '../utils/conciergeSchema.js'
 import { isPurchasableProduct } from '../utils/productCommerce.js'
 
 const DEFAULT_TIMEOUT_MS = 14000
+const FALLBACK_NOTICE =
+  'Kết nối tư vấn đang bận một chút, mình vẫn có thể hỗ trợ bạn bằng thông tin của Hanapipi Flower.'
 
-function compactCandidate({ product }) {
-  return {
-    colors: product.colorPalette,
-    composition: product.flowerComposition,
-    description: product.shortDescription,
-    id: product.id,
-    moods: product.moods,
-    name: product.name,
-    occasions: product.occasions,
-    price: product.price,
-  }
+function redactPrivateText(value) {
+  return value
+    .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[email đã ẩn]')
+    .replace(/\bHF-\d{8}-\d{4}\b/giu, '[mã đơn đã ẩn]')
+    .replace(/(?:\+?84|0)(?:[\s.-]?\d){8,10}\b/gu, '[số điện thoại đã ẩn]')
+    .replace(/(?:địa chỉ|dia chi|address)\s*[:-]?\s*[^.!?\n]{3,120}/giu, '[địa chỉ đã ẩn]')
 }
 
-export function createConciergeRequest(message, rankedCandidates) {
+function compactHistory(history) {
+  return history
+    .filter(({ content, role }) => ['assistant', 'user'].includes(role) && content)
+    .slice(-8)
+    .map(({ content, role }) => ({
+      content: redactPrivateText(content).slice(0, 700),
+      role,
+    }))
+}
+
+function resolveLinks(linkIds, catalogue) {
+  const productMap = new Map(catalogue.map((product) => [product.id, product]))
+  return linkIds.flatMap((linkId) => {
+    if (linkId.startsWith('product:')) {
+      const product = productMap.get(linkId.slice('product:'.length))
+      return product
+        ? [{ id: linkId, label: `Xem ${product.name}`, to: `/product/${product.slug}` }]
+        : []
+    }
+    const link = getSupportLink(linkId)
+    return link ? [link] : []
+  })
+}
+
+export function createConciergeRequest({ candidates, history, message, pageContext }) {
   return {
-    candidates: rankedCandidates.filter(({ product }) => isPurchasableProduct(product)).slice(0, 8).map(compactCandidate),
+    candidates: candidates
+      .filter(({ product }) => isPurchasableProduct(product))
+      .slice(0, 8)
+      .map(({ product }) => compactProductKnowledge(product)),
+    history: compactHistory(history),
     locale: 'vi-VN',
-    message,
-  }
-}
-
-export function createDeterministicResponse(rankedCandidates, criteria, options = {}) {
-  const purchasableCandidates = rankedCandidates.filter(({ product }) => isPurchasableProduct(product))
-
-  return {
-    clarifyingQuestion: null,
-    intro: 'Ba lựa chọn gần nhất với điều bạn vừa chia sẻ.',
-    note: '',
-    recommendations: purchasableCandidates.slice(0, 3).map((candidate) => ({
-      ...buildRecommendationCopy(candidate, criteria),
-      product: candidate.product,
-      productId: candidate.product.id,
-    })),
-    source: 'deterministic',
-    status: 'recommendations',
-    usedFallback: Boolean(options.usedFallback),
+    message: redactPrivateText(message).slice(0, 500),
+    pageContext: {
+      productId: pageContext.productId ?? null,
+      route: pageContext.route.slice(0, 160),
+    },
   }
 }
 
@@ -48,39 +63,50 @@ function getConfiguredApiUrl() {
   return configuredUrl?.startsWith('/') ? configuredUrl : '/api/concierge'
 }
 
-export async function getConciergeAdvice({
+export async function getConciergeReply({
   apiUrl = getConfiguredApiUrl(),
+  candidates,
   catalogue,
-  criteria,
+  currentProduct,
   fetchImpl = globalThis.fetch,
+  grounding,
+  history,
   message,
-  rankedCandidates,
+  pageContext,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }) {
-  const fallback = createDeterministicResponse(rankedCandidates, criteria)
-  if (!apiUrl) return fallback
+  const fallback = createLocalConciergeResponse({ currentProduct, grounding, message })
+  const localResponse = {
+    ...fallback,
+    links: resolveLinks(fallback.links, catalogue),
+  }
+  if (!apiUrl) return localResponse
 
+  const requestBody = createConciergeRequest({ candidates, history, message, pageContext })
+  const candidateIds = requestBody.candidates.map(({ id }) => id)
   const controller = new AbortController()
   const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const response = await fetchImpl(apiUrl, {
-      body: JSON.stringify(createConciergeRequest(message, rankedCandidates)),
+      body: JSON.stringify(requestBody),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
       signal: controller.signal,
     })
     if (!response.ok) throw new Error('Concierge request was not successful')
-    const validated = validateConciergeResponse(
-      await response.json(),
-      catalogue.filter(isPurchasableProduct),
-    )
+
+    const validated = validateConciergeResponse(await response.json(), catalogue, candidateIds)
     if (!validated) throw new Error('Concierge response did not match the contract')
-    return { ...validated, source: 'ai', usedFallback: false }
+
+    return {
+      ...validated,
+      links: resolveLinks(validated.linkIds, catalogue),
+    }
   } catch {
     return {
-      ...fallback,
-      notice: 'Chúng tôi đang dùng bộ lọc Hanapipi Flower để tiếp tục gợi ý cho bạn.',
+      ...localResponse,
+      notice: FALLBACK_NOTICE,
       usedFallback: true,
     }
   } finally {

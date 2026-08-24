@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "hanapipi-flower",
+  "main": "./src/worker.js",
+  "compatibility_date": "2026-05-22",
+  "secrets": {
+    "required": ["GROQ_API_KEY"]
+  },
+  "vars": {
+    "API_V1_ENABLED": "false",
+    "API_ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173,https://hanapipi-flower.hoangbuu1010.chatgpt.site"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hanapipi-flower-local",
+      "database_id": "local",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  }
+}

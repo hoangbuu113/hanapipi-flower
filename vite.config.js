@@ -15,14 +15,7 @@ export default defineConfig(({ command, mode }) => {
       sites(),
       ...(useWorkerRuntime ? [cloudflare({
         viteEnvironment: { name: 'server' },
-        config: {
-          main: 'src/worker.js',
-          compatibility_date: '2026-08-23',
-          assets: {
-            binding: 'ASSETS',
-            not_found_handling: 'single-page-application',
-          },
-        },
+        configPath: './wrangler.jsonc',
       })] : []),
     ],
   }

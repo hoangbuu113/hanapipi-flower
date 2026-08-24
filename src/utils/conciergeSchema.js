@@ -1,54 +1,64 @@
-const MAX_TEXT_LENGTH = 280
+import { supportLinkIds } from '../data/supportKnowledge.js'
+import { isPurchasableProduct } from './productCommerce.js'
 
-function cleanText(value, maxLength = MAX_TEXT_LENGTH) {
+const RESPONSE_TYPES = ['answer', 'clarification', 'recommendations', 'navigation', 'handoff']
+
+function cleanText(value, maxLength) {
   if (typeof value !== 'string') return ''
   return value.replace(/\s+/g, ' ').trim().slice(0, maxLength)
 }
 
-function validateClarifyingQuestion(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const question = cleanText(value.question, 180)
-  const options = Array.isArray(value.options)
-    ? value.options.map((option) => cleanText(option, 70)).filter(Boolean).slice(0, 4)
-    : []
-  if (!question || options.length < 2) return null
-  return { options, question }
+function cleanUniqueStrings(value, { allowedValues, maxItems, maxLength }) {
+  if (!Array.isArray(value) || value.length > maxItems) return null
+  const values = value.map((item) => cleanText(item, maxLength))
+  if (values.some((item) => !item)) return null
+  const uniqueValues = [...new Set(values)]
+  if (allowedValues && uniqueValues.some((item) => !allowedValues.has(item))) return null
+  return uniqueValues
 }
 
-export function validateConciergeResponse(value, catalogue) {
+function containsUrl(value) {
+  return /(?:https?:\/\/|www\.)/iu.test(value)
+}
+
+export function validateConciergeResponse(value, catalogue, candidateIds) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  if (!['recommendations', 'clarification'].includes(value.status)) return null
+  if (!RESPONSE_TYPES.includes(value.type)) return null
 
-  const validProducts = new Map(catalogue.map((product) => [product.id, product]))
-  const seenProductIds = new Set()
-  const recommendations = Array.isArray(value.recommendations)
-    ? value.recommendations.flatMap((recommendation) => {
-      if (!recommendation || typeof recommendation !== 'object') return []
-      const product = validProducts.get(recommendation.productId)
-      if (!product || seenProductIds.has(product.id)) return []
-      const reason = cleanText(recommendation.reason, 220)
-      if (!reason) return []
-      seenProductIds.add(product.id)
-      return [{
-        fitTags: Array.isArray(recommendation.fitTags)
-          ? recommendation.fitTags.map((tag) => cleanText(tag, 60)).filter(Boolean).slice(0, 3)
-          : [],
-        product,
-        productId: product.id,
-        reason,
-      }]
-    }).slice(0, 3)
-    : []
+  const message = cleanText(value.message, 700)
+  const note = value.note === null ? null : cleanText(value.note, 240)
+  const quickReplies = cleanUniqueStrings(value.quickReplies, { maxItems: 4, maxLength: 80 })
+  const allowedCandidateIds = new Set(candidateIds)
+  const productIds = cleanUniqueStrings(value.productIds, {
+    allowedValues: allowedCandidateIds,
+    maxItems: 3,
+    maxLength: 80,
+  })
+  const linkIds = cleanUniqueStrings(value.linkIds, {
+    allowedValues: new Set(supportLinkIds),
+    maxItems: 3,
+    maxLength: 80,
+  })
 
-  const clarifyingQuestion = validateClarifyingQuestion(value.clarifyingQuestion)
-  if (value.status === 'clarification' && !clarifyingQuestion) return null
-  if (value.status === 'recommendations' && recommendations.length === 0) return null
+  if (!message || note === '' || !quickReplies || !productIds || !linkIds) return null
+  if ([message, note, ...quickReplies].filter(Boolean).some(containsUrl)) return null
+  if (value.type === 'recommendations' && productIds.length === 0) return null
+  if (value.type === 'navigation' && linkIds.length === 0) return null
+
+  const productMap = new Map(
+    catalogue.filter(isPurchasableProduct).map((product) => [product.id, product]),
+  )
+  const products = productIds.map((id) => productMap.get(id)).filter(Boolean)
+  if (products.length !== productIds.length) return null
 
   return {
-    clarifyingQuestion: value.status === 'clarification' ? clarifyingQuestion : null,
-    intro: cleanText(value.intro),
-    note: cleanText(value.note),
-    recommendations: value.status === 'recommendations' ? recommendations : [],
-    status: value.status,
+    linkIds,
+    message,
+    note,
+    productIds,
+    products,
+    quickReplies,
+    source: 'ai',
+    type: value.type,
   }
 }

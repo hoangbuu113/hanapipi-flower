@@ -7,7 +7,12 @@
     "dev": "vite",
     "dev:worker": "vite --mode worker",
     "build": "vite build",
+    "postbuild": "node scripts/remove-build-dev-vars.js",
+    "db:generate:catalogue-migration": "node --import ./scripts/d1/register-catalogue-loader.js ./scripts/d1/generate-catalogue-migration.js",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "test:d1": "node --import ./scripts/d1/register-catalogue-loader.js ./scripts/d1/validate-foundation.js",
     "lint": "oxlint",
+    "test:worker": "node --import ./test/register-assets.js --test test/worker-api.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

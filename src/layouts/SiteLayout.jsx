@@ -2,7 +2,9 @@ import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Footer from '../components/Footer'
 import CartDrawer from '../components/CartDrawer'
+import ConciergeWidget from '../components/ConciergeWidget'
 import Navbar from '../components/Navbar'
+import { DELIVERY_CUTOFF_HOUR } from '../utils/delivery'
 
 function SiteLayout() {
   const location = useLocation()
@@ -21,12 +23,13 @@ function SiteLayout() {
 
   return (
     <div className="site-shell">
-      <div className="announcement">Giao hoa trong ngày cho đơn đặt trước 14:00.</div>
+      <div className="announcement">Giao hoa trong ngày cho đơn đặt trước {DELIVERY_CUTOFF_HOUR}:00.</div>
       <Navbar />
       <div className="site-main">
         <Outlet />
       </div>
       <Footer />
+      <ConciergeWidget />
       <CartDrawer />
     </div>
   )
