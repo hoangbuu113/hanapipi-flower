@@ -1,7 +1,7 @@
 :root {
-  --line-height-display-large: 1.08;
-  --line-height-display-section: 1.12;
-  --line-height-display-small: 1.18;
+  --line-height-display-large: 1.1;
+  --line-height-display-section: 1.14;
+  --line-height-display-small: 1.2;
 }
 
 body .home-hero__copy h1,
@@ -49,7 +49,7 @@ body .cart-page__empty h2 {
 
 @media (max-width: 719px) {
   :root {
-    --line-height-display-large: 1.1;
+    --line-height-display-large: 1.12;
     --line-height-display-section: 1.14;
   }
 }

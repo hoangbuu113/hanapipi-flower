@@ -1,9 +1,11 @@
 import { products } from '../data/products'
+import { normalizeGiftAddOns } from './cart'
 
 export function getCartItemPresentation(item) {
   if (item.custom) {
     return {
       details: `${item.style} · ${item.palette} · ${item.size} · ${item.flowers.join(', ')} · ${item.wrapping}`,
+      giftAddOns: [],
       name: item.name,
     }
   }
@@ -12,8 +14,34 @@ export function getCartItemPresentation(item) {
   const wrapping = product?.wrappingOptions?.find((option) => option.id === item.wrappingId)
   return {
     details: [size?.label, wrapping?.label].filter(Boolean).join(' · '),
+    giftAddOns: normalizeGiftAddOns(item.giftAddOns),
     name: product?.name ?? 'Bó hoa Hanapipi',
   }
+}
+
+export function getOrderGifting(order) {
+  const gifting = order?.gifting && typeof order.gifting === 'object' ? order.gifting : {}
+  const anonymous = Boolean(gifting.anonymous)
+
+  return {
+    anonymous,
+    includesHandwrittenCard: Boolean(gifting.includesHandwrittenCard),
+    message: typeof gifting.message === 'string'
+      ? gifting.message
+      : (typeof order?.message === 'string' ? order.message : ''),
+    senderName: anonymous || typeof gifting.senderName !== 'string' ? '' : gifting.senderName,
+  }
+}
+
+export function getOrderGiftAddOns(order) {
+  const uniqueAddOns = new Map()
+  const items = Array.isArray(order?.items) ? order.items : []
+
+  items.forEach((item) => {
+    normalizeGiftAddOns(item.giftAddOns).forEach((addOn) => uniqueAddOns.set(addOn.id, addOn))
+  })
+
+  return [...uniqueAddOns.values()]
 }
 
 export function createOrderCode() {

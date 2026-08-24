@@ -16,7 +16,6 @@ export const productPrices = {
   'happy-pastel': 760000,
   'may-trang': 690000,
   'nang-diu': 590000,
-  'no-watering-flower': 999000,
   'pastel-cloud': 780000,
   'sac-apricot': 650000,
   'soft-pink-garden': 690000,

@@ -3,8 +3,7 @@ import fiveRedRosesImage from '../assets/hanapipi-photos/11e6ab96-b808-4da3-81cd
 import pinkBouquetOne from '../assets/hanapipi-photos/41cd6826-4f50-40cd-9b08-32438e216342.jfif'
 import strawberryGiftImage from '../assets/hanapipi-photos/42fdaebb-daa5-4b66-87cd-56b4666bd3ba.jfif'
 import pastelBouquetOne from '../assets/hanapipi-photos/45c02138-3e6c-42f9-ac5c-40f748c868d2.jfif'
-import blushAtelierImage from '../assets/hanapipi-photos/49ce5412-ca99-45e1-8347-b8b6e8957cf1 (1).jfif'
-import blushAtelierDuplicate from '../assets/hanapipi-photos/49ce5412-ca99-45e1-8347-b8b6e8957cf1.jfif'
+import blushAtelierImage from '../assets/hanapipi-photos/49ce5412-ca99-45e1-8347-b8b6e8957cf1.jfif'
 import whiteBouquetTwo from '../assets/hanapipi-photos/4a543021-ea8d-41ab-b921-e1b062334cfd.jfif'
 import blueWrappedBlushImage from '../assets/hanapipi-photos/4e295c8e-4bd7-489b-8bbc-3485e350a064.jfif'
 import blueBouquetOne from '../assets/hanapipi-photos/4f55637f-62c1-4c4a-86b9-1a0a91d53b7d.jfif'
@@ -25,6 +24,7 @@ import happyPastelImage from '../assets/hanapipi-photos/ed53b488-db50-4f7b-977b-
 import grandArrangementImage from '../assets/hanapipi-photos/fa411ea3-dd3e-4e6a-b4ee-f7dd36ef7f06.jfif'
 import pinkBouquetDetail from '../assets/hanapipi-photos/fca52819-999f-479f-af3f-bc046b4a18cb.jfif'
 import { productPrices } from './prices'
+import { personalFlowerMedia } from './personalFlowerMedia'
 
 const standardCareNote =
   'Đặt hoa nơi thoáng mát, thay nước mỗi ngày và cắt vát gốc hoa khoảng 1–2 cm.'
@@ -42,16 +42,21 @@ const wrappingOptions = [
   { id: 'blush-ribbon', label: 'Ruy băng hồng phấn', note: 'Dịu dàng, có điểm nhấn' },
 ]
 
-const createProduct = (product) => ({
-  badges: [],
-  careNote: standardCareNote,
-  deliveryNote: standardDeliveryNote,
-  isBestSeller: false,
-  sizeOptions: standardSizes(product.price),
-  status: 'Có sẵn',
-  wrappingOptions,
-  ...product,
-})
+const createProduct = (product) => {
+  const purchaseType = product.purchaseType ?? 'standard'
+
+  return {
+    badges: [],
+    careNote: standardCareNote,
+    deliveryNote: standardDeliveryNote,
+    isBestSeller: false,
+    purchaseType,
+    sizeOptions: purchaseType === 'priceless' ? [] : standardSizes(product.price),
+    status: 'Có sẵn',
+    wrappingOptions: purchaseType === 'priceless' ? [] : wrappingOptions,
+    ...product,
+  }
+}
 
 export const products = [
   createProduct({
@@ -261,7 +266,7 @@ export const products = [
     id: 'no-watering-flower',
     slug: 'no-watering-flower',
     name: 'Bông Hoa Không Cần Tưới',
-    price: productPrices['no-watering-flower'],
+    purchaseType: 'priceless',
     images: [
       {
         src: noWateringFlowerImage,
@@ -269,6 +274,16 @@ export const products = [
         fit: 'contain',
         position: 'center',
       },
+    ],
+    media: [
+      {
+        src: noWateringFlowerImage,
+        alt: 'Bông hoa vô giá thuộc bộ sưu tập chỉ để ngắm.',
+        fit: 'contain',
+        position: 'center',
+        type: 'image',
+      },
+      ...personalFlowerMedia,
     ],
     shortDescription: 'Không cần tưới, chỉ cần được dỗ đúng lúc.',
     description:
@@ -298,7 +313,6 @@ export const products = [
     price: productPrices['blush-atelier'],
     images: [
       { src: blushAtelierImage, alt: 'Bó Hồng Sương với hoa hồng phấn, trắng ngà và foliage xanh', position: 'center 44%' },
-      { src: blushAtelierDuplicate, alt: 'Một góc khác của bó Hồng Sương tại bàn hoa', position: 'center 44%' },
     ],
     shortDescription: 'Hồng phấn, trắng ngà và sắc xanh nhẹ.',
     description:
@@ -552,4 +566,8 @@ export const bestSellers = products.filter((product) => product.isBestSeller)
 
 export function getProductBySlug(slug) {
   return products.find((product) => product.slug === slug)
+}
+
+export function getProductById(id) {
+  return products.find((product) => product.id === id)
 }

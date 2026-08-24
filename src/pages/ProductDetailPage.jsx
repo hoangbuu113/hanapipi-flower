@@ -1,10 +1,12 @@
-import { ChevronRight, Heart, Minus, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { Check, ChevronRight, Heart, Minus, Plus } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Container from '../components/Container'
 import ProductCard from '../components/ProductCard'
 import { getProductBySlug, products } from '../data/products'
+import { createGiftAddOnSnapshot, giftAddOns } from '../data/giftAddOns'
 import { formatCurrency } from '../utils/formatCurrency'
+import { getProductPriceLabel, isPurchasableProduct } from '../utils/productCommerce'
 import { useCommerce } from '../context/commerceStore'
 import './ProductDetailPage.css'
 
@@ -15,7 +17,9 @@ function ProductDetailPage() {
   const [selectedSizeId, setSelectedSizeId] = useState('standard')
   const [selectedWrappingId, setSelectedWrappingId] = useState(product?.wrappingOptions?.[0]?.id)
   const [quantity, setQuantity] = useState(1)
+  const [selectedGiftAddOnIds, setSelectedGiftAddOnIds] = useState([])
   const [showCartFeedback, setShowCartFeedback] = useState(false)
+  const activeVideoRef = useRef(null)
   const { addToCart, toggleWishlist, wishlistIds } = useCommerce()
 
   if (!product) {
@@ -30,15 +34,42 @@ function ProductDetailPage() {
     )
   }
 
-  const selectedSize = product.sizeOptions.find((option) => option.id === selectedSizeId) ?? product.sizeOptions[1]
+  const isPurchasable = isPurchasableProduct(product)
+  const galleryMedia = product.media ?? product.images
+  const activeMedia = galleryMedia[activeImageIndex]
+  const selectedSize = isPurchasable
+    ? product.sizeOptions.find((option) => option.id === selectedSizeId) ?? product.sizeOptions[1]
+    : null
   const relatedProducts = product.relatedProductIds
     .map((id) => products.find((item) => item.id === id))
     .filter(Boolean)
     .slice(0, 4)
   const isWishlisted = wishlistIds.includes(product.id)
+  const selectedGiftAddOns = isPurchasable
+    ? giftAddOns.filter((addOn) => selectedGiftAddOnIds.includes(addOn.id))
+    : []
+  const giftAddOnTotal = selectedGiftAddOns.reduce((total, addOn) => total + addOn.price, 0)
+  const selectedUnitTotal = isPurchasable ? selectedSize.price + giftAddOnTotal : null
+  const purchaseTotal = isPurchasable ? selectedUnitTotal * quantity : null
+
+  function toggleGiftAddOn(addOnId) {
+    setSelectedGiftAddOnIds((ids) => ids.includes(addOnId)
+      ? ids.filter((id) => id !== addOnId)
+      : [...ids, addOnId])
+    setShowCartFeedback(false)
+  }
 
   function handleAddToCart() {
-    addToCart({ productId: product.id, quantity, sizeId: selectedSize.id, unitPrice: selectedSize.price, wrappingId: selectedWrappingId })
+    if (!isPurchasable || !selectedSize) return
+
+    addToCart({
+      productId: product.id,
+      quantity,
+      sizeId: selectedSize.id,
+      unitPrice: selectedSize.price,
+      wrappingId: selectedWrappingId,
+      giftAddOns: selectedGiftAddOns.map(createGiftAddOnSnapshot),
+    })
     setShowCartFeedback(true)
   }
 
@@ -54,30 +85,48 @@ function ProductDetailPage() {
         <section className="product-detail" aria-labelledby="product-title">
           <div className="product-gallery">
             <figure className="product-gallery__main">
-              <img
-                alt={product.images[activeImageIndex].alt}
-                src={product.images[activeImageIndex].src}
-                style={{
-                  objectFit: product.images[activeImageIndex].fit ?? 'cover',
-                  objectPosition: product.images[activeImageIndex].position,
-                }}
-              />
+              {activeMedia.type === 'video' ? (
+                  <video
+                    ref={activeVideoRef}
+                    aria-label={activeMedia.alt}
+                    controls
+                    muted
+                    playsInline
+                    poster={activeMedia.poster}
+                    preload="metadata"
+                    src={activeMedia.src}
+                    style={{ objectFit: activeMedia.fit ?? 'cover', objectPosition: activeMedia.position }}
+                  />
+                ) : (
+                  <img
+                    alt={activeMedia.alt}
+                    src={activeMedia.src}
+                    style={{
+                      objectFit: activeMedia.fit ?? 'cover',
+                      objectPosition: activeMedia.position,
+                    }}
+                  />
+              )}
             </figure>
-            <div aria-label="Chọn hình ảnh bó hoa" className="product-gallery__thumbnails">
-              {product.images.map((image, index) => (
+            <div aria-label="Chọn ảnh hoặc video" className="product-gallery__thumbnails">
+              {galleryMedia.map((mediaItem, index) => (
                 <button
-                  aria-label={`Xem ảnh ${index + 1} của ${product.name}`}
+                  aria-label={`Xem ${mediaItem.type === 'video' ? 'video' : 'ảnh'} ${index + 1} của ${product.name}`}
                   aria-pressed={activeImageIndex === index}
                   className={activeImageIndex === index ? 'is-active' : ''}
-                  key={image.alt}
+                  key={`${mediaItem.type ?? 'image'}:${mediaItem.src}`}
                   type="button"
-                  onClick={() => setActiveImageIndex(index)}
+                  onClick={() => {
+                    activeVideoRef.current?.pause()
+                    setActiveImageIndex(index)
+                  }}
                 >
                   <img
                     alt=""
-                    src={image.src}
-                    style={{ objectFit: image.fit ?? 'cover', objectPosition: image.position }}
+                    src={mediaItem.type === 'video' ? mediaItem.poster : mediaItem.src}
+                    style={{ objectFit: mediaItem.fit ?? 'cover', objectPosition: mediaItem.position }}
                   />
+                  {mediaItem.type === 'video' && <span aria-hidden="true">Phát</span>}
                 </button>
               ))}
             </div>
@@ -90,10 +139,14 @@ function ProductDetailPage() {
               {product.badges[0] && <span className="product-detail__badge">{product.badges[0]}</span>}
               <button aria-label={isWishlisted ? `Bỏ lưu ${product.name}` : `Lưu ${product.name}`} aria-pressed={isWishlisted} className={`product-detail__wishlist ${isWishlisted ? 'is-saved' : ''}`} type="button" onClick={() => toggleWishlist(product.id)}><Heart aria-hidden="true" fill={isWishlisted ? 'currentColor' : 'none'} /></button>
             </div>
-            <p className="product-detail__price">{formatCurrency(selectedSize.price)}</p>
+            <p aria-live="polite" className="product-detail__price">
+              {isPurchasable ? formatCurrency(purchaseTotal) : getProductPriceLabel(product)}
+            </p>
+            {isPurchasable && <p className="product-detail__price-meta">Tổng cho {quantity} bó hoa và quà tặng đã chọn</p>}
             <p className="product-detail__story">{product.description}</p>
 
-            <fieldset className="product-option-group">
+            {isPurchasable ? <>
+              <fieldset className="product-option-group">
               <legend>Chọn kích thước</legend>
               <div className="product-size-options">
                 {product.sizeOptions.map((option) => (
@@ -103,56 +156,90 @@ function ProductDetailPage() {
                       name="size"
                       type="radio"
                       value={option.id}
-                      onChange={() => setSelectedSizeId(option.id)}
+                      onChange={() => { setSelectedSizeId(option.id); setShowCartFeedback(false) }}
                     />
                     <span>{option.label}</span>
                     <strong>{formatCurrency(option.price)}</strong>
                   </label>
                 ))}
               </div>
-            </fieldset>
+              </fieldset>
 
-            {product.wrappingOptions?.length > 0 && (
-              <fieldset className="product-option-group">
-                <legend>Kiểu gói</legend>
-                <div className="product-wrapping-options">
-                  {product.wrappingOptions.map((option) => (
-                    <label className={selectedWrappingId === option.id ? 'is-selected' : ''} key={option.id}>
-                      <input
-                        checked={selectedWrappingId === option.id}
-                        name="wrapping"
-                        type="radio"
-                        value={option.id}
-                        onChange={() => setSelectedWrappingId(option.id)}
-                      />
-                      <span>{option.label}</span>
-                      <small>{option.note}</small>
-                    </label>
-                  ))}
+              {product.wrappingOptions?.length > 0 && (
+                <fieldset className="product-option-group">
+                  <legend>Kiểu gói</legend>
+                  <div className="product-wrapping-options">
+                    {product.wrappingOptions.map((option) => (
+                      <label className={selectedWrappingId === option.id ? 'is-selected' : ''} key={option.id}>
+                        <input
+                          checked={selectedWrappingId === option.id}
+                          name="wrapping"
+                          type="radio"
+                          value={option.id}
+                          onChange={() => { setSelectedWrappingId(option.id); setShowCartFeedback(false) }}
+                        />
+                        <span>{option.label}</span>
+                        <small>{option.note}</small>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+
+              <fieldset className="product-option-group product-gift-options">
+                <legend>Thêm một món quà nhỏ</legend>
+                <p className="product-gift-options__intro">Chọn một hoặc nhiều món để gửi cùng bó hoa.</p>
+                <div className="product-gift-options__list">
+                  {giftAddOns.map((addOn) => {
+                    const isSelected = selectedGiftAddOnIds.includes(addOn.id)
+                    return (
+                      <button
+                        aria-pressed={isSelected}
+                        className={isSelected ? 'is-selected' : ''}
+                        key={addOn.id}
+                        type="button"
+                        onClick={() => toggleGiftAddOn(addOn.id)}
+                      >
+                        <span className="product-gift-options__check" aria-hidden="true">{isSelected && <Check />}</span>
+                        <span className="product-gift-options__copy">
+                          <strong>{addOn.name}</strong>
+                          <small>{addOn.note}</small>
+                        </span>
+                        <b>{addOn.price === 0 ? 'Miễn phí' : `+ ${formatCurrency(addOn.price)}`}</b>
+                      </button>
+                    )
+                  })}
                 </div>
               </fieldset>
-            )}
 
-            <div className="product-quantity">
-              <span>Số lượng</span>
-              <div aria-label="Số lượng bó hoa" className="product-stepper">
-                <button aria-label="Giảm số lượng" disabled={quantity === 1} type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>
-                  <Minus aria-hidden="true" />
-                </button>
-                <output aria-live="polite">{quantity}</output>
-                <button aria-label="Tăng số lượng" type="button" onClick={() => setQuantity((value) => value + 1)}>
-                  <Plus aria-hidden="true" />
-                </button>
+              <div className="product-quantity">
+                <span>Số lượng</span>
+                <div aria-label="Số lượng bó hoa" className="product-stepper">
+                  <button aria-label="Giảm số lượng" disabled={quantity === 1} type="button" onClick={() => { setQuantity((value) => Math.max(1, value - 1)); setShowCartFeedback(false) }}>
+                    <Minus aria-hidden="true" />
+                  </button>
+                  <output aria-live="polite">{quantity}</output>
+                  <button aria-label="Tăng số lượng" type="button" onClick={() => { setQuantity((value) => value + 1); setShowCartFeedback(false) }}>
+                    <Plus aria-hidden="true" />
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <p className="product-detail__availability">{product.status === 'Đặt trước' ? 'Bó hoa này được chuẩn bị theo đơn đặt trước.' : 'Bó hoa đang sẵn sàng để được gửi đi.'}</p>
-            <button className="button button--primary product-add-to-cart" type="button" onClick={handleAddToCart}>Thêm vào giỏ hàng</button>
-            {showCartFeedback && <p className="product-cart-feedback" role="status">Đã thêm vào giỏ hàng. <Link to="/cart">Xem giỏ hàng</Link></p>}
+              <p className="product-detail__availability">{product.status === 'Đặt trước' ? 'Bó hoa này được chuẩn bị theo đơn đặt trước.' : 'Bó hoa đang sẵn sàng để được gửi đi.'}</p>
+              <button className="button button--primary product-add-to-cart" type="button" onClick={handleAddToCart}>Thêm vào giỏ · {formatCurrency(purchaseTotal)}</button>
+              <p aria-live="polite" className={`product-cart-feedback ${showCartFeedback ? 'is-visible' : ''}`} role="status">
+                {showCartFeedback && <>Đã thêm {product.name}{selectedGiftAddOns.length ? ` cùng ${selectedGiftAddOns.length} món quà` : ''} vào giỏ hàng. <Link to="/cart">Xem giỏ hàng</Link></>}
+              </p>
+            </> : (
+              <div className="product-priceless-action">
+                <span>Chỉ để ngắm</span>
+                <Link className="button button--primary product-add-to-cart" to="/flower-already-taken">Mua thử xem</Link>
+              </div>
+            )}
           </div>
         </section>
 
-        <section className="product-information" aria-label="Thông tin về bó hoa">
+        <section className={`product-information ${isPurchasable ? '' : 'product-information--priceless'}`} aria-label="Thông tin về bó hoa">
           <div>
             <p className="eyebrow">Những gì bên trong</p>
             <h2>Thành phần hoa</h2>
@@ -165,13 +252,14 @@ function ProductDetailPage() {
             <h2>Chăm sóc hoa</h2>
             <p>{product.careNote}</p>
           </div>
-          <div>
+          {isPurchasable && <div>
             <p className="eyebrow">Gửi đi thật chỉn chu</p>
             <h2>Giao hoa</h2>
             <p>{product.deliveryNote}</p>
             <p>Đặt trước 14:00 để được ưu tiên giao trong ngày.</p>
             <p>Bạn có thể chọn ngày và khung giờ giao trong giỏ hàng.</p>
-          </div>
+            <Link className="product-information__link" to="/delivery-information">Xem thông tin giao hoa</Link>
+          </div>}
         </section>
 
         {relatedProducts.length > 0 && (

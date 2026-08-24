@@ -9,7 +9,6 @@ import bluePinkImage from '../assets/hanapipi-photos/8f4bc810-e1dd-4fa0-8094-943
 import sunflowerImage from '../assets/hanapipi-photos/9d055925-4c58-4c97-8bb4-88714cc1468a.jfif'
 import loveImage from '../assets/hanapipi-photos/c0a70a74-4bba-447a-a25c-a5c26bf8b669.jfif'
 import freshStartImage from '../assets/hanapipi-photos/d48f02bc-4b0f-422d-8d00-01349439972e.jfif'
-import craftImage from '../assets/hanapipi-photos/fa411ea3-dd3e-4e6a-b4ee-f7dd36ef7f06.jfif'
 
 export const occasions = [
   {
@@ -88,10 +87,8 @@ export const socialMoments = [
     position: 'center 50%',
   },
   {
-    alt: 'Thiết kế hoa kem, đỏ trầm và xanh đang được hoàn thiện',
     caption: 'Một thiết kế nhiều lớp tại bàn hoa.',
-    image: craftImage,
-    position: 'center 43%',
+    editorialMediaKey: 'socialMoment',
   },
   {
     alt: 'Bó ba bông hướng dương cùng hoa nhỏ màu trắng',
@@ -108,7 +105,6 @@ export const socialMoments = [
 ]
 
 export const homeImages = {
-  craft: craftImage,
   hero: heroImage,
   seasonal: seasonalImage,
 }

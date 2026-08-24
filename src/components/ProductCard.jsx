@@ -1,11 +1,13 @@
 import { Heart } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { formatCurrency } from '../utils/formatCurrency'
 import { useCommerce } from '../context/commerceStore'
+import { getProductPriceLabel, PRICELESS_PURCHASE_TYPE } from '../utils/productCommerce'
 import './ProductCard.css'
 
 function ProductCard({ product, priority = false }) {
-  const badge = product.badges?.[0]
+  const badge = product.purchaseType === PRICELESS_PURCHASE_TYPE
+    ? 'Chỉ để ngắm'
+    : product.badges?.[0]
   const { toggleWishlist, wishlistIds } = useCommerce()
   const isWishlisted = wishlistIds.includes(product.id)
 
@@ -29,7 +31,7 @@ function ProductCard({ product, priority = false }) {
             <h3>{product.name}</h3>
             <p>{product.shortDescription}</p>
           </div>
-          <strong>{formatCurrency(product.price)}</strong>
+          <strong>{getProductPriceLabel(product)}</strong>
         </div>
       </Link>
       <button

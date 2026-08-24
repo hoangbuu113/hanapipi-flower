@@ -18,11 +18,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 400ms ease-out;
-}
-
-.product-card__link:hover .product-card__media img {
-  transform: scale(1.025);
+  transition: transform var(--motion-standard) var(--motion-ease-out);
 }
 
 .product-card__badge {
@@ -52,12 +48,27 @@
   padding: 0;
 }
 
+.product-card__wishlist {
+  transition: background-color var(--motion-fast) var(--motion-ease-out),
+    color var(--motion-fast) var(--motion-ease-out);
+}
+
 .product-card__wishlist.is-saved { color: var(--accent-romantic); }
 
 .product-card__wishlist svg {
   width: 16px;
   height: 16px;
   stroke-width: 1.35;
+  transition: fill var(--motion-fast) var(--motion-ease-out),
+    transform var(--motion-fast) var(--motion-ease-out);
+}
+
+.product-card__wishlist:active svg { transform: scale(0.88); }
+
+@media (hover: hover) and (pointer: fine) {
+  .product-card__link:hover .product-card__media img { transform: scale(1.02); }
+  .product-card__wishlist:hover { background: var(--surface); }
+  .product-card__wishlist:hover svg { transform: scale(1.08); }
 }
 
 .product-card__content {
@@ -125,5 +136,8 @@
 @media (prefers-reduced-motion: reduce) {
   .product-card__media img {
     transition: none;
+    transform: none !important;
   }
+
+  .product-card__wishlist svg { transform: none !important; }
 }

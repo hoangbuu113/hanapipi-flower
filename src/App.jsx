@@ -16,6 +16,7 @@ import AuthPage from './pages/AuthPage'
 import AccountPage from './pages/AccountPage'
 import DeliveryInformationPage from './pages/DeliveryInformationPage'
 import FlowerCarePage from './pages/FlowerCarePage'
+import FlowerAlreadyTakenPage from './pages/FlowerAlreadyTakenPage'
 
 const TypographyTest = lazy(() => import('./pages/TypographyTest'))
 
@@ -119,6 +120,7 @@ function App() {
         <Route path="account" element={<AccountPage />} />
         <Route path="delivery-information" element={<DeliveryInformationPage />} />
         <Route path="flower-care" element={<FlowerCarePage />} />
+        <Route path="flower-already-taken" element={<FlowerAlreadyTakenPage />} />
         <Route
           path="account/orders"
           element={<RoutePlaceholder content={routeContent.orders} />}

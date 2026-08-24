@@ -5,12 +5,12 @@ import CheckoutSummary from '../components/CheckoutSummary'
 import DeliverySelector from '../components/DeliverySelector'
 import { useAccount } from '../context/accountStore'
 import { useCommerce } from '../context/commerceStore'
-import { cartSubtotal } from '../utils/cart'
+import { cartHasGiftAddOn, cartSubtotal } from '../utils/cart'
 import { isDeliveryDateAvailable } from '../utils/delivery'
 import { createOrderCode } from '../utils/order'
 import './CheckoutPage.css'
 
-const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer: false, receiverName: '', receiverPhone: '', city: '', district: '', ward: '', address: '', message: '', payment: 'cod' }
+const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer: false, receiverName: '', receiverPhone: '', city: '', district: '', ward: '', address: '', message: '', cardSenderName: '', anonymousSender: false, payment: 'cod' }
 
 function CheckoutPage() {
   const { addOrder, user } = useAccount()
@@ -19,6 +19,12 @@ function CheckoutPage() {
   const [errors, setErrors] = useState({})
   const navigate = useNavigate()
   const subtotal = cartSubtotal(cartItems)
+  const includesHandwrittenCard = cartHasGiftAddOn(cartItems, 'handwritten-card')
+  const giftingPreview = {
+    anonymous: form.anonymousSender,
+    message: form.message.trim(),
+    senderName: form.anonymousSender ? '' : form.cardSenderName.trim(),
+  }
 
   function update(key, value) { setForm((current) => ({ ...current, [key]: value })); setErrors((current) => ({ ...current, [key]: '' })) }
   function validate() {
@@ -47,7 +53,11 @@ function CheckoutPage() {
       code: orderCode, status: 'Đã ghi nhận', timestamp: new Date().toISOString(), total: subtotal,
       buyer: { name: form.buyerName.trim(), phone: form.buyerPhone.trim(), email: form.email.trim() }, receiver,
       address: { city: form.city, district: form.district, ward: form.ward, detail: form.address.trim() },
-      delivery: deliveryDraft, message: form.message.trim(), payment: form.payment === 'cod' ? 'Thanh toán khi nhận hoa' : 'Chuyển khoản ngân hàng', items: cartItems,
+      delivery: deliveryDraft,
+      message: form.message.trim(),
+      gifting: { ...giftingPreview, includesHandwrittenCard },
+      payment: form.payment === 'cod' ? 'Thanh toán khi nhận hoa' : 'Chuyển khoản ngân hàng',
+      items: cartItems,
     })
     clearCart()
     navigate(`/checkout/success/${orderCode}`)
@@ -60,10 +70,16 @@ function CheckoutPage() {
     <FormSection title="Thông tin người nhận"><label className="checkout-checkbox"><input checked={form.receiverIsBuyer} type="checkbox" onChange={(event) => update('receiverIsBuyer', event.target.checked)} /> Người nhận là tôi</label>{!form.receiverIsBuyer && <div className="checkout-fields"><Field error={errors.receiverName} label="Họ và tên" required><input value={form.receiverName} onChange={(event) => update('receiverName', event.target.value)} /></Field><Field error={errors.receiverPhone} label="Số điện thoại" required><input inputMode="tel" value={form.receiverPhone} onChange={(event) => update('receiverPhone', event.target.value)} /></Field></div>}</FormSection>
     <FormSection title="Địa chỉ giao hoa"><div className="checkout-fields checkout-fields--three"><Field error={errors.city} label="Tỉnh / thành phố" required><select value={form.city} onChange={(event) => update('city', event.target.value)}><option value="">Chọn khu vực</option><option>TP. Hồ Chí Minh</option><option>Hà Nội</option><option>Đà Nẵng</option></select></Field><Field error={errors.district} label="Quận / huyện" required><select value={form.district} onChange={(event) => update('district', event.target.value)}><option value="">Chọn quận / huyện</option><option>Quận 1</option><option>Quận 3</option><option>Quận Bình Thạnh</option><option>Quận Cầu Giấy</option><option>Quận Hải Châu</option></select></Field><Field error={errors.ward} label="Phường / xã" required><select value={form.ward} onChange={(event) => update('ward', event.target.value)}><option value="">Chọn phường / xã</option><option>Phường Bến Nghé</option><option>Phường Võ Thị Sáu</option><option>Phường 25</option><option>Phường Dịch Vọng</option><option>Phường Thạch Thang</option></select></Field></div><Field error={errors.address} label="Địa chỉ cụ thể" required><input placeholder="Ví dụ: 18 Nguyễn Huệ, tòa nhà A" value={form.address} onChange={(event) => update('address', event.target.value)} /></Field></FormSection>
     <FormSection title="Thời gian giao hoa"><DeliverySelector />{errors.delivery && <p className="checkout-error">{errors.delivery}</p>}</FormSection>
-    <FormSection title="Lời nhắn"><Field label="Lời nhắn cho đơn hoa"><textarea maxLength="200" placeholder="Một lời nhắn ngắn dành cho người nhận" value={form.message} onChange={(event) => update('message', event.target.value)} /><small>{form.message.length}/200</small></Field></FormSection>
+    <FormSection title="Lời nhắn tặng hoa">
+      {includesHandwrittenCard && <p className="checkout-gifting-note">Đơn hoa có Thiệp viết tay. Lời nhắn dưới đây sẽ được chuẩn bị trên thiệp.</p>}
+      <Field label="Lời nhắn cho người nhận"><textarea maxLength="200" placeholder="Một lời nhắn ngắn dành cho người nhận" value={form.message} onChange={(event) => update('message', event.target.value)} /><small>{form.message.length}/200</small></Field>
+      <Field label="Tên người gửi trên thiệp (không bắt buộc)"><input disabled={form.anonymousSender} maxLength="60" placeholder="Ví dụ: Minh Anh" value={form.cardSenderName} onChange={(event) => update('cardSenderName', event.target.value)} /></Field>
+      <label className="checkout-checkbox"><input checked={form.anonymousSender} type="checkbox" onChange={(event) => update('anonymousSender', event.target.checked)} /> Không ghi tên người gửi</label>
+      <p className="checkout-gifting-reassurance">Đơn giao đến người nhận không kèm hóa đơn hoặc thông tin giá.</p>
+    </FormSection>
     <FormSection title="Phương thức thanh toán"><div className="checkout-payment"><label><input checked={form.payment === 'cod'} name="payment" type="radio" onChange={() => update('payment', 'cod')} /> Thanh toán khi nhận hoa</label><label><input checked={form.payment === 'bank'} name="payment" type="radio" onChange={() => update('payment', 'bank')} /> Chuyển khoản ngân hàng</label></div><p className="checkout-demo-note">Đây là bản demo, chưa phát sinh thanh toán.</p></FormSection>
     <button className="button button--primary checkout-submit" type="submit">Đặt hoa</button>
-  </form><CheckoutSummary cartItems={cartItems} deliveryDraft={deliveryDraft} subtotal={subtotal} /></div></Container></main>
+  </form><CheckoutSummary cartItems={cartItems} deliveryDraft={deliveryDraft} gifting={giftingPreview} subtotal={subtotal} /></div></Container></main>
 }
 
 function FormSection({ children, title }) { return <fieldset className="checkout-section"><legend>{title}</legend>{children}</fieldset> }

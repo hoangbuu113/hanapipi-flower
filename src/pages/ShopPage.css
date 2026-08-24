@@ -25,7 +25,7 @@
 }
 
 .shop-catalogue {
-  margin-top: clamp(56px, 8vw, 112px);
+  margin-top: clamp(56px, 6vw, 88px);
 }
 
 .shop-toolbar {
@@ -107,6 +107,19 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 56px 24px;
   margin-top: 32px;
+}
+
+@media (min-width: 1200px) {
+  .shop-product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 52px 20px;
+  }
+
+  .shop-product-grid .product-card__content {
+    align-items: start;
+    flex-direction: column;
+    gap: 9px;
+  }
 }
 
 .shop-product-grid .product-card__content h3 {
@@ -277,3 +290,16 @@
 @media (prefers-reduced-motion: reduce) {
   .shop-filter-sheet { scroll-behavior: auto; }
 }
+
+.shop-filter-backdrop { animation: shop-overlay-enter var(--motion-drawer) var(--motion-ease-out) both; }
+.shop-filter-sheet { animation: filter-sheet-enter var(--motion-drawer) var(--motion-ease-out) both; padding-bottom: max(22px, env(safe-area-inset-bottom)); }
+.shop-filter-modal.is-closing { pointer-events: none; }
+.shop-filter-modal.is-closing .shop-filter-backdrop { animation-name: shop-overlay-exit; }
+.shop-filter-modal.is-closing .shop-filter-sheet { animation-name: filter-sheet-exit; }
+.shop-filter-close { transition: background-color var(--motion-fast) var(--motion-ease-out), border-color var(--motion-fast) var(--motion-ease-out); }
+@keyframes shop-overlay-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes shop-overlay-exit { from { opacity: 1; } to { opacity: 0; } }
+@keyframes filter-sheet-enter { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes filter-sheet-exit { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@media (hover: hover) and (pointer: fine) { .shop-filter-close:hover { border-color: var(--accent-botanical); background: var(--background-secondary); } }
+@media (prefers-reduced-motion: reduce) { .shop-filter-backdrop, .shop-filter-sheet { animation: none; } }

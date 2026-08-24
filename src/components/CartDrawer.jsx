@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useCommerce } from '../context/commerceStore'
 import CartItems, { DeliveryProgress } from './CartItems'
@@ -11,14 +11,33 @@ import './CartDrawer.css'
 function CartDrawer() {
   const { cartItems, closeCart, isCartOpen } = useCommerce()
   const closeButtonRef = useRef(null)
-  const closeCartRef = useRef(closeCart)
+  const closeTimerRef = useRef(null)
   const drawerPanelRef = useRef(null)
   const previousFocusRef = useRef(null)
+  const requestCloseRef = useRef(null)
+  const [isClosing, setIsClosing] = useState(false)
   const subtotal = cartSubtotal(cartItems)
 
+  function requestClose() {
+    if (isClosing) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reducedMotion) {
+      closeCart()
+      return
+    }
+
+    setIsClosing(true)
+    closeTimerRef.current = window.setTimeout(() => {
+      setIsClosing(false)
+      closeCart()
+    }, 320)
+  }
+
   useEffect(() => {
-    closeCartRef.current = closeCart
-  }, [closeCart])
+    requestCloseRef.current = requestClose
+  })
+
+  useEffect(() => () => window.clearTimeout(closeTimerRef.current), [])
 
   useEffect(() => {
     if (!isCartOpen) return undefined
@@ -28,7 +47,7 @@ function CartDrawer() {
     document.body.style.overflow = 'hidden'
     const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus())
     const handleKeydown = (event) => {
-      if (event.key === 'Escape') closeCartRef.current()
+      if (event.key === 'Escape') requestCloseRef.current()
       else trapDialogFocus(event, drawerPanelRef.current)
     }
     window.addEventListener('keydown', handleKeydown)
@@ -44,11 +63,11 @@ function CartDrawer() {
     }
   }, [isCartOpen])
   if (!isCartOpen) return null
-  return <div className="cart-drawer" role="dialog" aria-modal="true" aria-label="Giỏ hàng của bạn">
-    <button aria-label="Đóng giỏ hàng" className="cart-drawer__backdrop" type="button" onClick={closeCart} />
+  return <div className={`cart-drawer ${isClosing ? 'is-closing' : 'is-open'}`} role="dialog" aria-modal="true" aria-label="Giỏ hàng của bạn">
+    <button aria-label="Đóng giỏ hàng" className="cart-drawer__backdrop" type="button" onClick={requestClose} />
     <aside ref={drawerPanelRef} className="cart-drawer__panel">
-      <header><h2>Giỏ hàng</h2><button ref={closeButtonRef} aria-label="Đóng giỏ hàng" type="button" onClick={closeCart}><X aria-hidden="true" /></button></header>
-      {cartItems.length ? <><div className="cart-drawer__body"><CartItems /></div><footer><p className="cart-drawer__delivery-note">Chọn thời gian giao trong giỏ hàng</p><DeliveryProgress subtotal={subtotal} /><div className="cart-drawer__subtotal"><span>Tạm tính</span><strong>{formatCurrency(subtotal)}</strong></div><Link className="button button--primary" to="/cart" onClick={closeCart}>Xem giỏ hàng</Link></footer></> : <div className="cart-drawer__empty"><p>Giỏ hàng của bạn đang trống.</p><Link className="button button--secondary" to="/shop" onClick={closeCart}>Khám phá bộ sưu tập</Link></div>}
+      <header><h2>Giỏ hàng</h2><button ref={closeButtonRef} aria-label="Đóng giỏ hàng" type="button" onClick={requestClose}><X aria-hidden="true" /></button></header>
+      {cartItems.length ? <><div className="cart-drawer__body"><CartItems /></div><footer><p className="cart-drawer__delivery-note">Chọn thời gian giao trong giỏ hàng</p><DeliveryProgress subtotal={subtotal} /><div className="cart-drawer__subtotal"><span>Tạm tính</span><strong>{formatCurrency(subtotal)}</strong></div><Link className="button button--primary" to="/cart" onClick={requestClose}>Xem giỏ hàng</Link></footer></> : <div className="cart-drawer__empty"><p>Giỏ hàng của bạn đang trống.</p><Link className="button button--secondary" to="/shop" onClick={requestClose}>Khám phá bộ sưu tập</Link></div>}
     </aside>
   </div>
 }

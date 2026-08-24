@@ -2,8 +2,10 @@ import { ArrowRight, ArrowUpRight } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Container from '../components/Container'
+import EditorialVideo from '../components/EditorialVideo'
 import ProductCard from '../components/ProductCard'
 import SectionHeading from '../components/SectionHeading'
+import { editorialMedia } from '../data/editorialMedia'
 import {
   homeImages,
   occasions,
@@ -164,11 +166,7 @@ function HomePage() {
             </dl>
           </div>
           <figure className="home-craft__media">
-            <img
-              alt="Thiết kế hoa kem, đỏ trầm và xanh đang được hoàn thiện tại bàn hoa"
-              loading="lazy"
-              src={homeImages.craft}
-            />
+            <EditorialVideo media={editorialMedia.craftStory} />
             <figcaption>Một thiết kế nhiều lớp đang được hoàn thiện tại bàn hoa.</figcaption>
           </figure>
         </Container>
@@ -214,12 +212,16 @@ function HomePage() {
           <div className="social-mosaic">
             {socialMoments.map((moment) => (
               <figure className="social-mosaic__item" key={moment.caption}>
-                <img
-                  alt={moment.alt}
-                  loading="lazy"
-                  src={moment.image}
-                  style={{ objectPosition: moment.position }}
-                />
+                {moment.editorialMediaKey ? (
+                  <EditorialVideo media={editorialMedia[moment.editorialMediaKey]} />
+                ) : (
+                  <img
+                    alt={moment.alt}
+                    loading="lazy"
+                    src={moment.image}
+                    style={{ objectPosition: moment.position }}
+                  />
+                )}
                 <figcaption>{moment.caption}</figcaption>
               </figure>
             ))}

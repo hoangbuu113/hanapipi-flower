@@ -5,6 +5,7 @@ import Container from '../components/Container'
 import ProductCard from '../components/ProductCard'
 import { products } from '../data/products'
 import { trapDialogFocus } from '../utils/focus'
+import { compareProductPrices, matchesProductPriceFilter } from '../utils/productCommerce'
 import './ShopPage.css'
 
 const defaultFilters = {
@@ -18,13 +19,6 @@ const filterOptions = {
   occasion: ['Sinh nhật', 'Yêu thương', 'Kỷ niệm', 'Lời cảm ơn', 'Chúc mừng', 'Khởi đầu mới', 'Chia sẻ', 'Tặng không cần dịp'],
   color: ['Hồng phấn', 'Vàng ấm', 'Trắng', 'Trắng ngà', 'Xanh lam', 'Xanh lá', 'Đỏ'],
   status: ['Có sẵn', 'Theo mùa', 'Đặt trước'],
-}
-
-function matchesPrice(product, price) {
-  if (price === 'under-600') return product.price < 600000
-  if (price === '600-700') return product.price >= 600000 && product.price <= 700000
-  if (price === 'over-700') return product.price > 700000
-  return true
 }
 
 function ShopFilters({ filters, onChange, onClear }) {
@@ -70,6 +64,9 @@ function ShopPage() {
   const [filters, setFilters] = useState(defaultFilters)
   const [sort, setSort] = useState('featured')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [isFilterClosing, setIsFilterClosing] = useState(false)
+  const filterCloseTimerRef = useRef(null)
+  const filterCloseRequestRef = useRef(null)
   const filterTriggerRef = useRef(null)
   const filterCloseRef = useRef(null)
   const filterSheetRef = useRef(null)
@@ -81,15 +78,46 @@ function ShopPage() {
   )
   const selectedFilterCount = Object.values(activeFilters).filter((value) => value !== 'all').length
 
+  function openFilterSheet() {
+    window.clearTimeout(filterCloseTimerRef.current)
+    setIsFilterClosing(false)
+    setIsFilterOpen(true)
+  }
+
+  function closeFilterSheet() {
+    if (isFilterClosing) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reducedMotion) {
+      setIsFilterOpen(false)
+      return
+    }
+
+    setIsFilterClosing(true)
+    filterCloseTimerRef.current = window.setTimeout(() => {
+      setIsFilterClosing(false)
+      setIsFilterOpen(false)
+    }, 320)
+  }
+
+  useEffect(() => {
+    filterCloseRequestRef.current = closeFilterSheet
+  })
+
   useEffect(() => {
     const desktopFilterQuery = window.matchMedia('(min-width: 720px)')
     const closeOnDesktop = (event) => {
-      if (event.matches) setIsFilterOpen(false)
+      if (event.matches) {
+        window.clearTimeout(filterCloseTimerRef.current)
+        setIsFilterClosing(false)
+        setIsFilterOpen(false)
+      }
     }
 
     desktopFilterQuery.addEventListener('change', closeOnDesktop)
     return () => desktopFilterQuery.removeEventListener('change', closeOnDesktop)
   }, [])
+
+  useEffect(() => () => window.clearTimeout(filterCloseTimerRef.current), [])
 
   useEffect(() => {
     if (!isFilterOpen) return undefined
@@ -99,7 +127,7 @@ function ShopPage() {
     document.body.style.overflow = 'hidden'
     const focusFrame = window.requestAnimationFrame(() => filterCloseRef.current?.focus())
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape') setIsFilterOpen(false)
+      if (event.key === 'Escape') filterCloseRequestRef.current()
       else trapDialogFocus(event, filterSheetRef.current)
     }
 
@@ -120,13 +148,14 @@ function ShopPage() {
       (activeFilters.occasion === 'all' || product.occasions.includes(activeFilters.occasion)) &&
       (activeFilters.color === 'all' || product.colorPalette.includes(activeFilters.color)) &&
       (activeFilters.status === 'all' || product.status === activeFilters.status) &&
-      matchesPrice(product, activeFilters.price)
+      matchesProductPriceFilter(product, activeFilters.price)
     ))
 
     return visibleProducts.sort((first, second) => {
       if (sort === 'newest') return new Date(second.createdAt) - new Date(first.createdAt)
-      if (sort === 'price-ascending') return first.price - second.price
-      if (sort === 'price-descending') return second.price - first.price
+      if (sort === 'price-ascending' || sort === 'price-descending') {
+        return compareProductPrices(first, second, sort === 'price-descending' ? 'descending' : 'ascending')
+      }
       return Number(second.isBestSeller) - Number(first.isBestSeller)
     })
   }, [activeFilters, sort])
@@ -164,7 +193,7 @@ function ShopPage() {
         <section className="shop-catalogue" aria-label="Danh sách bó hoa">
           <h2 className="sr-only">Danh sách bó hoa</h2>
           <div className="shop-toolbar">
-            <button ref={filterTriggerRef} className="shop-filter-trigger" type="button" onClick={() => setIsFilterOpen(true)}>
+            <button ref={filterTriggerRef} className="shop-filter-trigger" type="button" onClick={openFilterSheet}>
               <SlidersHorizontal aria-hidden="true" />
               Lọc {selectedFilterCount > 0 && `(${selectedFilterCount})`}
             </button>
@@ -202,12 +231,13 @@ function ShopPage() {
       </Container>
 
       {isFilterOpen && (
-        <div className="shop-filter-modal" role="dialog" aria-modal="true" aria-label="Bộ lọc hoa">
+        <div className={`shop-filter-modal ${isFilterClosing ? 'is-closing' : 'is-open'}`} role="dialog" aria-modal="true" aria-label="Bộ lọc hoa">
           <button
             aria-label="Đóng bộ lọc"
             className="shop-filter-backdrop"
+            disabled={isFilterClosing}
             type="button"
-            onClick={() => setIsFilterOpen(false)}
+            onClick={closeFilterSheet}
           />
           <aside ref={filterSheetRef} className="shop-filter-sheet">
             <div className="shop-filter-sheet__header">
@@ -215,12 +245,12 @@ function ShopPage() {
                 <p className="eyebrow">Khám phá theo ý bạn</p>
                 <h2>Bộ lọc</h2>
               </div>
-              <button ref={filterCloseRef} aria-label="Đóng bộ lọc" className="shop-filter-close" type="button" onClick={() => setIsFilterOpen(false)}>
+              <button ref={filterCloseRef} aria-label="Đóng bộ lọc" className="shop-filter-close" disabled={isFilterClosing} type="button" onClick={closeFilterSheet}>
                 <X aria-hidden="true" />
               </button>
             </div>
             <ShopFilters filters={activeFilters} onChange={updateFilter} onClear={clearFilters} />
-            <button className="button button--primary shop-filter-apply" type="button" onClick={() => setIsFilterOpen(false)}>
+            <button className="button button--primary shop-filter-apply" disabled={isFilterClosing} type="button" onClick={closeFilterSheet}>
               Xem {filteredProducts.length} bó hoa
             </button>
           </aside>

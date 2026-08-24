@@ -1,0 +1,13 @@
+.editorial-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--background-secondary);
+  object-fit: cover;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editorial-video {
+    transform: none !important;
+  }
+}
