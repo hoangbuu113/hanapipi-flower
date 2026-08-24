@@ -90,7 +90,6 @@ function ProductDetailPage() {
                     ref={activeVideoRef}
                     aria-label={activeMedia.alt}
                     controls
-                    muted
                     playsInline
                     poster={activeMedia.poster}
                     preload="metadata"

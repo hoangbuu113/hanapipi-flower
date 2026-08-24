@@ -53,7 +53,6 @@ function FlowerAlreadyTakenPage() {
                   <video
                     aria-label={mediaItem.alt}
                     controls
-                    muted
                     playsInline
                     poster={mediaItem.poster}
                     preload="none"
