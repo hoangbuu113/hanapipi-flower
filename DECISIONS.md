@@ -4,7 +4,7 @@
 
 ### DECISION
 
-Use managed authentication only. Clerk is the preferred candidate but is not approved or final; Auth0 remains the fallback. The Worker must verify provider identity and map the stable provider `sub` to a D1 user.
+Use managed authentication only. Clerk was the preferred candidate but had not yet been approved; Auth0 remained the fallback. The Worker must verify provider identity and map the stable provider `sub` to a D1 user.
 
 ### WHY
 
@@ -16,7 +16,7 @@ Auth0 as fallback; Supabase Auth was evaluated but would add a second persistent
 
 ### STATUS
 
-ACTIVE
+SUPERSEDED by the Phase 17 Clerk selection below.
 
 ## 2026-08-24 / Phase 14
 
@@ -67,6 +67,24 @@ Real payment processing, card data, and its compliance obligations are outside c
 ### ALTERNATIVES CONSIDERED
 
 Real payment integration requires a separate approved phase and threat model.
+
+### STATUS
+
+ACTIVE
+
+## 2026-09-22 / Phase 17
+
+### DECISION
+
+Use Clerk as Hanapipi Flower's managed authentication provider. The Worker verifies Clerk identity, trusts only the verified stable `sub`, and maps that subject to the existing D1 `users` model. Do not build custom password authentication.
+
+### WHY
+
+Clerk supports the existing React and Cloudflare Worker architecture while keeping credential and session handling outside Hanapipi Flower. D1 remains authoritative for application user IDs, roles, status, and ownership.
+
+### ALTERNATIVES CONSIDERED
+
+Auth0 was retained as the fallback during planning but was not selected for the active Phase 17 implementation.
 
 ### STATUS
 

@@ -8,7 +8,8 @@
   },
   "vars": {
     "API_V1_ENABLED": "false",
-    "API_ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173,https://hanapipi-flower.hoangbuu1010.chatgpt.site"
+    "API_ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173,https://hanapipi-flower.hoangbuu1010.chatgpt.site",
+    "CLERK_AUTHORIZED_PARTIES": "http://localhost:5173,http://127.0.0.1:5173,https://hanapipi-flower.hoangbuu1010.chatgpt.site"
   },
   "d1_databases": [
     {

@@ -7,6 +7,7 @@ import {
   catalogueRepositoryLimits,
   createCatalogueRepository,
 } from '../../src/server/repositories/catalogueRepository.js'
+import { createUserRepository } from '../../src/server/repositories/userRepository.js'
 import { LocalD1Database } from './local-d1.js'
 import { verifyCatalogueMigration } from './generate-catalogue-migration.js'
 
@@ -270,6 +271,24 @@ async function verifyRepository(database) {
     .catch((error) => assert(error instanceof TypeError, 'Invalid sort failed with an unexpected error.'))
 }
 
+async function verifyUserRepository(database) {
+  const repository = createUserRepository(new LocalD1Database(database), {
+    generateId: () => 'usr_phase17_validation',
+    now: () => '2026-09-22T00:00:00.000Z',
+  })
+  const identity = { provider: 'clerk', subject: 'user_phase17_validation' }
+  const first = await repository.getOrCreateByIdentity(identity)
+  const second = await repository.getOrCreateByIdentity(identity)
+
+  assert(first.id === 'usr_phase17_validation', 'Managed identity created an unexpected local user ID.')
+  assert(second.id === first.id, 'Stable provider subject did not resolve to the same local user.')
+  assert(first.role === 'customer' && first.status === 'active', 'Managed identity received unsafe defaults.')
+  assert(
+    scalar(database, "SELECT COUNT(*) FROM users WHERE auth_provider = 'clerk' AND provider_subject = 'user_phase17_validation'") === 1,
+    'Repeated managed identity mapping created duplicate users.',
+  )
+}
+
 async function main() {
   await mkdir(qaTempRoot, { recursive: true })
   const tempDirectory = await mkdtemp(join(qaTempRoot, 'phase16-'))
@@ -308,6 +327,7 @@ async function main() {
     assertInvariants(restored, expectedSeed.checksum)
     const restoredSnapshot = readSnapshot(restored)
     assert(JSON.stringify(restoredSnapshot) === JSON.stringify(sourceSnapshot), 'Backup/restore snapshot differs from the source database.')
+    await verifyUserRepository(primary)
 
     console.log(JSON.stringify({
       backupRestore: 'identical',
@@ -323,6 +343,7 @@ async function main() {
       queryPlans,
       schemaTables: EXPECTED_TABLES.size,
       status: 'passed',
+      userMapping: 'verified',
     }, null, 2))
   } finally {
     databases.reverse().forEach((database) => {

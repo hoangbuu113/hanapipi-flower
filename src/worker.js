@@ -30,7 +30,12 @@ async function serveStaticRequest(request, env) {
 }
 
 export function createWorker(options = {}) {
-  const routeApiRequest = createApiRouter({ conciergeHandler: options.conciergeHandler })
+  const routeApiRequest = createApiRouter({
+    clerkTokenVerifier: options.clerkTokenVerifier,
+    conciergeHandler: options.conciergeHandler,
+    databaseRepositoriesFactory: options.databaseRepositoriesFactory,
+    identityVerifier: options.identityVerifier,
+  })
   const logger = options.logger ?? console
 
   return {

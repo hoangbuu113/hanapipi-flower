@@ -1,4 +1,5 @@
 import { createCatalogueRepository } from './repositories/catalogueRepository.js'
+import { createUserRepository } from './repositories/userRepository.js'
 
 export function getDatabaseBinding(env) {
   const db = env?.DB
@@ -12,6 +13,6 @@ export function createDatabaseRepositories(env) {
   const db = getDatabaseBinding(env)
   return {
     catalogue: createCatalogueRepository(db),
+    users: createUserRepository(db),
   }
 }
-

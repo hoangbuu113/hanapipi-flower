@@ -1,4 +1,6 @@
 import { handleConciergeRequest } from './concierge.js'
+import { createClerkIdentityVerifier } from './auth.js'
+import { createDatabaseRepositories } from './database.js'
 import {
   errorResponse,
   jsonResponse,
@@ -16,6 +18,7 @@ const API_V1_PREFIX = '/api/v1'
 const LEGACY_CONCIERGE_PATH = '/api/concierge'
 const V1_CONCIERGE_PATH = `${API_V1_PREFIX}/concierge`
 const V1_HEALTH_PATH = `${API_V1_PREFIX}/health`
+const V1_ME_PATH = `${API_V1_PREFIX}/me`
 const PREFLIGHT_HEADERS = ['authorization', 'content-type', 'idempotency-key', 'if-match']
 
 export const isApiPath = (pathname) => pathname === '/api' || pathname.startsWith('/api/')
@@ -91,8 +94,47 @@ function handlePreflight(request, env, requestId) {
   }), V1_CONCIERGE_PATH, { allowedOrigin: origin.origin })
 }
 
+function publicUser(user) {
+  return {
+    displayName: user.displayName,
+    id: user.id,
+    locale: user.locale,
+    role: user.role,
+    status: user.status,
+  }
+}
+
+async function handleCurrentUser(request, env, requestId, dependencies) {
+  const authentication = await dependencies.verifyIdentity(request, env)
+  if (!authentication.ok) {
+    return result(errorResponse(
+      authentication.status,
+      authentication.code,
+      authentication.message,
+      requestId,
+    ), V1_ME_PATH, { errorCode: authentication.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+  const user = await repositories.users.getOrCreateByIdentity(authentication.identity)
+  if (user.status !== 'active') {
+    return result(errorResponse(
+      403,
+      'ACCOUNT_UNAVAILABLE',
+      'Tài khoản hiện chưa thể sử dụng.',
+      requestId,
+    ), V1_ME_PATH, { errorCode: 'ACCOUNT_UNAVAILABLE' })
+  }
+
+  return result(successResponse({ user: publicUser(user) }, requestId), V1_ME_PATH)
+}
+
 export function createApiRouter(options = {}) {
   const conciergeHandler = options.conciergeHandler ?? handleConciergeRequest
+  const verifyIdentity = options.identityVerifier ?? createClerkIdentityVerifier({
+    verifyToken: options.clerkTokenVerifier,
+  })
+  const createRepositories = options.databaseRepositoriesFactory ?? createDatabaseRepositories
 
   return async function routeApiRequest(request, env, requestId) {
     const { pathname } = new URL(request.url)
@@ -119,6 +161,14 @@ export function createApiRouter(options = {}) {
     if (pathname === V1_HEALTH_PATH) {
       if (request.method !== 'GET') return methodNotAllowed(requestId, V1_HEALTH_PATH, 'GET')
       return result(successResponse({ status: 'ok', version: API_VERSION }, requestId), V1_HEALTH_PATH)
+    }
+
+    if (pathname === V1_ME_PATH) {
+      if (request.method !== 'GET') return methodNotAllowed(requestId, V1_ME_PATH, 'GET')
+      return handleCurrentUser(request, env, requestId, {
+        createRepositories,
+        verifyIdentity,
+      })
     }
 
     if (pathname === V1_CONCIERGE_PATH) {
