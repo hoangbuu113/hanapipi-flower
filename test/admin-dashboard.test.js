@@ -56,8 +56,10 @@ function createSeededDatabase() {
   const db = new DatabaseSync(':memory:')
   const m1 = fs.readFileSync(path.resolve('drizzle/0001_phase16_foundation.sql'), 'utf8')
   const m2 = fs.readFileSync(path.resolve('drizzle/0002_phase16_catalogue_seed.sql'), 'utf8')
+  const m3 = fs.readFileSync(path.resolve('drizzle/0003_add_product_internal_note.sql'), 'utf8')
   db.exec(m1)
   db.exec(m2)
+  db.exec(m3)
   return { d1: new D1Wrapper(db), sqlite: db }
 }
 
@@ -1853,4 +1855,408 @@ test('88. public GET /api/v1/catalogue/products/:slug returns updated variants a
   assert.ok(body.data.product.variants.some((v) => v.code === 'grand'), 'Updated variant must be present in public product')
   assert.ok(body.data.giftAddOns.some((g) => g.name === 'Quà công khai'), 'Active gift add-on must be present in public response')
   assert.ok(!body.data.giftAddOns.some((g) => g.name === 'Quà ẩn'), 'Inactive gift add-on must NOT be present in public response')
+})
+
+test('89. guest content edit request returns 401', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { shortDescription: 'Mô tả mới' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => null,
+  })
+  assert.equal(res.ok, false)
+  assert.equal(res.status, 401)
+  assert.equal(res.error.code, 'AUTHENTICATION_REQUIRED')
+})
+
+test('90. customer content edit request returns 403', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { shortDescription: 'Mô tả mới' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+  assert.equal(res.ok, false)
+  assert.equal(res.status, 403)
+  assert.equal(res.error.code, 'FORBIDDEN')
+})
+
+test('91. admin edits product name -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { name: 'Nắng Dịu Ban Mai Tuyệt Đẹp' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.equal(res.product.name, 'Nắng Dịu Ban Mai Tuyệt Đẹp')
+  const row = sqlite.prepare('SELECT name FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(row.name, 'Nắng Dịu Ban Mai Tuyệt Đẹp')
+})
+
+test('92. admin edits shortDescription -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { shortDescription: 'Một thiết kế đầy đặn với sắc hồng phấn.' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.equal(res.product.shortDescription, 'Một thiết kế đầy đặn với sắc hồng phấn.')
+  const row = sqlite.prepare('SELECT short_description FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(row.short_description, 'Một thiết kế đầy đặn với sắc hồng phấn.')
+})
+
+test('93. admin edits description -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { description: 'Câu chuyện chi tiết về loài hoa mùa hạ.' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.equal(res.product.description, 'Câu chuyện chi tiết về loài hoa mùa hạ.')
+  const row = sqlite.prepare('SELECT description FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(row.description, 'Câu chuyện chi tiết về loài hoa mùa hạ.')
+})
+
+test('94. admin edits collection -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { collection: 'Mùa Thu Hà Nội' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.equal(res.product.collection, 'Mùa Thu Hà Nội')
+  const row = sqlite.prepare('SELECT collection FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(row.collection, 'Mùa Thu Hà Nội')
+})
+
+test('95. admin edits careNote -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { careNote: 'Để nơi thoáng mát, tránh ánh nắng trực tiếp.' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.equal(res.product.careNote, 'Để nơi thoáng mát, tránh ánh nắng trực tiếp.')
+  const row = sqlite.prepare('SELECT care_note FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(row.care_note, 'Để nơi thoáng mát, tránh ánh nắng trực tiếp.')
+})
+
+test('96. admin edits deliveryNote -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { deliveryNote: 'Giao hỏa tốc 2 giờ nội thành.' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.equal(res.product.deliveryNote, 'Giao hỏa tốc 2 giờ nội thành.')
+  const row = sqlite.prepare('SELECT delivery_note FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(row.delivery_note, 'Giao hỏa tốc 2 giờ nội thành.')
+})
+
+test('97. admin edits internalNote -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { internalNote: 'Chỉ nhận đặt trước 2 ngày, hoa theo mùa.' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.equal(res.product.internalNote, 'Chỉ nhận đặt trước 2 ngày, hoa theo mùa.')
+  const row = sqlite.prepare('SELECT internal_note FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(row.internal_note, 'Chỉ nhận đặt trước 2 ngày, hoa theo mùa.')
+})
+
+test('98. admin edits composition -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { composition: ['Hoa hồng Ohara', 'Hoa baby', 'Lá bạc'] }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.deepEqual(res.product.composition, ['Hoa hồng Ohara', 'Hoa baby', 'Lá bạc'])
+  const row = sqlite.prepare('SELECT composition_json FROM products WHERE id = ?').get('nang-diu')
+  assert.deepEqual(JSON.parse(row.composition_json), ['Hoa hồng Ohara', 'Hoa baby', 'Lá bạc'])
+})
+
+test('99. admin edits occasions -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { occasions: ['Sinh nhật', 'Kỷ niệm'] }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.deepEqual(res.product.occasions, ['Sinh nhật', 'Kỷ niệm'])
+  const row = sqlite.prepare('SELECT occasions_json FROM products WHERE id = ?').get('nang-diu')
+  assert.deepEqual(JSON.parse(row.occasions_json), ['Sinh nhật', 'Kỷ niệm'])
+})
+
+test('100. admin edits moods -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { moods: ['Lãng mạn', 'Dịu dàng'] }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.deepEqual(res.product.moods, ['Lãng mạn', 'Dịu dàng'])
+  const row = sqlite.prepare('SELECT moods_json FROM products WHERE id = ?').get('nang-diu')
+  assert.deepEqual(JSON.parse(row.moods_json), ['Lãng mạn', 'Dịu dàng'])
+})
+
+test('101. admin edits colors -> updates D1 and response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('nang-diu', { colors: ['Hồng phấn', 'Trắng kem'] }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.deepEqual(res.product.colors, ['Hồng phấn', 'Trắng kem'])
+  const row = sqlite.prepare('SELECT colors_json FROM products WHERE id = ?').get('nang-diu')
+  assert.deepEqual(JSON.parse(row.colors_json), ['Hồng phấn', 'Trắng kem'])
+})
+
+test('102. public GET /api/v1/catalogue/products does NOT contain internalNote', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  await updateAdminProduct('nang-diu', { internalNote: 'GHI CHÚ TUYỆT MẬT NỘI BỘ' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  const res = await testWorker.fetch('/api/v1/catalogue/products')
+  assert.equal(res.status, 200)
+  const body = JSON.parse(await res.text())
+  const nangDiu = body.data.items.find((p) => p.slug === 'nang-diu')
+  assert.ok(nangDiu)
+  assert.equal('internalNote' in nangDiu, false, 'Public product item must NOT contain internalNote property')
+  assert.equal('internal_note' in nangDiu, false, 'Public product item must NOT contain internal_note property')
+  assert.equal(JSON.stringify(body).includes('GHI CHÚ TUYỆT MẬT NỘI BỘ'), false, 'Public catalogue list must not contain internal note text')
+})
+
+test('103. public GET /api/v1/catalogue/products/:slug does NOT contain internalNote', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  await updateAdminProduct('nang-diu', { internalNote: 'GHI CHÚ TUYỆT MẬT NỘI BỘ' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  const res = await testWorker.fetch('/api/v1/catalogue/products/nang-diu')
+  assert.equal(res.status, 200)
+  const body = JSON.parse(await res.text())
+  const product = body.data.product
+  assert.ok(product)
+  assert.equal('internalNote' in product, false, 'Public product detail must NOT contain internalNote property')
+  assert.equal('internal_note' in product, false, 'Public product detail must NOT contain internal_note property')
+  assert.equal(JSON.stringify(body).includes('GHI CHÚ TUYỆT MẬT NỘI BỘ'), false, 'Public catalogue detail response must not contain internal note text')
+})
+
+test('104. ProductDetailPage renders updated shortDescription', () => {
+  const pageCode = fs.readFileSync(path.resolve('src/pages/ProductDetailPage.jsx'), 'utf8')
+  assert.match(pageCode, /product\.shortDescription\s*\|\|\s*product\.description/u, 'ProductDetailPage must prioritize shortDescription for story text')
+})
+
+test('105. ProductDetailPage does NOT render internalNote anywhere', () => {
+  const pageCode = fs.readFileSync(path.resolve('src/pages/ProductDetailPage.jsx'), 'utf8')
+  assert.equal(/internalNote/u.test(pageCode), false, 'ProductDetailPage must never reference internalNote')
+  assert.equal(/internal_note/u.test(pageCode), false, 'ProductDetailPage must never reference internal_note')
+})
+
+test('106. validation rejects oversized shortDescription (> 320 chars) with 400', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const oversized = 'A'.repeat(321)
+  const res = await updateAdminProduct('nang-diu', { shortDescription: oversized }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, false)
+  assert.equal(res.status, 400)
+  assert.equal(res.error.code, 'INVALID_PAYLOAD')
+})
+
+test('107. validation rejects oversized description (> 1200 chars) with 400', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const oversized = 'B'.repeat(1201)
+  const res = await updateAdminProduct('nang-diu', { description: oversized }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, false)
+  assert.equal(res.status, 400)
+  assert.equal(res.error.code, 'INVALID_PAYLOAD')
+})
+
+test('108. validation rejects oversized notes (> 800 chars) with 400', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const oversized = 'C'.repeat(801)
+
+  const res1 = await updateAdminProduct('nang-diu', { internalNote: oversized }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res1.ok, false)
+  assert.equal(res1.status, 400)
+  assert.equal(res1.error.code, 'INVALID_PAYLOAD')
+
+  const res2 = await updateAdminProduct('nang-diu', { careNote: oversized }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res2.ok, false)
+  assert.equal(res2.status, 400)
+  assert.equal(res2.error.code, 'INVALID_PAYLOAD')
+
+  const res3 = await updateAdminProduct('nang-diu', { deliveryNote: oversized }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res3.ok, false)
+  assert.equal(res3.status, 400)
+  assert.equal(res3.error.code, 'INVALID_PAYLOAD')
+})
+
+test('109. validation rejects malformed arrays for tags/metadata with 400', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const res1 = await updateAdminProduct('nang-diu', { composition: 'not-an-array' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res1.ok, false)
+  assert.equal(res1.status, 400)
+  assert.equal(res1.error.code, 'INVALID_PAYLOAD')
+
+  const res2 = await updateAdminProduct('nang-diu', { occasions: [123, null] }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res2.ok, false)
+  assert.equal(res2.status, 400)
+  assert.equal(res2.error.code, 'INVALID_PAYLOAD')
+})
+
+test('110. content edit on unknown product returns 404', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const res = await updateAdminProduct('san-pham-khong-ton-tai', { shortDescription: 'Mới' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, false)
+  assert.equal(res.status, 404)
+  assert.equal(res.error.code, 'PRODUCT_NOT_FOUND')
+})
+
+test('111. content edit on archived product keeps active = 0 (does NOT silently restore)', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  await setAdminProductArchived('nang-diu', true, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  const rowBefore = sqlite.prepare('SELECT active FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(rowBefore.active, 0)
+
+  const res = await updateAdminProduct('nang-diu', { shortDescription: 'Cập nhật sản phẩm lưu trữ' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.equal(res.product.active, false)
+  const rowAfter = sqlite.prepare('SELECT active FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(rowAfter.active, 0, 'Active state must remain 0 after content edit')
+})
+
+test('112. content edit does NOT alter media, sizes, wrapping, or gift add-ons', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const beforeProduct = sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('nang-diu')
+  const beforeVariants = sqlite.prepare('SELECT * FROM product_variants WHERE product_id = ?').all('nang-diu')
+  const beforeGifts = sqlite.prepare('SELECT * FROM gift_add_ons').all()
+
+  const res = await updateAdminProduct('nang-diu', {
+    internalNote: 'Ghi chú mới',
+    name: 'Nắng Dịu Đổi Tên',
+    shortDescription: 'Mô tả ngắn mới',
+  }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+
+  const afterProduct = sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('nang-diu')
+  const afterVariants = sqlite.prepare('SELECT * FROM product_variants WHERE product_id = ?').all('nang-diu')
+  const afterGifts = sqlite.prepare('SELECT * FROM gift_add_ons').all()
+
+  assert.equal(beforeProduct.media_json, afterProduct.media_json, 'Media must remain untouched')
+  assert.deepEqual(beforeVariants, afterVariants, 'Variants must remain untouched')
+  assert.deepEqual(beforeGifts, afterGifts, 'Gift add-ons must remain untouched')
+})
+
+test('113. invariant protection: no-watering-flower preserves priceless and protected identity while allowing content/internal notes', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const res = await updateAdminProduct('no-watering-flower', {
+    careNote: 'Không cần tưới nước, chỉ cần sự chân thành.',
+    internalNote: 'Tác phẩm nghệ thuật đặc biệt, không bán thương mại.',
+  }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, true)
+  assert.equal(res.product.purchaseType, 'priceless')
+  assert.equal(res.product.priceVnd, null)
+  assert.equal(res.product.isPurchasable, false)
+  assert.equal(res.product.internalNote, 'Tác phẩm nghệ thuật đặc biệt, không bán thương mại.')
+
+  const row = sqlite.prepare('SELECT price_vnd, purchase_type, internal_note FROM products WHERE id = ?').get('no-watering-flower')
+  assert.equal(row.price_vnd, null)
+  assert.equal(row.purchase_type, 'priceless')
+  assert.equal(row.internal_note, 'Tác phẩm nghệ thuật đặc biệt, không bán thương mại.')
+
+  const badRes = await updateAdminProduct('no-watering-flower', {
+    priceVnd: 500000,
+    shortDescription: 'Cố gắng đặt giá',
+  }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(badRes.ok, false)
+  assert.equal(badRes.status, 400)
+  assert.equal(badRes.error.code, 'PROTECTED_PRODUCT')
 })

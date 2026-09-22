@@ -44,8 +44,10 @@ function createSeededDatabase() {
   const db = new DatabaseSync(':memory:')
   const m1 = fs.readFileSync(path.resolve('drizzle/0001_phase16_foundation.sql'), 'utf8')
   const m2 = fs.readFileSync(path.resolve('drizzle/0002_phase16_catalogue_seed.sql'), 'utf8')
+  const m3 = fs.readFileSync(path.resolve('drizzle/0003_add_product_internal_note.sql'), 'utf8')
   db.exec(m1)
   db.exec(m2)
+  db.exec(m3)
   return { d1: new D1Wrapper(db), sqlite: db }
 }
 

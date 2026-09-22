@@ -105,7 +105,7 @@
 
 .product-detail__price { margin: 18px 0 0; font-size: 17px; font-weight: 700; }
 .product-detail__price-meta { margin: 5px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
-.product-detail__story { margin: 25px 0 0; color: var(--text-muted); font-size: 15px; line-height: 1.72; }
+.product-detail__story { margin: 25px 0 0; color: var(--text-muted); font-size: 15px; line-height: 1.72; white-space: pre-line; }
 
 .product-option-group {
   min-width: 0;

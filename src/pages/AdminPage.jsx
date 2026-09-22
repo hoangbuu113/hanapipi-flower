@@ -51,7 +51,7 @@ function AdminPage() {
   const [catalogueError, setCatalogueError] = useState(null)
   const [catalogueReloadKey, setCatalogueReloadKey] = useState(0)
 
-  const [editingProductId, setEditingProductId] = useState(null)
+  const [editingProduct, setEditingProduct] = useState(null)
   const [editForm, setEditForm] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
@@ -201,10 +201,21 @@ function AdminPage() {
   }
 
   const handleStartEdit = (product) => {
-    setEditingProductId(product.id)
+    setEditingProduct(product)
     setEditForm({
+      careNote: product.careNote ?? '',
+      collection: product.collection ?? '',
+      colors: Array.isArray(product.colors) ? product.colors.join(', ') : '',
+      composition: Array.isArray(product.composition) ? product.composition.join(', ') : '',
+      deliveryNote: product.deliveryNote ?? '',
+      description: product.description ?? '',
+      internalNote: product.internalNote ?? '',
       isPurchasable: Boolean(product.isPurchasable),
-      priceVnd: product.priceVnd ?? 0,
+      moods: Array.isArray(product.moods) ? product.moods.join(', ') : '',
+      name: product.name ?? '',
+      occasions: Array.isArray(product.occasions) ? product.occasions.join(', ') : '',
+      priceVnd: product.priceVnd ?? '',
+      shortDescription: product.shortDescription ?? '',
       status: product.status ?? 'available',
     })
     setSaveError(null)
@@ -212,34 +223,97 @@ function AdminPage() {
   }
 
   const handleCancelEdit = () => {
-    setEditingProductId(null)
+    setEditingProduct(null)
     setEditForm(null)
     setSaveError(null)
   }
 
-  const handleSaveEdit = async (productId) => {
-    if (!editForm) return
+  const handleSaveEdit = async (e) => {
+    e?.preventDefault()
+    if (!editingProduct || !editForm) return
 
-    const price = Number(editForm.priceVnd)
-    if (!Number.isInteger(price) || price <= 0) {
-      setSaveError('Giá sản phẩm phải là số nguyên dương hợp lệ.')
+    const isPriceless = editingProduct.purchaseType === 'priceless' || editingProduct.slug === 'no-watering-flower'
+
+    if (!editForm.name.trim()) {
+      setSaveError('Tên sản phẩm không được để trống.')
+      return
+    }
+
+    let price = null
+    if (!isPriceless) {
+      price = Number(editForm.priceVnd)
+      if (!Number.isInteger(price) || price <= 0) {
+        setSaveError('Giá sản phẩm phải là số nguyên dương hợp lệ.')
+        return
+      }
+    }
+
+    if (editForm.shortDescription.length > 320) {
+      setSaveError('Mô tả ngắn tối đa 320 ký tự.')
+      return
+    }
+
+    if (editForm.description.length > 1200) {
+      setSaveError('Mô tả chi tiết tối đa 1200 ký tự.')
+      return
+    }
+
+    if (editForm.collection.length > 160) {
+      setSaveError('Bộ sưu tập tối đa 160 ký tự.')
+      return
+    }
+
+    if (editForm.careNote.length > 800) {
+      setSaveError('Hướng dẫn chăm sóc tối đa 800 ký tự.')
+      return
+    }
+
+    if (editForm.deliveryNote.length > 800) {
+      setSaveError('Thông tin giao hoa tối đa 800 ký tự.')
+      return
+    }
+
+    if (editForm.internalNote.length > 800) {
+      setSaveError('Ghi chú nội bộ tối đa 800 ký tự.')
       return
     }
 
     setIsSaving(true)
     setSaveError(null)
 
-    const result = await updateAdminProduct(productId, {
-      isPurchasable: editForm.isPurchasable,
-      priceVnd: price,
-      status: editForm.status,
-    }, { getToken })
+    const parseCommaList = (str) =>
+      typeof str === 'string'
+        ? str.split(/[,;\n]/u).map((s) => s.trim()).filter(Boolean)
+        : []
 
+    const payload = {
+      careNote: editForm.careNote.trim(),
+      collection: editForm.collection.trim(),
+      colors: parseCommaList(editForm.colors),
+      composition: parseCommaList(editForm.composition),
+      deliveryNote: editForm.deliveryNote.trim(),
+      description: editForm.description.trim(),
+      internalNote: editForm.internalNote.trim(),
+      name: editForm.name.trim(),
+      moods: parseCommaList(editForm.moods),
+      occasions: parseCommaList(editForm.occasions),
+      shortDescription: editForm.shortDescription.trim(),
+      status: editForm.status,
+    }
+
+    if (!isPriceless) {
+      payload.priceVnd = price
+      // Preserve archived state (active = 0) unless product is active and user checked isPurchasable
+      payload.isPurchasable = editingProduct.active ? editForm.isPurchasable : (editForm.isPurchasable && editingProduct.active)
+    }
+
+    const productId = editingProduct.id
+    const result = await updateAdminProduct(productId, payload, { getToken })
     setIsSaving(false)
 
     if (result.ok && result.product) {
       setProducts((prev) => prev.map((p) => (p.id === result.product.id ? result.product : p)))
-      setEditingProductId(null)
+      setEditingProduct(null)
       setEditForm(null)
       setSaveSuccess(`Đã cập nhật thành công "${result.product.name}".`)
     } else {
@@ -975,7 +1049,7 @@ function AdminPage() {
                     <th scope="col">Giá niêm yết</th>
                     <th scope="col">Khả năng mua</th>
                     <th scope="col">Trạng thái</th>
-                    <th scope="col">Đặc biệt / Ghi chú</th>
+                    <th scope="col">Ghi chú nội bộ</th>
                     <th scope="col">Thao tác</th>
                   </tr>
                 </thead>
@@ -983,7 +1057,6 @@ function AdminPage() {
                   {products.map((product) => {
                     const isPriceless = product.purchaseType === 'priceless' || product.priceVnd == null
                     const isProtected = product.slug === 'no-watering-flower' || isPriceless
-                    const isEditing = editingProductId === product.id
                     const isArchivePending = archiveProductId === product.id
                     const imageSrc = product.media?.[0]?.src
                     const statusLabel = STATUS_LABELS[product.status] || product.status
@@ -991,7 +1064,7 @@ function AdminPage() {
                     return (
                       <tr
                         key={product.id}
-                        className={isEditing ? 'admin-row--editing' : (!product.active ? 'admin-row--archived' : undefined)}
+                        className={!product.active ? 'admin-row--archived' : undefined}
                       >
                         <td>
                           <div className="admin-product-cell">
@@ -1007,6 +1080,11 @@ function AdminPage() {
                             <div className="admin-product-info">
                               <span className="admin-product-name">{product.name}</span>
                               <div className="admin-product-badges">
+                                {isProtected && (
+                                  <span className="admin-badge admin-badge--priceless">
+                                    Được bảo vệ
+                                  </span>
+                                )}
                                 {product.isBestSeller && (
                                   <span className="admin-badge admin-badge--bestseller">
                                     Bán chạy
@@ -1027,136 +1105,66 @@ function AdminPage() {
                         <td>
                           {isProtected ? (
                             <span className="admin-price admin-price--priceless">Vô giá</span>
-                          ) : isEditing ? (
-                            <input
-                              aria-label={`Giá niêm yết cho ${product.name}`}
-                              className="admin-input-price"
-                              disabled={isSaving}
-                              min="1000"
-                              step="1000"
-                              type="number"
-                              value={editForm.priceVnd}
-                              onChange={(e) => setEditForm((f) => ({ ...f, priceVnd: e.target.value }))}
-                            />
                           ) : (
                             <span className="admin-price">{formatCurrency(product.priceVnd)}</span>
                           )}
                         </td>
                         <td>
-                          {isProtected ? (
+                          {isProtected || !product.isPurchasable ? (
                             <span className="admin-badge admin-badge--not-purchasable">
                               Không mở bán
                             </span>
-                          ) : isEditing ? (
-                            <label className="admin-checkbox-label">
-                              <input
-                                checked={editForm.isPurchasable}
-                                disabled={isSaving}
-                                type="checkbox"
-                                onChange={(e) => setEditForm((f) => ({ ...f, isPurchasable: e.target.checked }))}
-                              />
-                              <span>Có thể mua</span>
-                            </label>
-                          ) : product.isPurchasable ? (
+                          ) : (
                             <span className="admin-badge admin-badge--purchasable">
                               Có thể mua
                             </span>
-                          ) : (
-                            <span className="admin-badge admin-badge--not-purchasable">
-                              Không mở bán
-                            </span>
                           )}
                         </td>
                         <td>
-                          {isEditing ? (
-                            <select
-                              aria-label={`Trạng thái cho ${product.name}`}
-                              className="admin-select-status"
-                              disabled={isSaving}
-                              value={editForm.status}
-                              onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
-                            >
-                              <option value="available">Có sẵn</option>
-                              <option value="preorder">Đặt trước</option>
-                              <option value="seasonal">Theo mùa</option>
-                              <option value="archived">Lưu trữ</option>
-                            </select>
-                          ) : (
-                            <span
-                              className={`admin-badge admin-badge--${product.status || 'available'}`}
-                            >
-                              {statusLabel}
-                            </span>
-                          )}
+                          <span
+                            className={`admin-badge admin-badge--${product.status || 'available'}`}
+                          >
+                            {statusLabel}
+                          </span>
                         </td>
                         <td>
-                          {isProtected ? (
-                            <span className="admin-badge admin-badge--priceless">
-                              Sản phẩm vô giá - Được bảo vệ
+                          {product.internalNote ? (
+                            <span className="admin-internal-note-cell" title={product.internalNote}>
+                              {product.internalNote}
                             </span>
                           ) : (
                             <span style={{ color: 'var(--text-muted)' }}>—</span>
                           )}
                         </td>
                         <td>
-                          {isProtected ? (
-                            <span className="admin-badge admin-badge--priceless">
-                              Được bảo vệ
-                            </span>
-                          ) : isEditing ? (
-                            <div className="admin-inline-actions">
-                              <button
-                                className="button button--primary button--small"
-                                disabled={isSaving}
-                                type="button"
-                                onClick={() => handleSaveEdit(product.id)}
-                              >
-                                {isSaving ? 'Đang lưu...' : 'Lưu'}
-                              </button>
-                              <button
-                                className="button button--text button--small"
-                                disabled={isSaving}
-                                type="button"
-                                onClick={handleCancelEdit}
-                              >
-                                Hủy
-                              </button>
-                              {saveError && (
-                                <span className="admin-edit-error" role="alert">
-                                  {saveError}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="admin-inline-actions">
-                              <button
-                                className="button button--secondary button--small admin-edit-btn"
-                                disabled={isArchivePending}
-                                type="button"
-                                onClick={() => handleStartEdit(product)}
-                              >
-                                Chỉnh sửa
-                              </button>
-                              <button
-                                className="button button--secondary button--small admin-variants-btn"
-                                disabled={isArchivePending}
-                                type="button"
-                                onClick={() => handleOpenVariants(product)}
-                              >
-                                Tùy chọn
-                              </button>
-                              <button
-                                className={`button button--small ${product.active ? 'button--text admin-archive-btn' : 'button--primary'}`}
-                                disabled={isArchivePending}
-                                type="button"
-                                onClick={() => handleArchiveChange(product, product.active)}
-                              >
-                                {isArchivePending
-                                  ? (product.active ? 'Đang lưu trữ...' : 'Đang khôi phục...')
-                                  : (product.active ? 'Lưu trữ' : 'Khôi phục')}
-                              </button>
-                            </div>
-                          )}
+                          <div className="admin-inline-actions">
+                            <button
+                              className="button button--secondary button--small admin-edit-btn"
+                              disabled={isArchivePending}
+                              type="button"
+                              onClick={() => handleStartEdit(product)}
+                            >
+                              Chỉnh sửa
+                            </button>
+                            <button
+                              className="button button--secondary button--small admin-variants-btn"
+                              disabled={isArchivePending}
+                              type="button"
+                              onClick={() => handleOpenVariants(product)}
+                            >
+                              Tùy chọn
+                            </button>
+                            <button
+                              className={`button button--small ${product.active ? 'button--text admin-archive-btn' : 'button--primary'}`}
+                              disabled={isArchivePending}
+                              type="button"
+                              onClick={() => handleArchiveChange(product, product.active)}
+                            >
+                              {isArchivePending
+                                ? (product.active ? 'Đang lưu trữ...' : 'Đang khôi phục...')
+                                : (product.active ? 'Lưu trữ' : 'Khôi phục')}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -1166,6 +1174,301 @@ function AdminPage() {
             </div>
           )}
         </section>
+
+        {/* Product Full Content Edit Modal */}
+        {editingProduct && editForm && (
+          <div className="admin-modal-backdrop" onClick={handleCancelEdit} role="presentation">
+            <div
+              aria-labelledby="edit-product-modal-title"
+              className="admin-modal admin-modal--edit-product"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+            >
+              <div className="admin-modal__header">
+                <div>
+                  <h3 id="edit-product-modal-title">Chỉnh sửa sản phẩm: {editingProduct.name}</h3>
+                  <p>Cập nhật nội dung hiển thị, thông tin hoa và ghi chú quản trị.</p>
+                </div>
+                <button
+                  className="button button--text button--small"
+                  type="button"
+                  onClick={handleCancelEdit}
+                >
+                  Đóng
+                </button>
+              </div>
+
+              <form className="admin-modal__body admin-edit-form" onSubmit={handleSaveEdit}>
+                {saveError && (
+                  <div className="admin-catalogue-error admin-catalogue-error--compact" role="alert">
+                    <p>{saveError}</p>
+                  </div>
+                )}
+
+                {/* Group 1: Thông tin cơ bản */}
+                <fieldset className="admin-edit-fieldset">
+                  <legend>Thông tin cơ bản</legend>
+                  <div className="admin-form-grid">
+                    <div className="admin-form-group">
+                      <label htmlFor="edit-name">
+                        Tên sản phẩm <span className="admin-required">*</span>
+                      </label>
+                      <input
+                        id="edit-name"
+                        className="admin-input-text"
+                        disabled={isSaving}
+                        maxLength={160}
+                        required
+                        type="text"
+                        value={editForm.name}
+                        onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label>Đường dẫn (URL)</label>
+                      <input
+                        className="admin-input-text admin-input-readonly"
+                        readOnly
+                        type="text"
+                        value={`/san-pham/${editingProduct.slug}`}
+                      />
+                      <span className="admin-helper-text">Đường dẫn sản phẩm được giữ cố định để bảo vệ liên kết.</span>
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label htmlFor="edit-price">
+                        Giá niêm yết (VND) <span className="admin-required">*</span>
+                      </label>
+                      {editingProduct.purchaseType === 'priceless' || editingProduct.slug === 'no-watering-flower' ? (
+                        <input
+                          className="admin-input-text admin-input-readonly"
+                          readOnly
+                          type="text"
+                          value="Vô giá (Không mở bán)"
+                        />
+                      ) : (
+                        <input
+                          id="edit-price"
+                          className="admin-input-text"
+                          disabled={isSaving}
+                          min="1000"
+                          required
+                          step="1000"
+                          type="number"
+                          value={editForm.priceVnd}
+                          onChange={(e) => setEditForm((f) => ({ ...f, priceVnd: e.target.value }))}
+                        />
+                      )}
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label htmlFor="edit-status">Trạng thái</label>
+                      <select
+                        id="edit-status"
+                        className="admin-select-status"
+                        disabled={isSaving}
+                        value={editForm.status}
+                        onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
+                      >
+                        <option value="available">Có sẵn</option>
+                        <option value="preorder">Đặt trước</option>
+                        <option value="seasonal">Theo mùa</option>
+                        <option value="archived">Lưu trữ</option>
+                      </select>
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label htmlFor="edit-collection">Bộ sưu tập</label>
+                      <input
+                        id="edit-collection"
+                        className="admin-input-text"
+                        disabled={isSaving}
+                        maxLength={160}
+                        placeholder="Ví dụ: Những ngày tươi sáng"
+                        type="text"
+                        value={editForm.collection}
+                        onChange={(e) => setEditForm((f) => ({ ...f, collection: e.target.value }))}
+                      />
+                    </div>
+
+                    {!(editingProduct.purchaseType === 'priceless' || editingProduct.slug === 'no-watering-flower') && (
+                      <div className="admin-form-group admin-form-group--checkbox">
+                        <label className="admin-checkbox-label">
+                          <input
+                            checked={editForm.isPurchasable}
+                            disabled={isSaving}
+                            type="checkbox"
+                            onChange={(e) => setEditForm((f) => ({ ...f, isPurchasable: e.target.checked }))}
+                          />
+                          <span>Có thể mua (Mở bán cho khách hàng)</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </fieldset>
+
+                {/* Group 2: Nội dung hiển thị */}
+                <fieldset className="admin-edit-fieldset">
+                  <legend>Nội dung hiển thị</legend>
+                  <div className="admin-form-group">
+                    <label htmlFor="edit-short-description">Mô tả ngắn</label>
+                    <textarea
+                      id="edit-short-description"
+                      className="admin-textarea"
+                      disabled={isSaving}
+                      maxLength={320}
+                      rows={3}
+                      value={editForm.shortDescription}
+                      onChange={(e) => setEditForm((f) => ({ ...f, shortDescription: e.target.value }))}
+                    />
+                    <span className="admin-helper-text">Hiển thị trực tiếp dưới giá trên trang sản phẩm.</span>
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label htmlFor="edit-description">Mô tả chi tiết / Câu chuyện</label>
+                    <textarea
+                      id="edit-description"
+                      className="admin-textarea"
+                      disabled={isSaving}
+                      maxLength={1200}
+                      rows={4}
+                      value={editForm.description}
+                      onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                    />
+                  </div>
+                </fieldset>
+
+                {/* Group 3: Thông tin hoa */}
+                <fieldset className="admin-edit-fieldset">
+                  <legend>Thông tin hoa</legend>
+                  <div className="admin-form-grid">
+                    <div className="admin-form-group">
+                      <label htmlFor="edit-composition">Thành phần hoa</label>
+                      <input
+                        id="edit-composition"
+                        className="admin-input-text"
+                        disabled={isSaving}
+                        placeholder="Cách nhau bởi dấu phẩy (Ví dụ: Hướng dương, Hoa nhỏ trắng)"
+                        type="text"
+                        value={editForm.composition}
+                        onChange={(e) => setEditForm((f) => ({ ...f, composition: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label htmlFor="edit-occasions">Dịp tặng</label>
+                      <input
+                        id="edit-occasions"
+                        className="admin-input-text"
+                        disabled={isSaving}
+                        placeholder="Cách nhau bởi dấu phẩy (Ví dụ: Sinh nhật, Lời cảm ơn)"
+                        type="text"
+                        value={editForm.occasions}
+                        onChange={(e) => setEditForm((f) => ({ ...f, occasions: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label htmlFor="edit-moods">Phong cách / Cảm xúc</label>
+                      <input
+                        id="edit-moods"
+                        className="admin-input-text"
+                        disabled={isSaving}
+                        placeholder="Cách nhau bởi dấu phẩy (Ví dụ: Ấm áp, Rạng rỡ)"
+                        type="text"
+                        value={editForm.moods}
+                        onChange={(e) => setEditForm((f) => ({ ...f, moods: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label htmlFor="edit-colors">Bảng màu</label>
+                      <input
+                        id="edit-colors"
+                        className="admin-input-text"
+                        disabled={isSaving}
+                        placeholder="Cách nhau bởi dấu phẩy (Ví dụ: Vàng ấm, Trắng)"
+                        type="text"
+                        value={editForm.colors}
+                        onChange={(e) => setEditForm((f) => ({ ...f, colors: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </fieldset>
+
+                {/* Group 4: Thông tin giao/chăm sóc */}
+                <fieldset className="admin-edit-fieldset">
+                  <legend>Thông tin giao/chăm sóc</legend>
+                  <div className="admin-form-grid">
+                    <div className="admin-form-group">
+                      <label htmlFor="edit-care-note">Hướng dẫn chăm sóc</label>
+                      <textarea
+                        id="edit-care-note"
+                        className="admin-textarea"
+                        disabled={isSaving}
+                        maxLength={800}
+                        rows={3}
+                        value={editForm.careNote}
+                        onChange={(e) => setEditForm((f) => ({ ...f, careNote: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label htmlFor="edit-delivery-note">Thông tin giao hoa</label>
+                      <textarea
+                        id="edit-delivery-note"
+                        className="admin-textarea"
+                        disabled={isSaving}
+                        maxLength={800}
+                        rows={3}
+                        value={editForm.deliveryNote}
+                        onChange={(e) => setEditForm((f) => ({ ...f, deliveryNote: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </fieldset>
+
+                {/* Group 5: Ghi chú nội bộ */}
+                <fieldset className="admin-edit-fieldset">
+                  <legend>Ghi chú nội bộ</legend>
+                  <div className="admin-form-group">
+                    <label htmlFor="edit-internal-note">Ghi chú nội bộ</label>
+                    <textarea
+                      id="edit-internal-note"
+                      className="admin-textarea"
+                      disabled={isSaving}
+                      maxLength={800}
+                      placeholder="Ví dụ: Chỉ nhận đặt trước 2 ngày, Hoa theo mùa..."
+                      rows={3}
+                      value={editForm.internalNote}
+                      onChange={(e) => setEditForm((f) => ({ ...f, internalNote: e.target.value }))}
+                    />
+                    <span className="admin-helper-text">Chỉ quản trị viên nhìn thấy. Không hiển thị cho khách hàng.</span>
+                  </div>
+                </fieldset>
+
+                <div className="admin-modal__actions">
+                  <button
+                    className="button button--primary"
+                    disabled={isSaving}
+                    type="submit"
+                  >
+                    {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                  </button>
+                  <button
+                    className="button button--text"
+                    disabled={isSaving}
+                    type="button"
+                    onClick={handleCancelEdit}
+                  >
+                    Hủy
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Product Options Modal (Sizes & Wrapping) */}
         {configuringProduct && (

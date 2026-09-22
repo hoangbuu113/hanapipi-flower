@@ -224,7 +224,12 @@ function ProductDetailPage() {
               {isPurchasable ? formatCurrency(purchaseTotal) : getProductPriceLabel(product)}
             </p>
             {isPurchasable && <p className="product-detail__price-meta">Tổng cho {quantity} bó hoa và quà tặng đã chọn</p>}
-            <p className="product-detail__story">{product.description}</p>
+            <p className="product-detail__story">{product.shortDescription || product.description}</p>
+            {product.description && product.description !== product.shortDescription && (
+              <p className="product-detail__story-detail" style={{ marginTop: '12px', color: 'var(--text-muted)', fontSize: '14px', lineHeight: '1.6', whiteSpace: 'pre-line' }}>
+                {product.description}
+              </p>
+            )}
 
             {isPurchasable ? <>
               <fieldset className="product-option-group">

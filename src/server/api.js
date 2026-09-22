@@ -173,7 +173,7 @@ async function handleListAdminProducts(request, env, requestId, dependencies) {
   const repositories = dependencies.createRepositories(env)
   const options = parseCatalogueListOptions(url)
   const [catalogueResult, version] = await Promise.all([
-    repositories.catalogue.listProducts({ ...options, activeOnly: false }),
+    repositories.catalogue.listProducts({ ...options, activeOnly: false, forAdmin: true }),
     repositories.catalogue.getCatalogueVersion(),
   ])
 
@@ -219,10 +219,29 @@ async function handleUpdateAdminProduct(idOrSlug, request, env, requestId, depen
     ), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'INVALID_PAYLOAD' })
   }
 
+  // Whitelist supported fields
+  const payload = {}
+  if (body.name !== undefined) payload.name = body.name
+  if (body.priceVnd !== undefined) payload.priceVnd = body.priceVnd
+  if (body.status !== undefined) payload.status = body.status
+  if (body.isPurchasable !== undefined) payload.isPurchasable = body.isPurchasable
+  if (body.shortDescription !== undefined) payload.shortDescription = body.shortDescription
+  if (body.description !== undefined) payload.description = body.description
+  if (body.collection !== undefined) payload.collection = body.collection
+  if (body.careNote !== undefined) payload.careNote = body.careNote
+  if (body.deliveryNote !== undefined) payload.deliveryNote = body.deliveryNote
+  if (body.internalNote !== undefined) payload.internalNote = body.internalNote
+  if (body.composition !== undefined) payload.composition = body.composition
+  if (body.flowerComposition !== undefined) payload.flowerComposition = body.flowerComposition
+  if (body.occasions !== undefined) payload.occasions = body.occasions
+  if (body.moods !== undefined) payload.moods = body.moods
+  if (body.colors !== undefined) payload.colors = body.colors
+  if (body.colorPalette !== undefined) payload.colorPalette = body.colorPalette
+
   const repositories = dependencies.createRepositories(env)
 
   try {
-    const updated = await repositories.catalogue.updateProductCommerceFields(idOrSlug, body)
+    const updated = await repositories.catalogue.updateProductCommerceFields(idOrSlug, payload)
     if (!updated) {
       return result(errorResponse(
         404,
@@ -401,6 +420,7 @@ async function handleCreateAdminProduct(request, env, requestId, dependencies) {
   if (typeof body.imageUrl === 'string') payload.imageUrl = body.imageUrl
   if (typeof body.careNote === 'string') payload.careNote = body.careNote
   if (typeof body.deliveryNote === 'string') payload.deliveryNote = body.deliveryNote
+  if (typeof body.internalNote === 'string') payload.internalNote = body.internalNote
   if (Array.isArray(body.badges)) payload.badges = body.badges
   if (Array.isArray(body.colors)) payload.colors = body.colors
   if (Array.isArray(body.moods)) payload.moods = body.moods

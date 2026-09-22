@@ -114,6 +114,12 @@ async function applyMigrations(database) {
   assert(migrationFiles.length > 0, 'No versioned D1 migrations were found.')
 
   for (const fileName of migrationFiles) {
+    const hasSchemaTable = scalar(database, "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'schema_versions'")
+    if (hasSchemaTable > 0) {
+      const version = fileName.replace(/\.sql$/u, '')
+      const applied = scalar(database, 'SELECT COUNT(*) FROM schema_versions WHERE version = ?', [version])
+      if (applied > 0) continue
+    }
     database.exec(await readFile(join(migrationDirectory, fileName), 'utf8'))
   }
   return migrationFiles

@@ -17,7 +17,7 @@ const PRODUCT_SELECT = `
     price_vnd, currency, status, badges_json, colors_json, moods_json,
     occasions_json, composition_json, media_json, care_note, delivery_note,
     is_best_seller, active, sort_order, catalogue_version_id, created_at_utc,
-    updated_at_utc
+    updated_at_utc, internal_note
   FROM products
 `
 
@@ -63,6 +63,15 @@ function mapProduct(row) {
     sortOrder: row.sort_order,
     status: row.status,
     updatedAtUtc: row.updated_at_utc,
+  }
+}
+
+function mapAdminProduct(row) {
+  const product = mapProduct(row)
+  if (!product) return null
+  return {
+    ...product,
+    internalNote: row.internal_note ?? '',
   }
 }
 
@@ -127,19 +136,22 @@ export function createCatalogueRepository(db) {
       `).first()
     },
 
-    async getProductById(id) {
+    async getProductById(id, { forAdmin = false } = {}) {
       if (typeof id !== 'string' || id.length === 0 || id.length > 100) return null
-      return mapProduct(await db.prepare(`${PRODUCT_SELECT} WHERE id = ? LIMIT 1`).bind(id).first())
+      const row = await db.prepare(`${PRODUCT_SELECT} WHERE id = ? LIMIT 1`).bind(id).first()
+      return forAdmin ? mapAdminProduct(row) : mapProduct(row)
     },
 
-    async getProductBySlug(slug) {
+    async getProductBySlug(slug, { forAdmin = false } = {}) {
       if (typeof slug !== 'string' || slug.length === 0 || slug.length > 100) return null
-      return mapProduct(await db.prepare(`${PRODUCT_SELECT} WHERE slug = ? LIMIT 1`).bind(slug).first())
+      const row = await db.prepare(`${PRODUCT_SELECT} WHERE slug = ? LIMIT 1`).bind(slug).first()
+      return forAdmin ? mapAdminProduct(row) : mapProduct(row)
     },
 
     async listProducts(options = {}) {
       const {
         activeOnly = true,
+        forAdmin = false,
         maxPriceVnd = null,
         purchaseType = 'all',
         sort = 'catalogue',
@@ -170,8 +182,9 @@ export function createCatalogueRepository(db) {
       const sql = `${PRODUCT_SELECT} ${where} ORDER BY ${SORT_EXPRESSIONS[sort]} LIMIT ? OFFSET ?`
       const { results = [] } = await db.prepare(sql).bind(...bindings, limit, offset).all()
 
+      const mapper = forAdmin ? mapAdminProduct : mapProduct
       return {
-        items: results.map(mapProduct),
+        items: results.map(mapper),
         limit,
         offset,
       }
@@ -346,8 +359,184 @@ export function createCatalogueRepository(db) {
         bindings.push(fields.isPurchasable ? 1 : 0)
       }
 
+      // 4. name
+      if (fields.name !== undefined) {
+        if (typeof fields.name !== 'string' || !fields.name.trim() || fields.name.trim().length > 160) {
+          const err = new Error('Tên sản phẩm không được để trống và tối đa 160 ký tự.')
+          err.code = 'INVALID_NAME'
+          err.status = 400
+          throw err
+        }
+        updates.push('name = ?')
+        bindings.push(fields.name.trim())
+      }
+
+      // 5. shortDescription
+      if (fields.shortDescription !== undefined) {
+        if (typeof fields.shortDescription !== 'string') {
+          const err = new Error('Mô tả ngắn phải là chuỗi văn bản.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        const trimmed = fields.shortDescription.trim()
+        if (trimmed.length > 320) {
+          const err = new Error('Mô tả ngắn tối đa 320 ký tự.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        updates.push('short_description = ?')
+        bindings.push(trimmed)
+      }
+
+      // 6. description
+      if (fields.description !== undefined) {
+        if (typeof fields.description !== 'string') {
+          const err = new Error('Mô tả chi tiết phải là chuỗi văn bản.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        const trimmed = fields.description.trim()
+        if (trimmed.length > 1200) {
+          const err = new Error('Mô tả chi tiết tối đa 1200 ký tự.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        updates.push('description = ?')
+        bindings.push(trimmed)
+      }
+
+      // 7. collection
+      if (fields.collection !== undefined) {
+        if (typeof fields.collection !== 'string') {
+          const err = new Error('Bộ sưu tập phải là chuỗi văn bản.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        const trimmed = fields.collection.trim()
+        if (trimmed.length > 160) {
+          const err = new Error('Bộ sưu tập tối đa 160 ký tự.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        updates.push('collection = ?')
+        bindings.push(trimmed)
+      }
+
+      // 8. careNote
+      if (fields.careNote !== undefined) {
+        if (typeof fields.careNote !== 'string') {
+          const err = new Error('Hướng dẫn chăm sóc phải là chuỗi văn bản.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        const trimmed = fields.careNote.trim()
+        if (trimmed.length > 800) {
+          const err = new Error('Hướng dẫn chăm sóc tối đa 800 ký tự.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        updates.push('care_note = ?')
+        bindings.push(trimmed)
+      }
+
+      // 9. deliveryNote
+      if (fields.deliveryNote !== undefined) {
+        if (typeof fields.deliveryNote !== 'string') {
+          const err = new Error('Thông tin giao hoa phải là chuỗi văn bản.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        const trimmed = fields.deliveryNote.trim()
+        if (trimmed.length > 800) {
+          const err = new Error('Thông tin giao hoa tối đa 800 ký tự.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        updates.push('delivery_note = ?')
+        bindings.push(trimmed)
+      }
+
+      // 10. internalNote
+      if (fields.internalNote !== undefined) {
+        if (typeof fields.internalNote !== 'string') {
+          const err = new Error('Ghi chú nội bộ phải là chuỗi văn bản.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        const trimmed = fields.internalNote.trim()
+        if (trimmed.length > 800) {
+          const err = new Error('Ghi chú nội bộ tối đa 800 ký tự.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        updates.push('internal_note = ?')
+        bindings.push(trimmed)
+      }
+
+      // 11. composition / flowerComposition
+      const compositionArg = fields.composition !== undefined ? fields.composition : fields.flowerComposition
+      if (compositionArg !== undefined) {
+        if (!Array.isArray(compositionArg) || compositionArg.some((x) => typeof x !== 'string')) {
+          const err = new Error('Thành phần hoa phải là danh sách chuỗi.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        updates.push('composition_json = ?')
+        bindings.push(JSON.stringify(compositionArg.map((x) => x.trim()).filter(Boolean)))
+      }
+
+      // 12. occasions
+      if (fields.occasions !== undefined) {
+        if (!Array.isArray(fields.occasions) || fields.occasions.some((x) => typeof x !== 'string')) {
+          const err = new Error('Dịp tặng phải là danh sách chuỗi.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        updates.push('occasions_json = ?')
+        bindings.push(JSON.stringify(fields.occasions.map((x) => x.trim()).filter(Boolean)))
+      }
+
+      // 13. moods
+      if (fields.moods !== undefined) {
+        if (!Array.isArray(fields.moods) || fields.moods.some((x) => typeof x !== 'string')) {
+          const err = new Error('Phong cách / Cảm xúc phải là danh sách chuỗi.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        updates.push('moods_json = ?')
+        bindings.push(JSON.stringify(fields.moods.map((x) => x.trim()).filter(Boolean)))
+      }
+
+      // 14. colors / colorPalette
+      const colorsArg = fields.colors !== undefined ? fields.colors : fields.colorPalette
+      if (colorsArg !== undefined) {
+        if (!Array.isArray(colorsArg) || colorsArg.some((x) => typeof x !== 'string')) {
+          const err = new Error('Bảng màu phải là danh sách chuỗi.')
+          err.code = 'INVALID_PAYLOAD'
+          err.status = 400
+          throw err
+        }
+        updates.push('colors_json = ?')
+        bindings.push(JSON.stringify(colorsArg.map((x) => x.trim()).filter(Boolean)))
+      }
+
       if (updates.length === 0) {
-        return product
+        return this.getProductById(product.id, { forAdmin: true })
       }
 
       const now = new Date().toISOString()
@@ -358,7 +547,7 @@ export function createCatalogueRepository(db) {
       const sql = `UPDATE products SET ${updates.join(', ')} WHERE id = ?`
       await db.prepare(sql).bind(...bindings).run()
 
-      return this.getProductById(product.id)
+      return this.getProductById(product.id, { forAdmin: true })
     },
 
     async setProductArchived(idOrSlug, archived) {
@@ -380,7 +569,9 @@ export function createCatalogueRepository(db) {
       }
 
       const nextActive = archived ? 0 : 1
-      if (product.active === (nextActive === 1)) return product
+      if (product.active === (nextActive === 1)) {
+        return this.getProductById(product.id, { forAdmin: true })
+      }
 
       await db.prepare(`
         UPDATE products
@@ -388,7 +579,7 @@ export function createCatalogueRepository(db) {
         WHERE id = ?
       `).bind(nextActive, new Date().toISOString(), product.id).run()
 
-      return this.getProductById(product.id)
+      return this.getProductById(product.id, { forAdmin: true })
     },
 
     async createProduct(data = {}) {
@@ -509,6 +700,10 @@ export function createCatalogueRepository(db) {
       const occasions = Array.isArray(data.occasions) ? data.occasions.filter((o) => typeof o === 'string') : []
       const composition = Array.isArray(data.composition) ? data.composition.filter((c) => typeof c === 'string') : []
 
+      const internalNote = (typeof data.internalNote === 'string' && data.internalNote.trim())
+        ? data.internalNote.trim().slice(0, 800)
+        : null
+
       // Generate server ID
       const id = 'prod_' + globalThis.crypto.randomUUID().replaceAll('-', '')
 
@@ -526,18 +721,18 @@ export function createCatalogueRepository(db) {
           id, slug, name, short_description, description, collection, purchase_type,
           price_vnd, currency, status, badges_json, colors_json, moods_json, occasions_json,
           composition_json, media_json, care_note, delivery_note, is_best_seller, active,
-          sort_order, catalogue_version_id, created_at_utc, updated_at_utc
+          sort_order, catalogue_version_id, created_at_utc, updated_at_utc, internal_note
         ) VALUES (
           ?, ?, ?, ?, ?, ?, 'standard',
           ?, 'VND', ?, ?, ?, ?, ?,
           ?, ?, ?, ?, 0, ?,
-          ?, ?, ?, ?
+          ?, ?, ?, ?, ?
         )
       `).bind(
         id, slug, name, shortDescription, description, collection,
         price, status, JSON.stringify(badges), JSON.stringify(colors), JSON.stringify(moods), JSON.stringify(occasions),
         JSON.stringify(composition), JSON.stringify(media), careNote, deliveryNote, active,
-        sortOrder, activeVersion.version, now, now
+        sortOrder, activeVersion.version, now, now, internalNote
       )
 
       const insertVariantStmt = db.prepare(`
@@ -554,7 +749,7 @@ export function createCatalogueRepository(db) {
 
       await db.batch([insertProductStmt, insertVariantStmt])
 
-      return this.getProductById(id)
+      return this.getProductById(id, { forAdmin: true })
     },
 
     async saveProductVariants(productId, variantsList) {
