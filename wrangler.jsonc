@@ -4,7 +4,7 @@
   "main": "./src/worker.js",
   "compatibility_date": "2026-05-22",
   "secrets": {
-    "required": ["GROQ_API_KEY"]
+    "required": ["GROQ_API_KEY", "CLERK_JWT_KEY"]
   },
   "vars": {
     "API_V1_ENABLED": "false",

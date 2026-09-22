@@ -1,26 +1,26 @@
 # CURRENT PHASE
 
-Phase 16 is complete. Phase 17 has started; only the server-side Clerk trust-boundary slice is complete. Phase 17 as a whole is not complete.
+Phase 16 is complete. Phase 17 is in progress; the server-side Clerk trust boundary and live development-instance verification are complete. Phase 17 as a whole is not complete.
 
 # LAST VERIFIED TASK
 
-The Worker now verifies Clerk Bearer identity through a reusable boundary, maps verified `sub` values to D1 users, and exposes protected `GET /api/v1/me`. Focused auth and D1 mapping tests pass.
+A real Clerk development session was verified end to end through the local Worker: the token was cryptographically verified, its stable `sub` mapped to one D1 user, repeated requests reused that user, and protected `GET /api/v1/me` returned the safe payload.
 
 # CURRENT ARCHITECTURE STATE
 
-React/Vite/Sites serves the SPA through a Cloudflare Worker. D1 schema, migrations, catalogue seed, catalogue repository, and managed-identity user repository exist. API v1 includes protected `GET /api/v1/me` but remains globally gated with `API_V1_ENABLED=false`. Frontend catalogue/commerce/account state is still largely static or `localStorage`-driven.
+React/Vite/Sites serves the SPA through a Cloudflare Worker. D1 schema, migrations, catalogue seed, catalogue repository, and managed-identity user repository exist. A Clerk development application is linked locally; Email OTP and Google are enabled. API v1 includes protected `GET /api/v1/me` but remains globally gated with `API_V1_ENABLED=false`. Frontend catalogue/commerce/account state is still largely static or `localStorage`-driven.
 
 # WHAT IS WORKING
 
-Storefront routes and mock commerce flows exist. Catalogue invariant is 24 total / 23 purchasable / 1 priceless. Worker-based Groq concierge and local fallback exist. Clerk token verification, stable-sub D1 mapping, duplicate-safe user upsert, and unauthenticated protection have focused server tests.
+Storefront routes and mock commerce flows exist. Catalogue invariant is 24 total / 23 purchasable / 1 priceless. Worker-based Groq concierge and local fallback exist. Clerk token verification, stable-sub D1 mapping, duplicate-safe user upsert, unauthenticated protection, and one real development-session flow are verified.
 
 # WHAT IS PARTIAL
 
-D1 catalogue access is not authoritative runtime commerce. Clerk frontend sign-in and live tenant integration are not configured. The existing frontend mock account/password flow remains unchanged. Cart, Wishlist, Checkout, Orders, and `/account/orders` have not migrated; static and D1 catalogues temporarily coexist.
+D1 catalogue access is not authoritative runtime commerce. Clerk frontend sign-in is not integrated into the storefront. The existing frontend mock account/password flow remains unchanged. Cart, Wishlist, Checkout, Orders, and `/account/orders` have not migrated; static and D1 catalogues temporarily coexist.
 
 # CURRENT BLOCKERS
 
-Clerk is approved, but real tenant values and `CLERK_JWT_KEY` have not been configured or live-tested. API v1 remains intentionally disabled by default.
+No blocker remains for the verified server trust boundary. Frontend auth migration still requires a separately scoped implementation. API v1 remains intentionally disabled by default.
 
 # OPEN RISKS
 
@@ -33,7 +33,7 @@ Clerk is approved, but real tenant values and `CLERK_JWT_KEY` have not been conf
 
 # NEXT BEST TASK
 
-Configure a Clerk development tenant and Worker bindings through secret-safe channels, then perform one live token-verification check against `GET /api/v1/me` before changing frontend auth.
+Integrate the Clerk client provider and sign-in session into the existing frontend account entry points without migrating commerce state or removing the mock account flow until its replacement is verified.
 
 # LATEST VERIFIED COMMIT
 
