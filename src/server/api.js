@@ -504,13 +504,16 @@ async function handleUploadAdminMedia(request, env, requestId, dependencies) {
 
   try {
     await mediaStorage.put(key, buffer, mimeType)
-  } catch {
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'STORAGE_ERROR'
+    const message = err.message || 'Không thể lưu trữ tệp hình ảnh.'
     return result(errorResponse(
-      500,
-      'STORAGE_ERROR',
-      'Không thể lưu trữ tệp hình ảnh.',
+      status,
+      code,
+      message,
       requestId,
-    ), V1_ADMIN_MEDIA_PATH, { errorCode: 'STORAGE_ERROR' })
+    ), V1_ADMIN_MEDIA_PATH, { errorCode: code })
   }
 
   return result(
@@ -547,13 +550,16 @@ async function handleDeleteAdminMedia(key, request, env, requestId, dependencies
   const mediaStorage = dependencies.createMediaStorage ? dependencies.createMediaStorage(env) : createMediaStorage(env)
   try {
     await mediaStorage.delete(key)
-  } catch {
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'STORAGE_ERROR'
+    const message = err.message || 'Không thể xóa tệp hình ảnh khỏi lưu trữ.'
     return result(errorResponse(
-      500,
-      'STORAGE_ERROR',
-      'Không thể xóa tệp hình ảnh khỏi lưu trữ.',
+      status,
+      code,
+      message,
       requestId,
-    ), `${V1_ADMIN_MEDIA_PATH}/${key}`, { errorCode: 'STORAGE_ERROR' })
+    ), `${V1_ADMIN_MEDIA_PATH}/${key}`, { errorCode: code })
   }
 
   return result(
@@ -576,13 +582,16 @@ async function handleGetPublicMedia(key, request, env, requestId, dependencies) 
   let item = null
   try {
     item = await mediaStorage.get(key)
-  } catch {
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'STORAGE_ERROR'
+    const message = err.message || 'Không thể tải tệp hình ảnh.'
     return result(errorResponse(
-      500,
-      'STORAGE_ERROR',
-      'Không thể tải tệp hình ảnh.',
+      status,
+      code,
+      message,
       requestId,
-    ), `${V1_MEDIA_PATH}/${key}`, { errorCode: 'STORAGE_ERROR' })
+    ), `${V1_MEDIA_PATH}/${key}`, { errorCode: code })
   }
 
   if (!item) {

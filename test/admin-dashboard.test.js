@@ -12,6 +12,7 @@ import {
   updateAdminProduct,
   uploadAdminMedia,
 } from '../src/services/adminClient.js'
+import { MemoryMediaBucket } from '../src/server/mediaStorage.js'
 import { createWorker } from '../src/worker.js'
 
 class D1Wrapper {
@@ -57,8 +58,8 @@ function createSeededDatabase() {
 const localOrigin = 'http://127.0.0.1:5173'
 const testJwtKey = 'unit-test-admin-public-key'
 
-function createEnv(d1, { apiV1Enabled = 'true' } = {}) {
-  return {
+function createEnv(d1, { apiV1Enabled = 'true', mediaBucket } = {}) {
+  const env = {
     API_ALLOWED_ORIGINS: localOrigin,
     API_V1_ENABLED: apiV1Enabled,
     ASSETS: { async fetch() { return new Response('Not found', { status: 404 }) } },
@@ -66,9 +67,13 @@ function createEnv(d1, { apiV1Enabled = 'true' } = {}) {
     CLERK_JWT_KEY: testJwtKey,
     DB: d1,
   }
+  if (mediaBucket !== null) {
+    env.MEDIA_BUCKET = mediaBucket ?? new MemoryMediaBucket()
+  }
+  return env
 }
 
-function createTestWorker(d1, { apiV1Enabled = 'true' } = {}) {
+function createTestWorker(d1, { apiV1Enabled = 'true', mediaBucket } = {}) {
   const mockVerifier = async (token, _options) => {
     if (token === 'admin-token') {
       return { azp: localOrigin, sub: 'user_admin_subject' }
@@ -80,7 +85,7 @@ function createTestWorker(d1, { apiV1Enabled = 'true' } = {}) {
   }
 
   const worker = createWorker({ clerkTokenVerifier: mockVerifier, logger: { info() {} } })
-  const env = createEnv(d1, { apiV1Enabled })
+  const env = createEnv(d1, { apiV1Enabled, mediaBucket })
 
   return {
     env,
@@ -1447,4 +1452,47 @@ test('75. existing Edit/Add/Archive/Restore flows remain intact', async () => {
   })
   assert.equal(restoreRes.ok, true)
   assert.equal(restoreRes.product.active, true)
+})
+
+test('76. normal runtime missing MEDIA_BUCKET fails safely and does NOT use volatile memory fallback', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  // Create worker with mediaBucket: null (simulating missing R2 binding in production/runtime)
+  const testWorker = createTestWorker(d1, { mediaBucket: null })
+
+  const fakeFile = new Blob(['sample-image-content'], { type: 'image/jpeg' })
+  const result = await uploadAdminMedia(fakeFile, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, false, 'Must NOT succeed when MEDIA_BUCKET is missing')
+  assert.equal(result.status, 503, 'Must return 503 Service Unavailable')
+  assert.equal(result.error.code, 'MEDIA_STORAGE_UNAVAILABLE')
+  assert.equal(result.error.message, 'Dịch vụ lưu trữ hình ảnh chưa được cấu hình.')
+})
+
+test('77. delete operation with missing MEDIA_BUCKET fails safely with 503', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1, { mediaBucket: null })
+
+  const result = await deleteAdminMedia('prod_media_test123.jpg', {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 503)
+  assert.equal(result.error.code, 'MEDIA_STORAGE_UNAVAILABLE')
+})
+
+test('78. public GET with missing MEDIA_BUCKET fails safely with 503', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1, { mediaBucket: null })
+
+  const res = await testWorker.fetch('/api/v1/media/prod_media_test123.jpg')
+  assert.equal(res.status, 503)
+  const body = JSON.parse(await res.text())
+  assert.equal(body.error.code, 'MEDIA_STORAGE_UNAVAILABLE')
 })

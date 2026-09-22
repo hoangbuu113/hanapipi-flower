@@ -4,16 +4,17 @@ Phase 18 in progress: Admin can edit core commerce fields, create normal product
 
 # LAST VERIFIED TASK
 
-Implemented Admin Product Media & URL UX enhancements:
+Implemented Admin Product Media & URL UX enhancements and storage hardening:
 - Product Name is the primary Admin input; slug/path auto-generates from Product Name using Vietnamese-safe normalization.
 - The technical slug input is hidden from the default visible form; a clean preview (`/san-pham/<slug>`) is displayed, and an advanced path control is expandable via `Tùy chỉnh đường dẫn` with manual override protection and reset-to-name capability.
 - Replaced the manual image URL text field with a reusable `ProductImageUploader` component supporting device photo selection (mobile/desktop) and drag-and-drop.
 - Real image upload is backed by Cloudflare R2 storage via `MEDIA_BUCKET` binding (`POST /api/v1/admin/media`, `DELETE /api/v1/admin/media/:key`, and public `GET /api/v1/media/:key`).
+- Media storage is strictly hardened: normal Worker runtime requires `MEDIA_BUCKET` and fails safely with 503 `MEDIA_STORAGE_UNAVAILABLE` if the binding is absent. Silent volatile in-memory fallback is prohibited in runtime and permitted only as an explicitly injected test fake (`MemoryMediaBucket`).
 - Server validates image MIME types (`image/jpeg`, `image/png`, `image/webp`), enforces 10 MB limit, generates safe unique keys (`prod_media_<uuid>.<ext>`), and prevents path traversal.
 - D1 `media_json` stores only canonical media references (`/api/v1/media/<key>`); no binary or base64 data is stored in D1.
 - Image replace uploads the new image first before deleting the old image. Image removal features smooth animation and preserves previous state if deletion fails.
 - `no-watering-flower` romantic/private gallery remains strictly untouched and protected.
-- 75/75 admin tests pass; all existing storefront and auth regressions remain green.
+- 78/78 admin tests pass; all existing storefront and auth regressions remain green.
 - `API_V1_ENABLED=false` was verified; no deployment occurred.
 
 # CURRENT ARCHITECTURE STATE

@@ -25,8 +25,9 @@ export function generateMediaKey(mimeType) {
   return `prod_media_${random}.${ext}`
 }
 
-// In-memory fallback bucket for local testing or when R2 is not bound
-class MemoryMediaBucket {
+// In-memory bucket for explicit test injection only.
+// Normal Worker runtime MUST NOT silently use volatile in-memory storage.
+export class MemoryMediaBucket {
   constructor() {
     this.objects = new Map()
   }
@@ -64,14 +65,21 @@ class MemoryMediaBucket {
   }
 }
 
-// Global memory bucket instance for fallback across worker requests
-const fallbackBucket = new MemoryMediaBucket()
+function createStorageUnavailableError() {
+  const err = new Error('Dịch vụ lưu trữ hình ảnh chưa được cấu hình.')
+  err.code = 'MEDIA_STORAGE_UNAVAILABLE'
+  err.status = 503
+  return err
+}
 
 export function createMediaStorage(env = {}) {
-  const bucket = env.MEDIA_BUCKET ?? fallbackBucket
+  const bucket = env.MEDIA_BUCKET
 
   return {
     async put(key, body, contentType) {
+      if (!bucket) {
+        throw createStorageUnavailableError()
+      }
       if (!isValidMediaKey(key)) {
         throw new TypeError('Invalid media storage key.')
       }
@@ -83,11 +91,17 @@ export function createMediaStorage(env = {}) {
     },
 
     async get(key) {
+      if (!bucket) {
+        throw createStorageUnavailableError()
+      }
       if (!isValidMediaKey(key)) return null
       return bucket.get(key)
     },
 
     async delete(key) {
+      if (!bucket) {
+        throw createStorageUnavailableError()
+      }
       if (!isValidMediaKey(key)) return
       return bucket.delete(key)
     },
