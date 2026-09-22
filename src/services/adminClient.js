@@ -80,14 +80,43 @@ export async function checkAdminAccess({
 }
 
 export async function fetchAdminCatalogue({
+  getToken,
   fetchImpl = globalThis.fetch,
   signal,
-  endpoint = '/api/v1/catalogue/products?limit=50',
+  endpoint = '/api/v1/admin/products?limit=50',
 } = {}) {
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return {
+      data: null,
+      error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' },
+      ok: false,
+      status: 401,
+      total: 0,
+    }
+  }
+
+  if (!token) {
+    return {
+      data: null,
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' },
+      ok: false,
+      status: 401,
+      total: 0,
+    }
+  }
+
   try {
     const response = await fetchImpl(endpoint, {
       headers: {
         Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
       },
       signal,
     })
@@ -172,6 +201,127 @@ export async function fetchAdminCatalogue({
       ok: false,
       status: 0,
       total: 0,
+    }
+  }
+}
+
+export async function setAdminProductArchived(idOrSlug, archived, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (!idOrSlug || typeof idOrSlug !== 'string') {
+    return {
+      error: { code: 'INVALID_ID', message: 'Mã định danh sản phẩm không hợp lệ.' },
+      ok: false,
+      product: null,
+      status: 400,
+    }
+  }
+  if (typeof archived !== 'boolean') {
+    throw new TypeError('archived must be a boolean.')
+  }
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return {
+      error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' },
+      ok: false,
+      product: null,
+      status: 401,
+    }
+  }
+
+  if (!token) {
+    return {
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' },
+      ok: false,
+      product: null,
+      status: 401,
+    }
+  }
+
+  try {
+    const action = archived ? 'archive' : 'restore'
+    const response = await fetchImpl(
+      `/api/v1/admin/products/${encodeURIComponent(idOrSlug)}/${action}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        method: 'PATCH',
+      },
+    )
+
+    let body = null
+    try {
+      body = await response.json()
+    } catch {
+      // Non-JSON response
+    }
+
+    if (!response.ok) {
+      return {
+        error: body?.error ?? {
+          code: 'API_ERROR',
+          message: archived ? 'Không thể lưu trữ sản phẩm.' : 'Không thể khôi phục sản phẩm.',
+        },
+        ok: false,
+        product: null,
+        status: response.status,
+      }
+    }
+
+    const rawProduct = body?.data?.product
+    if (!rawProduct || typeof rawProduct !== 'object') {
+      return {
+        error: { code: 'MALFORMED_RESPONSE', message: 'Dữ liệu phản hồi từ máy chủ không hợp lệ.' },
+        ok: false,
+        product: null,
+        status: response.status,
+      }
+    }
+
+    const price = rawProduct.priceVnd !== undefined ? rawProduct.priceVnd : rawProduct.price ?? null
+    const purchaseType = rawProduct.purchaseType ?? (price == null ? 'priceless' : 'standard')
+    const isPurchasable = rawProduct.isPurchasable
+      ?? (rawProduct.active !== false && purchaseType !== 'priceless' && Number.isFinite(price))
+
+    return {
+      error: null,
+      ok: true,
+      product: {
+        active: rawProduct.active !== false,
+        badges: Array.isArray(rawProduct.badges) ? rawProduct.badges : [],
+        collection: rawProduct.collection ?? null,
+        description: rawProduct.description ?? '',
+        id: rawProduct.id,
+        isBestSeller: Boolean(rawProduct.isBestSeller),
+        isPurchasable,
+        media: Array.isArray(rawProduct.media) ? rawProduct.media : [],
+        name: rawProduct.name,
+        priceVnd: price,
+        purchaseType,
+        shortDescription: rawProduct.shortDescription ?? '',
+        slug: rawProduct.slug ?? rawProduct.id,
+        sortOrder: rawProduct.sortOrder ?? 0,
+        status: rawProduct.status ?? 'available',
+      },
+      status: response.status,
+    }
+  } catch {
+    return {
+      error: {
+        code: 'NETWORK_ERROR',
+        message: archived
+          ? 'Không thể kết nối đến máy chủ để lưu trữ sản phẩm.'
+          : 'Không thể kết nối đến máy chủ để khôi phục sản phẩm.',
+      },
+      ok: false,
+      product: null,
+      status: 0,
     }
   }
 }

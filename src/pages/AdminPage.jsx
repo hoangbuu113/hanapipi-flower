@@ -3,7 +3,13 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import Container from '../components/Container'
 import { useAccount } from '../context/accountStore'
-import { checkAdminAccess, createAdminProduct, fetchAdminCatalogue, updateAdminProduct } from '../services/adminClient'
+import {
+  checkAdminAccess,
+  createAdminProduct,
+  fetchAdminCatalogue,
+  setAdminProductArchived,
+  updateAdminProduct,
+} from '../services/adminClient'
 import { formatCurrency } from '../utils/formatCurrency'
 import './AdminPage.css'
 
@@ -43,6 +49,8 @@ function AdminPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(null)
+  const [archiveProductId, setArchiveProductId] = useState(null)
+  const [archiveError, setArchiveError] = useState(null)
 
   const [isCreating, setIsCreating] = useState(false)
   const [createForm, setCreateForm] = useState({
@@ -195,6 +203,38 @@ function AdminPage() {
     }
   }
 
+  const handleArchiveChange = async (product, archived) => {
+    if (archived) {
+      const confirmed = window.confirm(
+        `Lưu trữ "${product.name}"? Sản phẩm sẽ biến mất khỏi cửa hàng, nhưng toàn bộ dữ liệu vẫn được giữ lại.`,
+      )
+      if (!confirmed) return
+    }
+
+    setArchiveProductId(product.id)
+    setArchiveError(null)
+    setSaveSuccess(null)
+
+    const result = await setAdminProductArchived(product.id, archived, { getToken })
+    setArchiveProductId(null)
+
+    if (result.ok && result.product) {
+      setProducts((prev) => prev.map((item) => (
+        item.id === result.product.id ? result.product : item
+      )))
+      setSaveSuccess(
+        archived
+          ? `Đã lưu trữ "${result.product.name}". Dữ liệu sản phẩm vẫn được giữ lại.`
+          : `Đã khôi phục "${result.product.name}" về cửa hàng.`,
+      )
+    } else {
+      setArchiveError(
+        result.error?.message
+          || (archived ? 'Không thể lưu trữ sản phẩm.' : 'Không thể khôi phục sản phẩm.'),
+      )
+    }
+  }
+
   // 1. Authoritative Server Permission Verification
   useEffect(() => {
     let isCancelled = false
@@ -244,7 +284,7 @@ function AdminPage() {
 
     const controller = new AbortController()
 
-    fetchAdminCatalogue({ signal: controller.signal })
+    fetchAdminCatalogue({ getToken, signal: controller.signal })
       .then((result) => {
         if (isCancelled) return
 
@@ -271,7 +311,7 @@ function AdminPage() {
       isCancelled = true
       controller.abort()
     }
-  }, [authStatus, catalogueReloadKey])
+  }, [authStatus, catalogueReloadKey, getToken])
 
   const handleRetryAuth = useCallback(() => {
     setAuthReloadKey((k) => k + 1)
@@ -439,6 +479,12 @@ function AdminPage() {
           {saveSuccess && (
             <div className="admin-save-success" role="status">
               <p>{saveSuccess}</p>
+            </div>
+          )}
+
+          {archiveError && (
+            <div className="admin-catalogue-error admin-catalogue-error--compact" role="alert">
+              <p>{archiveError}</p>
             </div>
           )}
 
@@ -616,12 +662,17 @@ function AdminPage() {
                 <tbody>
                   {products.map((product) => {
                     const isPriceless = product.purchaseType === 'priceless' || product.priceVnd == null
+                    const isProtected = product.slug === 'no-watering-flower' || isPriceless
                     const isEditing = editingProductId === product.id
+                    const isArchivePending = archiveProductId === product.id
                     const imageSrc = product.media?.[0]?.src
                     const statusLabel = STATUS_LABELS[product.status] || product.status
 
                     return (
-                      <tr key={product.id} className={isEditing ? 'admin-row--editing' : undefined}>
+                      <tr
+                        key={product.id}
+                        className={isEditing ? 'admin-row--editing' : (!product.active ? 'admin-row--archived' : undefined)}
+                      >
                         <td>
                           <div className="admin-product-cell">
                             {imageSrc && (
@@ -641,6 +692,11 @@ function AdminPage() {
                                     Bán chạy
                                   </span>
                                 )}
+                                {!product.active && (
+                                  <span className="admin-badge admin-badge--archived">
+                                    Đã lưu trữ
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -649,7 +705,7 @@ function AdminPage() {
                           <code className="admin-slug-code">{product.slug}</code>
                         </td>
                         <td>
-                          {isPriceless ? (
+                          {isProtected ? (
                             <span className="admin-price admin-price--priceless">Vô giá</span>
                           ) : isEditing ? (
                             <input
@@ -667,7 +723,7 @@ function AdminPage() {
                           )}
                         </td>
                         <td>
-                          {isPriceless ? (
+                          {isProtected ? (
                             <span className="admin-badge admin-badge--not-purchasable">
                               Không mở bán
                             </span>
@@ -714,7 +770,7 @@ function AdminPage() {
                           )}
                         </td>
                         <td>
-                          {isPriceless ? (
+                          {isProtected ? (
                             <span className="admin-badge admin-badge--priceless">
                               Sản phẩm vô giá - Được bảo vệ
                             </span>
@@ -723,7 +779,7 @@ function AdminPage() {
                           )}
                         </td>
                         <td>
-                          {isPriceless ? (
+                          {isProtected ? (
                             <span className="admin-badge admin-badge--priceless">
                               Được bảo vệ
                             </span>
@@ -752,13 +808,26 @@ function AdminPage() {
                               )}
                             </div>
                           ) : (
-                            <button
-                              className="button button--secondary button--small admin-edit-btn"
-                              type="button"
-                              onClick={() => handleStartEdit(product)}
-                            >
-                              Chỉnh sửa
-                            </button>
+                            <div className="admin-inline-actions">
+                              <button
+                                className="button button--secondary button--small admin-edit-btn"
+                                disabled={isArchivePending}
+                                type="button"
+                                onClick={() => handleStartEdit(product)}
+                              >
+                                Chỉnh sửa
+                              </button>
+                              <button
+                                className={`button button--small ${product.active ? 'button--text admin-archive-btn' : 'button--primary'}`}
+                                disabled={isArchivePending}
+                                type="button"
+                                onClick={() => handleArchiveChange(product, product.active)}
+                              >
+                                {isArchivePending
+                                  ? (product.active ? 'Đang lưu trữ...' : 'Đang khôi phục...')
+                                  : (product.active ? 'Lưu trữ' : 'Khôi phục')}
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>

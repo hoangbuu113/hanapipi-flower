@@ -1,23 +1,22 @@
 # CURRENT PHASE
 
-Phase 18 in progress: Admin can now CREATE new catalogue products (`POST /api/v1/admin/products`) as well as edit core commerce fields (`PATCH /api/v1/admin/products/:id`) from `/admin`. `no-watering-flower` is strictly protected server-side and client-side as a priceless non-purchasable product. Frontend Shop, Product Detail, SearchPage, Homepage (`#best-sellers`), and FlowerFinderPage are migrated to the D1-backed catalogue API with intentional gate fallback (`API_NOT_FOUND` → static data) and error/retry states. Static `src/data/products.js` is temporarily retained for unmigrated secondary consumers (CartItems, ConciergeWidget, CommerceContext, FlowerAlreadyTakenPage, WishlistPage, order.js, catalogueClient.js). Delete/Archive products, variants/media editing, and commerce migration are not implemented yet. API v1 remains default closed (`API_V1_ENABLED=false`).
+Phase 18 in progress: Admin can edit core commerce fields, create normal products, and archive/restore normal products from `/admin`. Archive is a soft-delete through the current `products.active` model; hard delete is not implemented. `no-watering-flower` remains strictly protected server-side and client-side as a priceless non-purchasable product. Frontend Shop, Product Detail, SearchPage, Homepage (`#best-sellers`), and FlowerFinderPage are migrated to the D1-backed catalogue API with intentional gate fallback (`API_NOT_FOUND` → static data) and error/retry states. Static `src/data/products.js` is temporarily retained for unmigrated secondary consumers (CartItems, ConciergeWidget, CommerceContext, FlowerAlreadyTakenPage, WishlistPage, order.js, catalogueClient.js). Product detail/media/variants editing and commerce migration are still pending. API v1 remains default closed (`API_V1_ENABLED=false`).
 
 # LAST VERIFIED TASK
 
-Implemented server-authoritative admin product creation (`POST /api/v1/admin/products`) from `/admin` (`src/server/repositories/catalogueRepository.js`, `src/server/api.js`, `src/services/adminClient.js`, `src/pages/AdminPage.jsx`, `src/pages/AdminPage.css`, `test/admin-dashboard.test.js`). Verified:
-- `POST /api/v1/admin/products` is strictly protected by `requireAdmin` server-side via Clerk identity mapping to D1 `users.role = 'admin'`. Guests return 401, customers return 403.
-- Payload whitelisted: `name`, `slug` (auto-lowercased, URL-safe regex, ≤100 chars, uniqueness-checked), `priceVnd` (positive integer), `status` ∈ `{available, seasonal, preorder}`, optional `collection`, `shortDescription`, `imageUrl`, `isPurchasable`.
-- `no-watering-flower` slug and `purchaseType: 'priceless'` are rejected at both API and repository layers (400 `PROTECTED_PRODUCT`). Duplicate slug rejected with 409 `SLUG_EXISTS`.
-- Product + default size variant (`Tiêu chuẩn`) inserted atomically via `db.batch()` under the active `catalogue_version_id`.
-- `normalizeCatalogueProduct` in `catalogueClient.js` safely handles media-less products (empty-src fallback image) to prevent ProductCard crash.
-- Admin UI "Thêm sản phẩm" panel auto-generates slug from Vietnamese product name (NFD normalization) and allows manual override. Prepends new product to admin list on success.
-- Controlled live D1 flow verified: customer POST → 403, admin create → 201 (hoa-cuc-mat-troi, 520.000 ₫), public catalogue returns new product with default variant, temp product deleted cleanly, catalogue restored to 24 products / 115 variants, user restored to customer role.
-- All 42/42 admin tests pass; all 117 frontend tests pass; lint clean (0 errors, 0 warnings); production build clean.
-- `API_V1_ENABLED=false` preserved as repository default.
+Implemented server-authoritative Admin archive/restore for normal catalogue products (`PATCH /api/v1/admin/products/:id/archive` and `/restore`) plus the protected Admin list (`GET /api/v1/admin/products`). Verified:
+- Every Admin read/mutation follows Clerk identity → canonical D1 user → `requireAdmin()`; guests are denied with 401 and customers with 403.
+- Archive sets only `products.active = 0`; restore sets only `products.active = 1`. Product rows, price, slug, media, variants, and relations remain intact.
+- The public catalogue excludes archived products while the Admin-only catalogue includes both active and archived products, so restoration remains possible without static fallback.
+- Archive and restore are idempotent. Unknown products return 404 and unexpected persistence errors return a safe 5xx without SQL/stack leakage.
+- `no-watering-flower` rejects both actions with `PROTECTED_PRODUCT` and remains active, priceless, and non-purchasable.
+- `/admin` provides Vietnamese confirmation before archive, canonical post-response updates, disabled/loading states, success/error feedback, and protected-product controls.
+- Controlled live local flow verified with a real Clerk test session and local D1: customer denied, temporary Admin role authorized archive, Admin still listed the inactive row, public catalogue hid it, restore returned it publicly, price/slug/media/variants stayed unchanged, and role/catalogue state were restored.
+- `API_V1_ENABLED=false` was restored after live verification; no deployment occurred.
 
 # CURRENT ARCHITECTURE STATE
 
-React/Vite/Sites serves the SPA through a Cloudflare Worker. Server catalogue/pricing read and mutation authority exists in D1. Frontend Shop, Product Detail, SearchPage, Homepage, and FlowerFinderPage load from D1 catalogue API with transitional 404 fallback. Admin UI at `/admin` loads strictly from D1 catalogue API and mutates via `PATCH /api/v1/admin/products/:id` (edit) and `POST /api/v1/admin/products` (create). Static `src/data/products.js` is temporarily retained for unmigrated secondary consumers (CartItems, ConciergeWidget, CommerceContext, FlowerAlreadyTakenPage, WishlistPage, order.js, catalogueClient.js). Clerk React provider wraps the frontend. API v1 remains globally gated closed with `API_V1_ENABLED=false`. Order history is safely preserved in `localStorage` under `hanapipi-flower:orders`. Commerce (Cart, Wishlist, Checkout) remains on existing unmigrated flows.
+React/Vite/Sites serves the SPA through a Cloudflare Worker. Server catalogue/pricing read and mutation authority exists in D1. Frontend Shop, Product Detail, SearchPage, Homepage, and FlowerFinderPage load from D1 catalogue API with transitional 404 fallback. Admin UI at `/admin` loads both active and archived rows strictly from `GET /api/v1/admin/products`, edits through `PATCH /api/v1/admin/products/:id`, creates through `POST /api/v1/admin/products`, and soft-archives/restores through the explicit action endpoints. Static `src/data/products.js` is temporarily retained for unmigrated secondary consumers (CartItems, ConciergeWidget, CommerceContext, FlowerAlreadyTakenPage, WishlistPage, order.js, catalogueClient.js). Clerk React provider wraps the frontend. API v1 remains globally gated closed with `API_V1_ENABLED=false`. Order history is safely preserved in `localStorage` under `hanapipi-flower:orders`. Commerce (Cart, Wishlist, Checkout) remains on existing unmigrated flows.
 
 **`products.active` semantics**: `active` conflates BOTH visibility AND purchasability. `active = 0` hides from public catalogue AND makes non-purchasable. Archive/Delete implementation must account for this dual meaning.
 
@@ -25,15 +24,15 @@ React/Vite/Sites serves the SPA through a Cloudflare Worker. Server catalogue/pr
 
 # WHAT IS WORKING
 
-Storefront routes and mock commerce flows exist. Catalogue invariant is 24 total / 23 purchasable / 1 priceless. Worker-based Groq concierge and local fallback exist. Clerk token verification, stable-sub D1 mapping, duplicate-safe user upsert, unauthenticated protection, frontend Clerk session, Email OTP verification, `/api/v1/me` hydration, sign-out, server-side `requireAdmin` authorization, `/api/v1/admin/me`, `/admin` route protection, D1-backed catalogue listing, D1-backed product detail endpoints, read-only Admin D1 catalogue view, Admin product commerce editing (`PATCH /api/v1/admin/products/:id`), Admin product creation (`POST /api/v1/admin/products`), `no-watering-flower` invariant enforcement, and frontend Shop, Product Detail, SearchPage, Homepage, and FlowerFinderPage catalogue API integration are verified.
+Storefront routes and mock commerce flows exist. Catalogue invariant is 24 total / 23 purchasable / 1 priceless. Worker-based Groq concierge and local fallback exist. Clerk token verification, stable-sub D1 mapping, duplicate-safe user upsert, unauthenticated protection, frontend Clerk session, Email OTP verification, `/api/v1/me` hydration, sign-out, server-side `requireAdmin` authorization, `/api/v1/admin/me`, `/admin` route protection, D1-backed catalogue listing/detail, Admin product commerce editing, Admin product creation, Admin soft archive/restore, protected active+archived Admin listing, `no-watering-flower` invariant enforcement, and frontend Shop, Product Detail, SearchPage, Homepage, and FlowerFinderPage catalogue API integration are verified.
 
 # WHAT IS PARTIAL
 
-Secondary catalogue consumers (FlowerAlreadyTakenPage, ConciergeWidget, WishlistPage, CartItems, CommerceContext) have not switched to D1 catalogue API yet. Delete/Archive product, variants/media editing are not implemented yet. Cart, Wishlist, Checkout, and Orders have not migrated to Worker/D1; static and D1 catalogues temporarily coexist.
+Secondary catalogue consumers (FlowerAlreadyTakenPage, ConciergeWidget, WishlistPage, CartItems, CommerceContext) have not switched to D1 catalogue API yet. Hard delete and product detail/media/variants editing are not implemented. Cart, Wishlist, Checkout, and Orders have not migrated to Worker/D1; static and D1 catalogues temporarily coexist.
 
 # CURRENT BLOCKERS
 
-None. Admin product creation is verified and all test suites pass. `API_V1_ENABLED` remains intentionally disabled by default.
+None. Admin archive/restore is verified locally and `API_V1_ENABLED` remains intentionally disabled by default.
 
 # OPEN RISKS
 
@@ -45,11 +44,11 @@ None. Admin product creation is verified and all test suites pass. `API_V1_ENABL
 
 # NEXT BEST TASK
 
-Phase 18J: Implement Admin Delete/Archive product (`DELETE` or `PATCH active=0` on `/api/v1/admin/products/:id`), respecting `no-watering-flower` protection and `products.active` dual-meaning semantics.
+Full product detail editing only.
 
 # LATEST VERIFIED COMMIT
 
-Use the commit resulting from this Admin product creation checkpoint (`Add admin product creation`) as the authoritative commit reference.
+Use the commit resulting from this Admin archive/restore checkpoint (`Add admin product archive restore`) as the authoritative commit reference.
 
 # DEPLOYMENT STATE
 
@@ -57,4 +56,4 @@ Sites/Worker deployment configuration exists. No deployment is performed by this
 
 # IMPORTANT NOTES
 
-Clerk is the selected managed provider; Auth0 is not used. D1 user role is authoritative for authorization. D1 is authoritative for catalogue and pricing; frontend static data is temporary compatibility data until Phase 18 migration completes. `products.active` conflates visibility and purchasability — Archive/Delete must account for this. This task does NOT build Delete/Archive product and does not migrate Cart, Wishlist, Checkout, Orders, or payments. Preserve `no-watering-flower`, the original Homepage hero, mock payments, Vietnamese UI, and current visual direction.
+Clerk is the selected managed provider; Auth0 is not used. D1 user role is authoritative for authorization. D1 is authoritative for catalogue and pricing; frontend static data is temporary compatibility data until Phase 18 migration completes. `products.active` still conflates visibility and purchasability: restoring an archived normal product necessarily makes it visible and purchasable because the current schema has no independent pre-archive purchasability field. Hard delete is not implemented. This task does not migrate Cart, Wishlist, Checkout, Orders, or payments. Preserve `no-watering-flower`, the original Homepage hero, mock payments, Vietnamese UI, and current visual direction.

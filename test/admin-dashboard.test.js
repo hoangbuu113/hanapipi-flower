@@ -7,6 +7,7 @@ import {
   checkAdminAccess,
   createAdminProduct,
   fetchAdminCatalogue,
+  setAdminProductArchived,
   updateAdminProduct,
 } from '../src/services/adminClient.js'
 import { createWorker } from '../src/worker.js'
@@ -190,11 +191,13 @@ test('5. admin authorization is not stored/trusted from localStorage', async () 
 })
 
 test('6. admin catalogue uses D1/API data', async () => {
-  const { d1 } = createSeededDatabase()
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
 
   const result = await fetchAdminCatalogue({
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
   })
 
   assert.equal(result.ok, true)
@@ -212,11 +215,13 @@ test('7. Admin does NOT import static products.js', () => {
 })
 
 test('8. product count renders correctly', async () => {
-  const { d1 } = createSeededDatabase()
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
 
   const result = await fetchAdminCatalogue({
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
   })
 
   assert.equal(result.total, 24)
@@ -224,11 +229,13 @@ test('8. product count renders correctly', async () => {
 })
 
 test('9. canonical API price renders', async () => {
-  const { d1 } = createSeededDatabase()
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
 
   const result = await fetchAdminCatalogue({
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
   })
 
   const nangDiu = result.data.find((p) => p.slug === 'nang-diu')
@@ -237,11 +244,13 @@ test('9. canonical API price renders', async () => {
 })
 
 test('10. no-watering-flower renders as priceless/non-purchasable', async () => {
-  const { d1 } = createSeededDatabase()
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
 
   const result = await fetchAdminCatalogue({
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
   })
 
   const priceless = result.data.find((p) => p.slug === 'no-watering-flower')
@@ -266,6 +275,7 @@ test('11. admin API error produces safe retry/error state', async () => {
     fetchImpl: async () => new Response(JSON.stringify({
       error: { code: 'API_NOT_FOUND', message: 'Không tìm thấy API được yêu cầu.' },
     }), { status: 404 }),
+    getToken: async () => 'some-token',
   })
   assert.equal(cat404.ok, false)
   assert.equal(cat404.data, null)
@@ -274,6 +284,7 @@ test('11. admin API error produces safe retry/error state', async () => {
 
   const netErr = await fetchAdminCatalogue({
     fetchImpl: async () => { throw new Error('Network failure') },
+    getToken: async () => 'some-token',
   })
   assert.equal(netErr.ok, false)
   assert.equal(netErr.data, null)
@@ -875,4 +886,276 @@ test('42. UI refreshes with canonical created product after success', () => {
 
   assert.match(adminPageCode, /setProducts\(\(prev\) => \[result\.product, \.\.\.prev\]\)/u)
   assert.ok(adminPageCode.includes('setSaveSuccess(`Đã tạo thành công sản phẩm "${result.product.name}".`)'))
+})
+
+// --- Phase 18J Archive / Restore Tests ---
+
+test('43. guest archive returns 401 without issuing a request', async () => {
+  let fetchCalled = false
+  const result = await setAdminProductArchived('nang-diu', true, {
+    fetchImpl: async () => {
+      fetchCalled = true
+      return new Response(null, { status: 500 })
+    },
+    getToken: async () => null,
+  })
+
+  assert.equal(result.status, 401)
+  assert.equal(result.error.code, 'AUTHENTICATION_REQUIRED')
+  assert.equal(fetchCalled, false)
+})
+
+test('44. customer archive returns 403', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+  const result = await setAdminProductArchived('nang-diu', true, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+
+  assert.equal(result.status, 403)
+  assert.equal(result.error.code, 'FORBIDDEN')
+})
+
+test('45. admin archives a normal product in D1 without mutating protected product data', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const before = { ...sqlite.prepare(`
+    SELECT slug, name, price_vnd, media_json FROM products WHERE id = 'nang-diu'
+  `).get() }
+  const variantsBefore = sqlite.prepare(`
+    SELECT COUNT(*) AS count FROM product_variants WHERE product_id = 'nang-diu'
+  `).get().count
+  const relationsBefore = sqlite.prepare(`
+    SELECT COUNT(*) AS count FROM product_relations
+    WHERE product_id = 'nang-diu' OR related_product_id = 'nang-diu'
+  `).get().count
+
+  const result = await setAdminProductArchived('nang-diu', true, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.product.active, false)
+  assert.equal(result.product.isPurchasable, false)
+  const after = sqlite.prepare(`
+    SELECT active, slug, name, price_vnd, media_json FROM products WHERE id = 'nang-diu'
+  `).get()
+  assert.equal(after.active, 0)
+  assert.deepEqual(
+    { slug: after.slug, name: after.name, price_vnd: after.price_vnd, media_json: after.media_json },
+    before,
+  )
+  assert.equal(sqlite.prepare(`SELECT COUNT(*) AS count FROM product_variants WHERE product_id = 'nang-diu'`).get().count, variantsBefore)
+  assert.equal(sqlite.prepare(`
+    SELECT COUNT(*) AS count FROM product_relations
+    WHERE product_id = 'nang-diu' OR related_product_id = 'nang-diu'
+  `).get().count, relationsBefore)
+})
+
+test('46. archived product is hidden publicly but remains visible to Admin', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  await setAdminProductArchived('nang-diu', true, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  const publicResponse = await testWorker.fetch('/api/v1/catalogue/products?limit=50')
+  const publicBody = JSON.parse(await publicResponse.text())
+  assert.equal(publicBody.data.items.some((product) => product.id === 'nang-diu'), false)
+
+  const adminResult = await fetchAdminCatalogue({
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  const archived = adminResult.data.find((product) => product.id === 'nang-diu')
+  assert.ok(archived)
+  assert.equal(archived.active, false)
+  assert.equal(adminResult.total, 24)
+})
+
+test('47. admin restores a product and D1 active becomes 1', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  sqlite.prepare(`UPDATE products SET active = 0 WHERE id = 'nang-diu'`).run()
+  const testWorker = createTestWorker(d1)
+
+  const result = await setAdminProductArchived('nang-diu', false, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.product.active, true)
+  assert.equal(result.product.isPurchasable, true)
+  assert.equal(sqlite.prepare(`SELECT active FROM products WHERE id = 'nang-diu'`).get().active, 1)
+})
+
+test('48. restored product reappears in the public catalogue', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  sqlite.prepare(`UPDATE products SET active = 0 WHERE id = 'nang-diu'`).run()
+  const testWorker = createTestWorker(d1)
+
+  await setAdminProductArchived('nang-diu', false, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  const response = await testWorker.fetch('/api/v1/catalogue/products?limit=50')
+  const body = JSON.parse(await response.text())
+  assert.equal(body.data.items.some((product) => product.id === 'nang-diu'), true)
+})
+
+test('49. no-watering-flower archive is rejected server-side', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const result = await setAdminProductArchived('no-watering-flower', true, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.status, 400)
+  assert.equal(result.error.code, 'PROTECTED_PRODUCT')
+})
+
+test('50. no-watering-flower restore is rejected server-side', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const result = await setAdminProductArchived('no-watering-flower', false, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.status, 400)
+  assert.equal(result.error.code, 'PROTECTED_PRODUCT')
+})
+
+test('51. protected product remains unchanged after failed archive and restore attempts', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const before = sqlite.prepare(`SELECT * FROM products WHERE id = 'no-watering-flower'`).get()
+
+  for (const archived of [true, false]) {
+    await setAdminProductArchived('no-watering-flower', archived, {
+      fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+      getToken: async () => 'admin-token',
+    })
+  }
+
+  const after = sqlite.prepare(`SELECT * FROM products WHERE id = 'no-watering-flower'`).get()
+  assert.deepEqual(after, before)
+})
+
+test('52. archive of an unknown product returns 404', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const result = await setAdminProductArchived('missing-product', true, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.status, 404)
+  assert.equal(result.error.code, 'PRODUCT_NOT_FOUND')
+})
+
+test('53. fake role and userId cannot bypass archive authorization', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+  const result = await setAdminProductArchived('nang-diu', true, {
+    fetchImpl: (url, opts) => testWorker.fetch(`${url}?role=admin&userId=usr_admin_001`, opts),
+    getToken: async () => 'customer-token',
+  })
+
+  assert.equal(result.status, 403)
+  assert.equal(result.error.code, 'FORBIDDEN')
+})
+
+test('54. repeated archive and restore operations are idempotent', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  for (const archived of [true, true, false, false]) {
+    const result = await setAdminProductArchived('nang-diu', archived, {
+      fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+      getToken: async () => 'admin-token',
+    })
+    assert.equal(result.ok, true)
+    assert.equal(result.product.active, !archived)
+  }
+})
+
+test('55. guest and customer cannot read the admin catalogue', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+  const guest = await fetchAdminCatalogue({
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => null,
+  })
+  const customer = await fetchAdminCatalogue({
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+
+  assert.equal(guest.status, 401)
+  assert.equal(customer.status, 403)
+})
+
+test('56. unexpected archive persistence errors return a safe 5xx response', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const failingD1 = {
+    batch: (...args) => d1.batch(...args),
+    prepare(sql) {
+      const statement = d1.prepare(sql)
+      if (!/UPDATE products\s+SET active/u.test(sql)) return statement
+      return {
+        bind() {
+          return {
+            async run() {
+              throw new Error('SQLITE_INTERNAL secret-table-name')
+            },
+          }
+        },
+      }
+    },
+  }
+  const testWorker = createTestWorker(failingD1)
+  const result = await setAdminProductArchived('nang-diu', true, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.status, 500)
+  assert.equal(result.error.code, 'INTERNAL_ERROR')
+  assert.doesNotMatch(result.error.message, /SQLITE|secret-table-name/u)
+})
+
+test('57. Admin archive UI confirms destructive visibility change and exposes request states', () => {
+  const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+
+  assert.match(adminPageCode, /window\.confirm/u)
+  assert.match(adminPageCode, /Sản phẩm sẽ biến mất khỏi cửa hàng, nhưng toàn bộ dữ liệu vẫn được giữ lại/u)
+  assert.match(adminPageCode, /Đang lưu trữ\.\.\./u)
+  assert.match(adminPageCode, /Đang khôi phục\.\.\./u)
+  assert.match(adminPageCode, /setSaveSuccess/u)
+  assert.match(adminPageCode, /setArchiveError/u)
+  assert.match(adminPageCode, /disabled=\{isArchivePending\}/u)
+})
+
+test('58. Admin archive UI updates only after canonical server success and protects the Easter egg', () => {
+  const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+
+  assert.match(adminPageCode, /if \(result\.ok && result\.product\)/u)
+  assert.match(adminPageCode, /item\.id === result\.product\.id \? result\.product : item/u)
+  assert.match(adminPageCode, /product\.slug === 'no-watering-flower'/u)
+  assert.match(adminPageCode, /isProtected \?/u)
+  assert.doesNotMatch(adminPageCode, /filter\(.*archive/u)
 })

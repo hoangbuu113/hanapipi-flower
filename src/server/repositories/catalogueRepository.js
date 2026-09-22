@@ -361,6 +361,36 @@ export function createCatalogueRepository(db) {
       return this.getProductById(product.id)
     },
 
+    async setProductArchived(idOrSlug, archived) {
+      if (typeof idOrSlug !== 'string' || idOrSlug.length === 0 || idOrSlug.length > 100) {
+        return null
+      }
+      if (typeof archived !== 'boolean') {
+        throw new TypeError('archived must be a boolean.')
+      }
+
+      const product = await this.getProductById(idOrSlug) ?? await this.getProductBySlug(idOrSlug)
+      if (!product) return null
+
+      if (product.purchaseType === 'priceless' || product.slug === 'no-watering-flower') {
+        const err = new Error('Sản phẩm được bảo vệ không thể lưu trữ hoặc khôi phục.')
+        err.code = 'PROTECTED_PRODUCT'
+        err.status = 400
+        throw err
+      }
+
+      const nextActive = archived ? 0 : 1
+      if (product.active === (nextActive === 1)) return product
+
+      await db.prepare(`
+        UPDATE products
+        SET active = ?, updated_at_utc = ?
+        WHERE id = ?
+      `).bind(nextActive, new Date().toISOString(), product.id).run()
+
+      return this.getProductById(product.id)
+    },
+
     async createProduct(data = {}) {
       if (!data || typeof data !== 'object' || Array.isArray(data)) {
         const err = new Error('Dữ liệu sản phẩm không hợp lệ.')
@@ -534,4 +564,3 @@ export const catalogueRepositoryLimits = {
   maxOffset: MAX_OFFSET,
   maxPageSize: MAX_PAGE_SIZE,
 }
-

@@ -283,6 +283,16 @@
   color: #9c3b3b;
 }
 
+.admin-badge--archived {
+  background: #f2f1ee;
+  border-color: #d8d4cc;
+  color: #625e57;
+}
+
+.admin-row--archived td {
+  background: #fbfaf8;
+}
+
 .admin-catalogue-loading,
 .admin-catalogue-error {
   display: flex;
@@ -309,6 +319,19 @@
   font-size: 20px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.admin-catalogue-error--compact {
+  align-items: flex-start;
+  min-height: 0;
+  margin-bottom: 20px;
+  padding: 12px 20px;
+  text-align: left;
+}
+
+.admin-catalogue-error--compact p {
+  color: var(--error, #b83232);
+  font-weight: 600;
 }
 
 @media (max-width: 768px) {
@@ -365,6 +388,11 @@
 }
 
 .admin-edit-btn {
+  white-space: nowrap;
+}
+
+.admin-archive-btn {
+  color: var(--error, #963c36);
   white-space: nowrap;
 }
 

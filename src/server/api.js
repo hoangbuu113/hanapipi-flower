@@ -147,6 +147,35 @@ async function handleAdminMe(request, env, requestId, dependencies) {
   }, requestId), V1_ADMIN_ME_PATH)
 }
 
+async function handleListAdminProducts(request, env, requestId, dependencies) {
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: auth.code })
+  }
+
+  const url = new URL(request.url)
+  const repositories = dependencies.createRepositories(env)
+  const options = parseCatalogueListOptions(url)
+  const [catalogueResult, version] = await Promise.all([
+    repositories.catalogue.listProducts({ ...options, activeOnly: false }),
+    repositories.catalogue.getCatalogueVersion(),
+  ])
+
+  return result(successResponse({
+    items: catalogueResult.items,
+    limit: catalogueResult.limit,
+    offset: catalogueResult.offset,
+    products: catalogueResult.items,
+    total: catalogueResult.items.length,
+    version: version?.version ?? null,
+  }, requestId), V1_ADMIN_PRODUCTS_PATH)
+}
+
 async function handleUpdateAdminProduct(idOrSlug, request, env, requestId, dependencies) {
   const auth = await dependencies.authorizeAdmin(request, env, dependencies)
   if (!auth.ok) {
@@ -203,6 +232,41 @@ async function handleUpdateAdminProduct(idOrSlug, request, env, requestId, depen
       message,
       requestId,
     ), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: code })
+  }
+}
+
+async function handleSetAdminProductArchived(idOrSlug, archived, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_PRODUCTS_PATH}/:id/${archived ? 'archive' : 'restore'}`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), route, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+  try {
+    const updated = await repositories.catalogue.setProductArchived(idOrSlug, archived)
+    if (!updated) {
+      return result(errorResponse(
+        404,
+        'PRODUCT_NOT_FOUND',
+        'Không tìm thấy sản phẩm được yêu cầu.',
+        requestId,
+      ), route, { errorCode: 'PRODUCT_NOT_FOUND' })
+    }
+
+    return result(successResponse({ product: updated }, requestId), route)
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.status && err.code
+      ? err.message
+      : 'Không thể thay đổi trạng thái lưu trữ của sản phẩm.'
+    return result(errorResponse(status, code, message, requestId), route, { errorCode: code })
   }
 }
 
@@ -359,6 +423,17 @@ function matchAdminProductParam(pathname) {
     if (idOrSlug.length > 0 && !idOrSlug.includes('/')) return decodeURIComponent(idOrSlug)
   }
   return null
+}
+
+function matchAdminProductAction(pathname) {
+  if (!pathname.startsWith(`${V1_ADMIN_PRODUCTS_PATH}/`)) return null
+  const remainder = pathname.slice(V1_ADMIN_PRODUCTS_PATH.length + 1).trim()
+  const match = remainder.match(/^([^/]+)\/(archive|restore)$/u)
+  if (!match) return null
+  return {
+    action: match[2],
+    idOrSlug: decodeURIComponent(match[1]),
+  }
 }
 
 function matchCatalogueSlug(pathname) {
@@ -527,12 +602,31 @@ export function createApiRouter(options = {}) {
     }
 
     if (pathname === V1_ADMIN_PRODUCTS_PATH) {
-      if (request.method !== 'POST') return methodNotAllowed(requestId, V1_ADMIN_PRODUCTS_PATH, 'POST')
-      return handleCreateAdminProduct(request, env, requestId, {
+      if (!['GET', 'POST'].includes(request.method)) {
+        return methodNotAllowed(requestId, V1_ADMIN_PRODUCTS_PATH, 'GET, POST')
+      }
+      const adminProductDependencies = {
         authorizeAdmin,
         createRepositories,
         verifyIdentity,
-      })
+      }
+      if (request.method === 'GET') {
+        return handleListAdminProducts(request, env, requestId, adminProductDependencies)
+      }
+      return handleCreateAdminProduct(request, env, requestId, adminProductDependencies)
+    }
+
+    const adminProductAction = matchAdminProductAction(pathname)
+    if (adminProductAction) {
+      if (request.method !== 'PATCH') return methodNotAllowed(requestId, pathname, 'PATCH')
+      return handleSetAdminProductArchived(
+        adminProductAction.idOrSlug,
+        adminProductAction.action === 'archive',
+        request,
+        env,
+        requestId,
+        { authorizeAdmin, createRepositories, verifyIdentity },
+      )
     }
 
     const adminProductId = matchAdminProductParam(pathname)
