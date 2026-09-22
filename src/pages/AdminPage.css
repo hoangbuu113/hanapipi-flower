@@ -323,3 +323,77 @@
     padding: 12px 10px;
   }
 }
+
+.admin-row--editing {
+  background: var(--surface-subtle, #fcfbf9);
+}
+
+.admin-input-price {
+  width: 120px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--surface, #fff);
+  color: var(--text-primary);
+}
+
+.admin-select-status {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface, #fff);
+  color: var(--text-primary);
+}
+
+.admin-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.admin-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-edit-btn {
+  white-space: nowrap;
+}
+
+.button--small {
+  padding: 6px 14px;
+  font-size: 12px;
+  min-height: 32px;
+}
+
+.admin-edit-error {
+  margin: 4px 0 0;
+  color: var(--error, #b83232);
+  font-size: 11px;
+  font-weight: 700;
+  width: 100%;
+}
+
+.admin-save-success {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  background: #eef7ee;
+  border: 1px solid #c4e4c4;
+  margin-bottom: 20px;
+}
+
+.admin-save-success p {
+  margin: 0;
+  color: #276727;
+  font-size: 13px;
+  font-weight: 600;
+}

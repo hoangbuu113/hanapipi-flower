@@ -175,3 +175,121 @@ export async function fetchAdminCatalogue({
     }
   }
 }
+
+export async function updateAdminProduct(idOrSlug, fields, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (!idOrSlug || typeof idOrSlug !== 'string') {
+    return {
+      error: { code: 'INVALID_ID', message: 'Mã định danh sản phẩm không hợp lệ.' },
+      ok: false,
+      product: null,
+      status: 400,
+    }
+  }
+
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return {
+      error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' },
+      ok: false,
+      product: null,
+      status: 401,
+    }
+  }
+
+  if (!token) {
+    return {
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' },
+      ok: false,
+      product: null,
+      status: 401,
+    }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/admin/products/${encodeURIComponent(idOrSlug)}`, {
+      body: JSON.stringify(fields),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'PATCH',
+    })
+
+    let body = null
+    try {
+      body = await response.json()
+    } catch {
+      // Non-JSON response
+    }
+
+    if (!response.ok) {
+      return {
+        error: body?.error ?? {
+          code: 'API_ERROR',
+          message: 'Không thể cập nhật sản phẩm.',
+        },
+        ok: false,
+        product: null,
+        status: response.status,
+      }
+    }
+
+    const rawProduct = body?.data?.product
+    if (!rawProduct || typeof rawProduct !== 'object') {
+      return {
+        error: {
+          code: 'MALFORMED_RESPONSE',
+          message: 'Dữ liệu phản hồi từ máy chủ không hợp lệ.',
+        },
+        ok: false,
+        product: null,
+        status: response.status,
+      }
+    }
+
+    const price = rawProduct.priceVnd !== undefined ? rawProduct.priceVnd : rawProduct.price ?? null
+    const purchaseType = rawProduct.purchaseType ?? (price == null ? 'priceless' : 'standard')
+    const isPurchasable = rawProduct.isPurchasable ?? (purchaseType !== 'priceless' && Number.isFinite(price))
+
+    const product = {
+      active: rawProduct.active !== false,
+      badges: Array.isArray(rawProduct.badges) ? rawProduct.badges : [],
+      collection: rawProduct.collection ?? null,
+      description: rawProduct.description ?? '',
+      id: rawProduct.id,
+      isBestSeller: Boolean(rawProduct.isBestSeller),
+      isPurchasable,
+      media: Array.isArray(rawProduct.media) ? rawProduct.media : [],
+      name: rawProduct.name,
+      priceVnd: price,
+      purchaseType,
+      shortDescription: rawProduct.shortDescription ?? '',
+      slug: rawProduct.slug ?? rawProduct.id,
+      sortOrder: rawProduct.sortOrder ?? 0,
+      status: rawProduct.status ?? 'available',
+    }
+
+    return {
+      error: null,
+      ok: true,
+      product,
+      status: response.status,
+    }
+  } catch {
+    return {
+      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ để cập nhật sản phẩm.' },
+      ok: false,
+      product: null,
+      status: 0,
+    }
+  }
+}

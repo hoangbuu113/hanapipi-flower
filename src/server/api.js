@@ -24,6 +24,7 @@ const V1_CONCIERGE_PATH = `${API_V1_PREFIX}/concierge`
 const V1_HEALTH_PATH = `${API_V1_PREFIX}/health`
 const V1_ME_PATH = `${API_V1_PREFIX}/me`
 const V1_ADMIN_ME_PATH = `${API_V1_PREFIX}/admin/me`
+const V1_ADMIN_PRODUCTS_PATH = `${API_V1_PREFIX}/admin/products`
 const V1_CATALOGUE_PATH = `${API_V1_PREFIX}/catalogue`
 const V1_CATALOGUE_PRODUCTS_PATH = `${API_V1_PREFIX}/catalogue/products`
 const PREFLIGHT_HEADERS = ['authorization', 'content-type', 'idempotency-key', 'if-match']
@@ -144,6 +145,73 @@ async function handleAdminMe(request, env, requestId, dependencies) {
       status: auth.user.status,
     },
   }, requestId), V1_ADMIN_ME_PATH)
+}
+
+async function handleUpdateAdminProduct(idOrSlug, request, env, requestId, dependencies) {
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: auth.code })
+  }
+
+  let body = null
+  try {
+    body = await request.json()
+  } catch {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const updated = await repositories.catalogue.updateProductCommerceFields(idOrSlug, body)
+    if (!updated) {
+      return result(errorResponse(
+        404,
+        'PRODUCT_NOT_FOUND',
+        'Không tìm thấy sản phẩm được yêu cầu.',
+        requestId,
+      ), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'PRODUCT_NOT_FOUND' })
+    }
+
+    return result(successResponse({ product: updated }, requestId), `${V1_ADMIN_PRODUCTS_PATH}/:id`)
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể cập nhật thông tin sản phẩm.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: code })
+  }
+}
+
+function matchAdminProductParam(pathname) {
+  if (pathname.startsWith(`${V1_ADMIN_PRODUCTS_PATH}/`)) {
+    const idOrSlug = pathname.slice(V1_ADMIN_PRODUCTS_PATH.length + 1).trim()
+    if (idOrSlug.length > 0 && !idOrSlug.includes('/')) return decodeURIComponent(idOrSlug)
+  }
+  return null
 }
 
 function matchCatalogueSlug(pathname) {
@@ -305,6 +373,16 @@ export function createApiRouter(options = {}) {
     if (pathname === V1_ADMIN_ME_PATH) {
       if (request.method !== 'GET') return methodNotAllowed(requestId, V1_ADMIN_ME_PATH, 'GET')
       return handleAdminMe(request, env, requestId, {
+        authorizeAdmin,
+        createRepositories,
+        verifyIdentity,
+      })
+    }
+
+    const adminProductId = matchAdminProductParam(pathname)
+    if (adminProductId) {
+      if (request.method !== 'PATCH') return methodNotAllowed(requestId, pathname, 'PATCH')
+      return handleUpdateAdminProduct(adminProductId, request, env, requestId, {
         authorizeAdmin,
         createRepositories,
         verifyIdentity,

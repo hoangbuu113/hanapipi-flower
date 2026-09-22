@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import Container from '../components/Container'
 import { useAccount } from '../context/accountStore'
-import { checkAdminAccess, fetchAdminCatalogue } from '../services/adminClient'
+import { checkAdminAccess, fetchAdminCatalogue, updateAdminProduct } from '../services/adminClient'
 import { formatCurrency } from '../utils/formatCurrency'
 import './AdminPage.css'
 
@@ -11,6 +11,7 @@ const STATUS_LABELS = {
   available: 'Có sẵn',
   preorder: 'Đặt trước',
   seasonal: 'Theo mùa',
+  archived: 'Lưu trữ',
 }
 
 function AdminPage() {
@@ -26,6 +27,59 @@ function AdminPage() {
   const [products, setProducts] = useState([])
   const [catalogueError, setCatalogueError] = useState(null)
   const [catalogueReloadKey, setCatalogueReloadKey] = useState(0)
+
+  const [editingProductId, setEditingProductId] = useState(null)
+  const [editForm, setEditForm] = useState(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState(null)
+  const [saveSuccess, setSaveSuccess] = useState(null)
+
+  const handleStartEdit = (product) => {
+    setEditingProductId(product.id)
+    setEditForm({
+      isPurchasable: Boolean(product.isPurchasable),
+      priceVnd: product.priceVnd ?? 0,
+      status: product.status ?? 'available',
+    })
+    setSaveError(null)
+    setSaveSuccess(null)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingProductId(null)
+    setEditForm(null)
+    setSaveError(null)
+  }
+
+  const handleSaveEdit = async (productId) => {
+    if (!editForm) return
+
+    const price = Number(editForm.priceVnd)
+    if (!Number.isInteger(price) || price <= 0) {
+      setSaveError('Giá sản phẩm phải là số nguyên dương hợp lệ.')
+      return
+    }
+
+    setIsSaving(true)
+    setSaveError(null)
+
+    const result = await updateAdminProduct(productId, {
+      isPurchasable: editForm.isPurchasable,
+      priceVnd: price,
+      status: editForm.status,
+    }, { getToken })
+
+    setIsSaving(false)
+
+    if (result.ok && result.product) {
+      setProducts((prev) => prev.map((p) => (p.id === result.product.id ? result.product : p)))
+      setEditingProductId(null)
+      setEditForm(null)
+      setSaveSuccess(`Đã cập nhật thành công "${result.product.name}".`)
+    } else {
+      setSaveError(result.error?.message || 'Không thể cập nhật sản phẩm.')
+    }
+  }
 
   // 1. Authoritative Server Permission Verification
   useEffect(() => {
@@ -257,6 +311,12 @@ function AdminPage() {
             </div>
           )}
 
+          {saveSuccess && (
+            <div className="admin-save-success" role="status">
+              <p>{saveSuccess}</p>
+            </div>
+          )}
+
           {!isCatalogueLoading && !catalogueError && (
             <div className="admin-table-container">
               <table className="admin-table">
@@ -268,16 +328,18 @@ function AdminPage() {
                     <th scope="col">Khả năng mua</th>
                     <th scope="col">Trạng thái</th>
                     <th scope="col">Đặc biệt / Ghi chú</th>
+                    <th scope="col">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {products.map((product) => {
                     const isPriceless = product.purchaseType === 'priceless' || product.priceVnd == null
+                    const isEditing = editingProductId === product.id
                     const imageSrc = product.media?.[0]?.src
                     const statusLabel = STATUS_LABELS[product.status] || product.status
 
                     return (
-                      <tr key={product.id}>
+                      <tr key={product.id} className={isEditing ? 'admin-row--editing' : undefined}>
                         <td>
                           <div className="admin-product-cell">
                             {imageSrc && (
@@ -307,12 +369,37 @@ function AdminPage() {
                         <td>
                           {isPriceless ? (
                             <span className="admin-price admin-price--priceless">Vô giá</span>
+                          ) : isEditing ? (
+                            <input
+                              aria-label={`Giá niêm yết cho ${product.name}`}
+                              className="admin-input-price"
+                              disabled={isSaving}
+                              min="1000"
+                              step="1000"
+                              type="number"
+                              value={editForm.priceVnd}
+                              onChange={(e) => setEditForm((f) => ({ ...f, priceVnd: e.target.value }))}
+                            />
                           ) : (
                             <span className="admin-price">{formatCurrency(product.priceVnd)}</span>
                           )}
                         </td>
                         <td>
-                          {product.isPurchasable ? (
+                          {isPriceless ? (
+                            <span className="admin-badge admin-badge--not-purchasable">
+                              Không mở bán
+                            </span>
+                          ) : isEditing ? (
+                            <label className="admin-checkbox-label">
+                              <input
+                                checked={editForm.isPurchasable}
+                                disabled={isSaving}
+                                type="checkbox"
+                                onChange={(e) => setEditForm((f) => ({ ...f, isPurchasable: e.target.checked }))}
+                              />
+                              <span>Có thể mua</span>
+                            </label>
+                          ) : product.isPurchasable ? (
                             <span className="admin-badge admin-badge--purchasable">
                               Có thể mua
                             </span>
@@ -323,11 +410,26 @@ function AdminPage() {
                           )}
                         </td>
                         <td>
-                          <span
-                            className={`admin-badge admin-badge--${product.status || 'available'}`}
-                          >
-                            {statusLabel}
-                          </span>
+                          {isEditing ? (
+                            <select
+                              aria-label={`Trạng thái cho ${product.name}`}
+                              className="admin-select-status"
+                              disabled={isSaving}
+                              value={editForm.status}
+                              onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
+                            >
+                              <option value="available">Có sẵn</option>
+                              <option value="preorder">Đặt trước</option>
+                              <option value="seasonal">Theo mùa</option>
+                              <option value="archived">Lưu trữ</option>
+                            </select>
+                          ) : (
+                            <span
+                              className={`admin-badge admin-badge--${product.status || 'available'}`}
+                            >
+                              {statusLabel}
+                            </span>
+                          )}
                         </td>
                         <td>
                           {isPriceless ? (
@@ -336,6 +438,45 @@ function AdminPage() {
                             </span>
                           ) : (
                             <span style={{ color: 'var(--text-muted)' }}>—</span>
+                          )}
+                        </td>
+                        <td>
+                          {isPriceless ? (
+                            <span className="admin-badge admin-badge--priceless">
+                              Được bảo vệ
+                            </span>
+                          ) : isEditing ? (
+                            <div className="admin-inline-actions">
+                              <button
+                                className="button button--primary button--small"
+                                disabled={isSaving}
+                                type="button"
+                                onClick={() => handleSaveEdit(product.id)}
+                              >
+                                {isSaving ? 'Đang lưu...' : 'Lưu'}
+                              </button>
+                              <button
+                                className="button button--text button--small"
+                                disabled={isSaving}
+                                type="button"
+                                onClick={handleCancelEdit}
+                              >
+                                Hủy
+                              </button>
+                              {saveError && (
+                                <span className="admin-edit-error" role="alert">
+                                  {saveError}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              className="button button--secondary button--small admin-edit-btn"
+                              type="button"
+                              onClick={() => handleStartEdit(product)}
+                            >
+                              Chỉnh sửa
+                            </button>
                           )}
                         </td>
                       </tr>

@@ -6,6 +6,7 @@ import test from 'node:test'
 import {
   checkAdminAccess,
   fetchAdminCatalogue,
+  updateAdminProduct,
 } from '../src/services/adminClient.js'
 import { createWorker } from '../src/worker.js'
 
@@ -88,6 +89,14 @@ function createTestWorker(d1, { apiV1Enabled = 'true' } = {}) {
   }
 }
 
+function seedAdminUser(sqlite) {
+  const now = new Date().toISOString()
+  sqlite.exec(`
+    INSERT INTO users (id, auth_provider, provider_subject, role, status, locale, created_at_utc, updated_at_utc)
+    VALUES ('usr_admin_001', 'clerk', 'user_admin_subject', 'admin', 'active', 'vi-VN', '${now}', '${now}')
+  `)
+}
+
 test('1. unauthenticated user cannot render Admin content', async () => {
   let fetchCalled = false
   const result = await checkAdminAccess({
@@ -109,7 +118,6 @@ test('2. authenticated customer cannot render Admin content', async () => {
   const { d1 } = createSeededDatabase()
   const testWorker = createTestWorker(d1)
 
-  // Customer token calls checkAdminAccess against real Worker + D1
   const result = await checkAdminAccess({
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
     getToken: async () => 'customer-token',
@@ -124,14 +132,8 @@ test('2. authenticated customer cannot render Admin content', async () => {
 
 test('3. D1-authorized admin can render Admin dashboard', async () => {
   const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
-
-  // Seed user_admin_subject as admin in D1
-  const now = new Date().toISOString()
-  sqlite.exec(`
-    INSERT INTO users (id, auth_provider, provider_subject, role, status, locale, created_at_utc, updated_at_utc)
-    VALUES ('usr_admin_001', 'clerk', 'user_admin_subject', 'admin', 'active', 'vi-VN', '${now}', '${now}')
-  `)
 
   const result = await checkAdminAccess({
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
@@ -149,7 +151,6 @@ test('4. fake client role=admin cannot bypass server authorization', async () =>
   const { d1 } = createSeededDatabase()
   const testWorker = createTestWorker(d1)
 
-  // Client attempts to pass ?role=admin or forged headers
   const result = await checkAdminAccess({
     fetchImpl: (url, opts) => {
       const forgedUrl = `${url}?role=admin&userId=usr_fake_admin`
@@ -184,8 +185,6 @@ test('5. admin authorization is not stored/trusted from localStorage', async () 
   assert.equal(result.authorized, false)
   assert.equal(result.status, 403)
   assert.equal(calledUrl, '/api/v1/admin/me')
-
-  // Verify adminClient never touches localStorage
   assert.equal(mockStorage.get('role'), 'admin', 'localStorage remains untouched by adminClient')
 })
 
@@ -252,7 +251,6 @@ test('10. no-watering-flower renders as priceless/non-purchasable', async () => 
 })
 
 test('11. admin API error produces safe retry/error state', async () => {
-  // 11a. Admin check fails with 500
   const auth500 = await checkAdminAccess({
     fetchImpl: async () => new Response(JSON.stringify({
       error: { code: 'INTERNAL_ERROR', message: 'Lỗi hệ thống.' },
@@ -263,8 +261,6 @@ test('11. admin API error produces safe retry/error state', async () => {
   assert.equal(auth500.authorized, false)
   assert.equal(auth500.status, 500)
 
-  // 11b. Admin catalogue fails with 404 (API_V1_ENABLED=false)
-  // Must NOT fall back to static data!
   const cat404 = await fetchAdminCatalogue({
     fetchImpl: async () => new Response(JSON.stringify({
       error: { code: 'API_NOT_FOUND', message: 'Không tìm thấy API được yêu cầu.' },
@@ -275,7 +271,6 @@ test('11. admin API error produces safe retry/error state', async () => {
   assert.equal(cat404.status, 404)
   assert.equal(cat404.error.code, 'API_NOT_FOUND')
 
-  // 11c. Network error
   const netErr = await fetchAdminCatalogue({
     fetchImpl: async () => { throw new Error('Network failure') },
   })
@@ -285,8 +280,6 @@ test('11. admin API error produces safe retry/error state', async () => {
 })
 
 test('12. no admin catalogue content flashes before permission check completes', () => {
-  // In AdminPage, when authStatus is 'loading', 'forbidden', or 'error',
-  // catalogue section is not rendered and products are not fetched.
   const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
 
   assert.match(adminPageCode, /authStatus === 'loading'/)
@@ -295,10 +288,245 @@ test('12. no admin catalogue content flashes before permission check completes',
   assert.match(adminPageCode, /authStatus !== 'authorized'/)
 })
 
-test('13. existing auth tests remain green (checked via npm run test:auth)', () => {
-  assert.ok(true)
+// --- Phase 18H Mutation Tests ---
+
+test('13. guest mutation returns 401', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+
+  const result = await updateAdminProduct('nang-diu', { priceVnd: 600000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => null,
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 401)
+  assert.equal(result.error.code, 'AUTHENTICATION_REQUIRED')
 })
 
-test('14. existing storefront tests remain green (checked via npm run test:frontend)', () => {
-  assert.ok(true)
+test('14. customer mutation returns 403', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+
+  const result = await updateAdminProduct('nang-diu', { priceVnd: 600000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 403)
+  assert.equal(result.error.code, 'FORBIDDEN')
+})
+
+test('15. admin can update normal product price and persisted D1 price changes', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const result = await updateAdminProduct('nang-diu', { priceVnd: 630000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 200)
+  assert.equal(result.product.id, 'nang-diu')
+  assert.equal(result.product.priceVnd, 630000)
+
+  // Verify direct D1 query reflects persisted change
+  const row = sqlite.prepare('SELECT price_vnd FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(row.price_vnd, 630000, 'D1 row must have updated price_vnd')
+})
+
+test('16. returned product reflects canonical D1 state', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const result = await updateAdminProduct('nang-diu', {
+    isPurchasable: true,
+    priceVnd: 640000,
+    status: 'preorder',
+  }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.product.id, 'nang-diu')
+  assert.equal(result.product.slug, 'nang-diu')
+  assert.equal(result.product.priceVnd, 640000)
+  assert.equal(result.product.status, 'preorder')
+  assert.equal(result.product.isPurchasable, true)
+})
+
+test('17. admin can update valid status', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const result = await updateAdminProduct('nang-diu', { status: 'seasonal' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.product.status, 'seasonal')
+
+  const row = sqlite.prepare('SELECT status FROM products WHERE id = ?').get('nang-diu')
+  assert.equal(row.status, 'seasonal')
+})
+
+test('18. invalid price is rejected with 400', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  // 18a. Negative price
+  const neg = await updateAdminProduct('nang-diu', { priceVnd: -50000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(neg.ok, false)
+  assert.equal(neg.status, 400)
+  assert.equal(neg.error.code, 'INVALID_PRICE')
+
+  // 18b. Zero price
+  const zero = await updateAdminProduct('nang-diu', { priceVnd: 0 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(zero.ok, false)
+  assert.equal(zero.status, 400)
+  assert.equal(zero.error.code, 'INVALID_PRICE')
+
+  // 18c. Float price
+  const flt = await updateAdminProduct('nang-diu', { priceVnd: 590000.5 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(flt.ok, false)
+  assert.equal(flt.status, 400)
+  assert.equal(flt.error.code, 'INVALID_PRICE')
+})
+
+test('19. unknown product returns 404', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const result = await updateAdminProduct('non-existent-flower-xyz', { priceVnd: 500000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 404)
+  assert.equal(result.error.code, 'PRODUCT_NOT_FOUND')
+})
+
+test('20. fake role=admin or fake userId cannot bypass server authorization', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+
+  const result = await updateAdminProduct('nang-diu', {
+    priceVnd: 700000,
+    role: 'admin',
+    userId: 'usr_admin_001',
+  }, {
+    fetchImpl: (url, opts) => {
+      const forgedUrl = `${url}?role=admin&userId=usr_admin_001`
+      return testWorker.fetch(forgedUrl, opts)
+    },
+    getToken: async () => 'customer-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 403)
+  assert.equal(result.error.code, 'FORBIDDEN')
+})
+
+test('21. no-watering-flower numeric price update is rejected', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const result = await updateAdminProduct('no-watering-flower', { priceVnd: 999999 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 400)
+  assert.equal(result.error.code, 'PROTECTED_PRODUCT')
+})
+
+test('22. no-watering-flower purchasable=true is rejected', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const result = await updateAdminProduct('no-watering-flower', { isPurchasable: true }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 400)
+  assert.equal(result.error.code, 'PROTECTED_PRODUCT')
+})
+
+test('23. no-watering-flower remains priceVnd=null and priceless after failed attempts', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  // Attempt mutations
+  await updateAdminProduct('no-watering-flower', { priceVnd: 100000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  await updateAdminProduct('no-watering-flower', { isPurchasable: true }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  // Verify in D1
+  const row = sqlite.prepare('SELECT price_vnd, purchase_type, active FROM products WHERE id = ?').get('no-watering-flower')
+  assert.equal(row.price_vnd, null, 'price_vnd must remain null')
+  assert.equal(row.purchase_type, 'priceless', 'purchase_type must remain priceless')
+})
+
+test('24. Admin UI save flow uses authenticated admin client and does not claim success early', () => {
+  const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+
+  assert.match(adminPageCode, /updateAdminProduct\(productId/u, 'Must call updateAdminProduct')
+  assert.match(adminPageCode, /getToken/u, 'Must pass getToken')
+  assert.match(adminPageCode, /setIsSaving\(true\)/u, 'Must set saving state')
+  assert.match(adminPageCode, /if \(result\.ok && result\.product\)/u, 'Must verify response before claiming success')
+})
+
+test('25. server error leaves prior visible product state intact', () => {
+  const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+
+  assert.match(adminPageCode, /setSaveError\(result\.error\?\.message/u)
+})
+
+test('26. storefront catalogue read reflects updated D1 value in integration test', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  // 1. Admin updates price to 680000
+  const updateRes = await updateAdminProduct('nang-diu', { priceVnd: 680000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(updateRes.ok, true)
+
+  // 2. Public storefront catalogue reads the updated price
+  const publicRes = await testWorker.fetch('/api/v1/catalogue/products/nang-diu')
+  assert.equal(publicRes.status, 200)
+  const publicBody = JSON.parse(await publicRes.text())
+  assert.equal(publicBody.data.product.priceVnd, 680000, 'Public catalogue must return updated D1 price')
 })

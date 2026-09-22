@@ -263,6 +263,103 @@ export function createCatalogueRepository(db) {
         purchaseType: row.purchase_type,
       }
     },
+
+    async updateProductCommerceFields(idOrSlug, fields = {}) {
+      if (typeof idOrSlug !== 'string' || idOrSlug.length === 0 || idOrSlug.length > 100) {
+        return null
+      }
+
+      const product = await this.getProductById(idOrSlug) ?? await this.getProductBySlug(idOrSlug)
+      if (!product) return null
+
+      const isPriceless = product.purchaseType === 'priceless' || product.slug === 'no-watering-flower'
+
+      // Enforce priceless invariant
+      if (isPriceless) {
+        if (fields.priceVnd !== undefined && fields.priceVnd !== null) {
+          const err = new Error('Sản phẩm vô giá không thể gán giá bán.')
+          err.code = 'PROTECTED_PRODUCT'
+          err.status = 400
+          throw err
+        }
+        if (fields.isPurchasable === true) {
+          const err = new Error('Sản phẩm vô giá không thể mở bán.')
+          err.code = 'PROTECTED_PRODUCT'
+          err.status = 400
+          throw err
+        }
+      }
+
+      const updates = []
+      const bindings = []
+
+      // 1. priceVnd
+      if (fields.priceVnd !== undefined) {
+        if (isPriceless) {
+          if (fields.priceVnd !== null) {
+            const err = new Error('Sản phẩm vô giá không thể gán giá bán.')
+            err.code = 'PROTECTED_PRODUCT'
+            err.status = 400
+            throw err
+          }
+        } else {
+          const price = fields.priceVnd
+          if (typeof price !== 'number' || !Number.isInteger(price) || price <= 0) {
+            const err = new Error('Giá sản phẩm phải là số nguyên dương hợp lệ.')
+            err.code = 'INVALID_PRICE'
+            err.status = 400
+            throw err
+          }
+          updates.push('price_vnd = ?')
+          bindings.push(price)
+        }
+      }
+
+      // 2. status
+      if (fields.status !== undefined) {
+        const allowedStatuses = ['available', 'seasonal', 'preorder', 'archived']
+        if (typeof fields.status !== 'string' || !allowedStatuses.includes(fields.status)) {
+          const err = new Error('Trạng thái sản phẩm không hợp lệ.')
+          err.code = 'INVALID_STATUS'
+          err.status = 400
+          throw err
+        }
+        updates.push('status = ?')
+        bindings.push(fields.status)
+      }
+
+      // 3. isPurchasable -> active
+      if (fields.isPurchasable !== undefined) {
+        if (typeof fields.isPurchasable !== 'boolean') {
+          const err = new Error('Khả năng mua phải là giá trị boolean.')
+          err.code = 'INVALID_PURCHASABILITY'
+          err.status = 400
+          throw err
+        }
+        if (isPriceless && fields.isPurchasable) {
+          const err = new Error('Sản phẩm vô giá không thể mở bán.')
+          err.code = 'PROTECTED_PRODUCT'
+          err.status = 400
+          throw err
+        }
+        updates.push('active = ?')
+        bindings.push(fields.isPurchasable ? 1 : 0)
+      }
+
+      if (updates.length === 0) {
+        return product
+      }
+
+      const now = new Date().toISOString()
+      updates.push('updated_at_utc = ?')
+      bindings.push(now)
+      bindings.push(product.id)
+
+      const sql = `UPDATE products SET ${updates.join(', ')} WHERE id = ?`
+      await db.prepare(sql).bind(...bindings).run()
+
+      return this.getProductById(product.id)
+    },
   }
 }
 
