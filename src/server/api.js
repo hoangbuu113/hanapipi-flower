@@ -192,6 +192,75 @@ async function handleCreateOrder(request, env, requestId, dependencies) {
   }
 }
 
+async function handleListUserOrders(request, env, requestId, dependencies) {
+  const auth = await dependencies.authenticateUser(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), V1_ORDERS_PATH, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const orders = await repositories.orders.listForUser(auth.user)
+    return result(
+      successResponse({
+        items: orders,
+        orders,
+        total: orders.length,
+      }, requestId),
+      V1_ORDERS_PATH,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tải danh sách đơn hàng.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), V1_ORDERS_PATH, { errorCode: code })
+  }
+}
+
+async function handleGetUserOrder(idOrCode, request, env, requestId, dependencies) {
+  const route = `${V1_ORDERS_PATH}/:id`
+  const auth = await dependencies.authenticateUser(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), route, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const order = await repositories.orders.getForUser(auth.user, idOrCode)
+    return result(
+      successResponse({ order }, requestId),
+      route,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tải thông tin đơn hàng.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), route, { errorCode: code })
+  }
+}
+
 async function handleAdminMe(request, env, requestId, dependencies) {
   const auth = await dependencies.authorizeAdmin(request, env, dependencies)
   if (!auth.ok) {
@@ -921,6 +990,14 @@ function matchCatalogueSlug(pathname) {
   return null
 }
 
+function matchOrderIdOrCode(pathname) {
+  if (pathname.startsWith(`${V1_ORDERS_PATH}/`)) {
+    const idOrCode = pathname.slice(V1_ORDERS_PATH.length + 1).trim()
+    if (idOrCode.length > 0 && !idOrCode.includes('/')) return decodeURIComponent(idOrCode)
+  }
+  return null
+}
+
 function parseCatalogueListOptions(url) {
   const params = url.searchParams
   const options = {}
@@ -1069,8 +1146,26 @@ export function createApiRouter(options = {}) {
     }
 
     if (pathname === V1_ORDERS_PATH) {
-      if (request.method !== 'POST') return methodNotAllowed(requestId, V1_ORDERS_PATH, 'POST')
-      return handleCreateOrder(request, env, requestId, {
+      if (!['GET', 'POST'].includes(request.method)) {
+        return methodNotAllowed(requestId, V1_ORDERS_PATH, 'GET, POST')
+      }
+      const orderDependencies = {
+        authenticateUser,
+        createRepositories,
+        verifyIdentity,
+      }
+      if (request.method === 'GET') {
+        return handleListUserOrders(request, env, requestId, orderDependencies)
+      }
+      return handleCreateOrder(request, env, requestId, orderDependencies)
+    }
+
+    const orderIdOrCode = matchOrderIdOrCode(pathname)
+    if (orderIdOrCode) {
+      if (request.method !== 'GET') {
+        return methodNotAllowed(requestId, `${V1_ORDERS_PATH}/:id`, 'GET')
+      }
+      return handleGetUserOrder(orderIdOrCode, request, env, requestId, {
         authenticateUser,
         createRepositories,
         verifyIdentity,

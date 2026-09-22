@@ -1,27 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth, useUser } from '@clerk/clerk-react'
 import { AccountContext } from './accountStore'
-import { fetchCurrentUser } from '../services/apiClient'
-
-const orderStorageKey = 'hanapipi-flower:orders'
-
-function readStorage(key, fallback) {
-  try {
-    return JSON.parse(window.localStorage.getItem(key)) ?? fallback
-  } catch {
-    return fallback
-  }
-}
+import { fetchCurrentUser, fetchUserOrders } from '../services/apiClient'
 
 export function AccountProvider({ children }) {
-  const [orders, setOrders] = useState(() => {
-    const stored = readStorage(orderStorageKey, [])
-    return Array.isArray(stored) ? stored : []
-  })
-
-  useEffect(() => {
-    window.localStorage.setItem(orderStorageKey, JSON.stringify(orders))
-  }, [orders])
+  const [orders, setOrders] = useState([])
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false)
+  const [ordersError, setOrdersError] = useState(null)
 
   const { isLoaded: isAuthLoaded, isSignedIn, getToken, signOut } = useAuth()
   const { isLoaded: isUserLoaded, user: clerkUser } = useUser()
@@ -80,6 +65,66 @@ export function AccountProvider({ children }) {
     }
   }, [isAuthLoaded, isUserLoaded, isSignedIn, getToken])
 
+  const refreshOrders = useCallback(async () => {
+    if (!isSignedIn) {
+      setOrdersError(null)
+      setIsOrdersLoading(false)
+      return
+    }
+
+    setIsOrdersLoading(true)
+    try {
+      const result = await fetchUserOrders({ getToken })
+      if (result.ok) {
+        setOrders(result.orders)
+        setOrdersError(null)
+      } else if (result.status === 404 && result.error?.code === 'API_NOT_FOUND') {
+        // Fallback gate for disabled API v1
+        setOrdersError(null)
+      } else {
+        setOrdersError(result.error)
+      }
+    } catch {
+      setOrdersError({ code: 'HYDRATION_FAILED', message: 'Không thể kết nối đến máy chủ.' })
+    } finally {
+      setIsOrdersLoading(false)
+    }
+  }, [isSignedIn, getToken])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    if (!isAuthLoaded || !isSignedIn) {
+      return undefined
+    }
+
+    fetchUserOrders({ getToken })
+      .then((result) => {
+        if (isCancelled) return
+        if (result.ok) {
+          setOrders(result.orders)
+          setOrdersError(null)
+        } else if (result.status === 404 && result.error?.code === 'API_NOT_FOUND') {
+          setOrdersError(null)
+        } else {
+          setOrdersError(result.error)
+        }
+      })
+      .catch(() => {
+        if (isCancelled) return
+        setOrdersError({ code: 'HYDRATION_FAILED', message: 'Không thể kết nối đến máy chủ.' })
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsOrdersLoading(false)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [isAuthLoaded, isSignedIn, getToken])
+
   const user = useMemo(() => {
     if (!isSignedIn || !clerkUser) return null
     return {
@@ -103,6 +148,12 @@ export function AccountProvider({ children }) {
     } finally {
       setD1User(null)
       setAuthError(null)
+      setOrders([])
+      try {
+        window.localStorage.removeItem('hanapipi-flower:orders')
+      } catch {
+        // Ignore storage access errors
+      }
     }
   }, [signOut])
 
@@ -120,11 +171,19 @@ export function AccountProvider({ children }) {
   }, [clerkUser])
 
   const addOrder = useCallback((order) => {
-    setOrders((current) => [order, ...current])
+    setOrders((current) => {
+      const orderKey = order?.code || order?.orderCode || order?.id
+      const filtered = current.filter((o) => (o.code || o.orderCode || o.id) !== orderKey)
+      return [order, ...filtered]
+    })
   }, [])
 
   const value = useMemo(() => ({
     orders,
+    isOrdersLoading,
+    ordersError,
+    refreshOrders,
+    retryOrders: refreshOrders,
     user,
     d1User,
     isAuthLoading,
@@ -133,7 +192,7 @@ export function AccountProvider({ children }) {
     logout,
     updateProfile,
     addOrder,
-  }), [orders, user, d1User, isAuthLoading, authError, hydrateUser, logout, updateProfile, addOrder])
+  }), [orders, isOrdersLoading, ordersError, refreshOrders, user, d1User, isAuthLoading, authError, hydrateUser, logout, updateProfile, addOrder])
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>
 }

@@ -2,6 +2,7 @@ import { products } from '../data/products'
 import { normalizeGiftAddOns } from './cart'
 
 export function getCartItemPresentation(item) {
+  if (!item) return { details: '', giftAddOns: [], name: '' }
   if (item.custom) {
     return {
       details: `${item.style} · ${item.palette} · ${item.size} · ${item.flowers.join(', ')} · ${item.wrapping}`,
@@ -10,12 +11,20 @@ export function getCartItemPresentation(item) {
     }
   }
   const product = products.find((entry) => entry.id === item.productId)
-  const size = product?.sizeOptions.find((option) => option.id === item.sizeId)
-  const wrapping = product?.wrappingOptions?.find((option) => option.id === item.wrappingId)
+  const size = (item.size && typeof item.size === 'object' && item.size.label)
+    ? item.size
+    : product?.sizeOptions?.find((option) => option.id === item.sizeId)
+  const wrapping = (item.wrapping && typeof item.wrapping === 'object' && item.wrapping.label)
+    ? item.wrapping
+    : product?.wrappingOptions?.find((option) => option.id === item.wrappingId)
+
+  const sizeLabel = typeof item.size === 'string' ? item.size : size?.label
+  const wrappingLabel = typeof item.wrapping === 'string' ? item.wrapping : wrapping?.label
+
   return {
-    details: [size?.label, wrapping?.label].filter(Boolean).join(' · '),
+    details: [sizeLabel, wrappingLabel].filter(Boolean).join(' · '),
     giftAddOns: normalizeGiftAddOns(item.giftAddOns),
-    name: product?.name ?? 'Bó hoa Hanapipi',
+    name: item.name || product?.name || 'Bó hoa Hanapipi',
   }
 }
 
@@ -54,4 +63,37 @@ export function createOrderCode() {
 export function formatDeliveryDate(value) {
   if (!value) return 'Chưa chọn ngày'
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(`${value}T12:00:00`))
+}
+
+export function formatOrderStatus(status) {
+  switch (status) {
+    case 'received':
+      return 'Đã tiếp nhận'
+    case 'confirmed':
+      return 'Đã xác nhận'
+    case 'processing':
+      return 'Đang chuẩn bị'
+    case 'delivering':
+      return 'Đang giao hoa'
+    case 'completed':
+      return 'Đã giao hoa'
+    case 'cancelled':
+      return 'Đã hủy'
+    default:
+      return status || 'Đã ghi nhận'
+  }
+}
+
+export function formatPaymentStatus(status) {
+  switch (status) {
+    case 'mock_pending':
+    case 'pending':
+      return 'Chờ thanh toán'
+    case 'paid':
+      return 'Đã thanh toán'
+    case 'failed':
+      return 'Thanh toán thất bại'
+    default:
+      return status || 'Chờ xử lý'
+  }
 }

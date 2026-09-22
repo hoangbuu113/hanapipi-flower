@@ -3,11 +3,27 @@ import { Link } from 'react-router-dom'
 import Container from '../components/Container'
 import { useAccount } from '../context/accountStore'
 import { formatCurrency } from '../utils/formatCurrency'
-import { getCartItemPresentation, getOrderGiftAddOns, getOrderGifting } from '../utils/order'
+import {
+  formatDeliveryDate,
+  formatOrderStatus,
+  formatPaymentStatus,
+  getCartItemPresentation,
+  getOrderGiftAddOns,
+  getOrderGifting,
+} from '../utils/order'
 import './AccountPages.css'
 
 function AccountPage() {
-  const { isAuthLoading, logout, orders, updateProfile, user } = useAccount()
+  const {
+    isAuthLoading,
+    isOrdersLoading,
+    logout,
+    orders,
+    ordersError,
+    refreshOrders,
+    updateProfile,
+    user,
+  } = useAccount()
 
   return (
     <main className="account-page">
@@ -47,34 +63,66 @@ function AccountPage() {
         <section className="account-orders" aria-labelledby="orders-title">
           <p className="eyebrow">Đơn hoa của tôi</p>
           <h2 id="orders-title">Những đơn hoa đã ghi nhận</h2>
-          {orders.length ? (
+          {isOrdersLoading && !orders.length ? (
+            <div className="account-orders__loading">
+              <p>Đang tải danh sách đơn hoa...</p>
+            </div>
+          ) : ordersError && !orders.length ? (
+            <div className="account-orders__error" role="alert">
+              <p>{ordersError.message || 'Không thể tải danh sách đơn hoa.'}</p>
+              <button className="button button--secondary" type="button" onClick={refreshOrders}>
+                Thử lại
+              </button>
+            </div>
+          ) : orders.length ? (
             <div className="account-order-list">
               {orders.map((order) => {
+                const orderCode = order.code || order.orderCode
+                const orderTimestamp = order.timestamp || order.createdAtUtc
                 const gifting = getOrderGifting(order)
                 const giftAddOns = getOrderGiftAddOns(order)
                 return (
-                  <article key={order.code}>
+                  <article key={orderCode}>
                     <header>
                       <div>
-                        <strong>{order.code}</strong>
-                        <span>
-                          {new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(new Date(order.timestamp))}
-                        </span>
+                        <strong>{orderCode}</strong>
+                        {orderTimestamp && (
+                          <span>
+                            {new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(new Date(orderTimestamp))}
+                          </span>
+                        )}
                       </div>
-                      <em>{order.status}</em>
+                      <em>{formatOrderStatus(order.status)}</em>
                     </header>
                     <dl>
-                      <div>
-                        <dt>Người nhận</dt>
-                        <dd>{order.receiver.name}</dd>
-                      </div>
+                      {order.receiver?.name && (
+                        <div>
+                          <dt>Người nhận</dt>
+                          <dd>{order.receiver.name}</dd>
+                        </div>
+                      )}
+                      {(order.delivery?.date || order.deliveryDate) && (
+                        <div>
+                          <dt>Giao dự kiến</dt>
+                          <dd>
+                            {formatDeliveryDate(order.delivery?.date || order.deliveryDate)}
+                            {(order.delivery?.slot || order.deliverySlot) ? ` · ${order.delivery?.slot || order.deliverySlot}` : ''}
+                          </dd>
+                        </div>
+                      )}
                       <div>
                         <dt>Tổng tiền</dt>
-                        <dd>{formatCurrency(order.total)}</dd>
+                        <dd>{formatCurrency(order.total ?? order.totalVnd)}</dd>
                       </div>
+                      {order.paymentStatus && (
+                        <div>
+                          <dt>Thanh toán</dt>
+                          <dd>{formatPaymentStatus(order.paymentStatus)}</dd>
+                        </div>
+                      )}
                     </dl>
                     <p>
-                      {order.items.map((item) => {
+                      {order.items?.map((item) => {
                         const presentation = getCartItemPresentation(item)
                         return `${presentation.name} × ${item.quantity}`
                       }).join(' · ')}
@@ -94,6 +142,11 @@ function AccountPage() {
                         <strong>Người gửi:</strong> {gifting.anonymous ? 'Không ghi tên người gửi' : gifting.senderName}
                       </p>
                     )}
+                    <div className="account-order__actions">
+                      <Link className="button button--text" to={`/checkout/success/${orderCode}`}>
+                        Xem chi tiết đơn hoa →
+                      </Link>
+                    </div>
                   </article>
                 )
               })}

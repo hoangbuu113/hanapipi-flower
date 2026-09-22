@@ -886,13 +886,13 @@ test('34. API gate closed by default (404 API_NOT_FOUND when API_V1_ENABLED=fals
   assert.equal(body.error?.code, 'API_NOT_FOUND')
 })
 
-// 35. Regressions 35: Method not allowed for non-POST methods on /api/v1/orders
-test('35. method not allowed for non-POST methods on /api/v1/orders', async () => {
+// 35. Regressions 35: Method not allowed for non-GET/POST methods on /api/v1/orders
+test('35. method not allowed for non-GET/POST methods on /api/v1/orders', async () => {
   const { d1, sqlite } = createSeededDatabase()
   seedCustomerUser(sqlite)
   const worker = createTestWorker(d1)
 
-  for (const method of ['GET', 'PUT', 'DELETE', 'PATCH']) {
+  for (const method of ['PUT', 'DELETE', 'PATCH']) {
     const response = await worker.fetch('/api/v1/orders', {
       method,
       headers: {
@@ -900,7 +900,7 @@ test('35. method not allowed for non-POST methods on /api/v1/orders', async () =
       },
     })
     assert.equal(response.status, 405, `${method} must return 405`)
-    assert.equal(response.headers.get('Allow'), 'POST')
+    assert.equal(response.headers.get('Allow'), 'GET, POST')
   }
 })
 
