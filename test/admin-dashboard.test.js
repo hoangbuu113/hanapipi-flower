@@ -177,7 +177,7 @@ test('5. admin authorization is not stored/trusted from localStorage', async () 
     fetchImpl: async (url) => {
       calledUrl = url
       return new Response(JSON.stringify({
-        error: { code: 'FORBIDDEN', message: 'Báº¡n khÃ´ng cÃ³ quyá»n truy cáº­p tÃ i nguyÃªn nÃ y.' },
+        error: { code: 'FORBIDDEN', message: 'Bạn không có quyền truy cập tài nguyên này.' },
       }), { status: 403 })
     },
     getToken: async () => 'customer-token',
@@ -254,7 +254,7 @@ test('10. no-watering-flower renders as priceless/non-purchasable', async () => 
 test('11. admin API error produces safe retry/error state', async () => {
   const auth500 = await checkAdminAccess({
     fetchImpl: async () => new Response(JSON.stringify({
-      error: { code: 'INTERNAL_ERROR', message: 'Lá»—i há»‡ thá»‘ng.' },
+      error: { code: 'INTERNAL_ERROR', message: 'Lỗi hệ thống.' },
     }), { status: 500 }),
     getToken: async () => 'some-token',
   })
@@ -264,7 +264,7 @@ test('11. admin API error produces safe retry/error state', async () => {
 
   const cat404 = await fetchAdminCatalogue({
     fetchImpl: async () => new Response(JSON.stringify({
-      error: { code: 'API_NOT_FOUND', message: 'KhÃ´ng tÃ¬m tháº¥y API Ä‘Æ°á»£c yÃªu cáº§u.' },
+      error: { code: 'API_NOT_FOUND', message: 'Không tìm thấy API được yêu cầu.' },
     }), { status: 404 }),
   })
   assert.equal(cat404.ok, false)
@@ -537,7 +537,7 @@ test('27. guest POST to /api/v1/admin/products returns 401', async () => {
   const testWorker = createTestWorker(d1)
 
   // via client without token
-  const clientRes = await createAdminProduct({ name: 'Hoa Má»›i', priceVnd: 500000, slug: 'hoa-moi' }, {
+  const clientRes = await createAdminProduct({ name: 'Hoa Mới', priceVnd: 500000, slug: 'hoa-moi' }, {
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
     getToken: async () => null,
   })
@@ -547,7 +547,7 @@ test('27. guest POST to /api/v1/admin/products returns 401', async () => {
 
   // via direct fetch without Authorization header
   const directRes = await testWorker.fetch('/api/v1/admin/products', {
-    body: JSON.stringify({ name: 'Hoa Má»›i', priceVnd: 500000, slug: 'hoa-moi' }),
+    body: JSON.stringify({ name: 'Hoa Mới', priceVnd: 500000, slug: 'hoa-moi' }),
     headers: { 'Content-Type': 'application/json' },
     method: 'POST',
   })
@@ -558,7 +558,7 @@ test('28. customer POST to /api/v1/admin/products returns 403', async () => {
   const { d1 } = createSeededDatabase()
   const testWorker = createTestWorker(d1)
 
-  const result = await createAdminProduct({ name: 'Hoa Má»›i', priceVnd: 500000, slug: 'hoa-moi' }, {
+  const result = await createAdminProduct({ name: 'Hoa Mới', priceVnd: 500000, slug: 'hoa-moi' }, {
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
     getToken: async () => 'customer-token',
   })
@@ -574,12 +574,12 @@ test('29. admin can create valid normal product, new row exists in D1, and canon
   const testWorker = createTestWorker(d1)
 
   const result = await createAdminProduct({
-    collection: 'Bá»™ sÆ°u táº­p mÃ¹a thu',
+    collection: 'Bộ sưu tập mùa thu',
     imageUrl: 'https://images.unsplash.com/photo-test',
     isPurchasable: true,
-    name: 'Hoa CÃºc MÃ¹a Thu',
+    name: 'Hoa Cúc Mùa Thu',
     priceVnd: 620000,
-    shortDescription: 'Hoa cÃºc vÃ ng áº¥m Ã¡p cho ngÃ y thu.',
+    shortDescription: 'Hoa cúc vàng ấm áp cho ngày thu.',
     slug: 'hoa-cuc-mua-thu',
     status: 'available',
   }, {
@@ -591,7 +591,7 @@ test('29. admin can create valid normal product, new row exists in D1, and canon
   assert.equal(result.status, 201)
   assert.ok(result.product.id.startsWith('prod_'), 'ID must have server-generated prefix prod_')
   assert.equal(result.product.slug, 'hoa-cuc-mua-thu')
-  assert.equal(result.product.name, 'Hoa CÃºc MÃ¹a Thu')
+  assert.equal(result.product.name, 'Hoa Cúc Mùa Thu')
   assert.equal(result.product.priceVnd, 620000)
   assert.equal(result.product.status, 'available')
   assert.equal(result.product.isPurchasable, true)
@@ -600,7 +600,7 @@ test('29. admin can create valid normal product, new row exists in D1, and canon
   const row = sqlite.prepare('SELECT id, slug, name, price_vnd, status, active FROM products WHERE slug = ?').get('hoa-cuc-mua-thu')
   assert.ok(row, 'Product row must exist in D1 products table')
   assert.equal(row.slug, 'hoa-cuc-mua-thu')
-  assert.equal(row.name, 'Hoa CÃºc MÃ¹a Thu')
+  assert.equal(row.name, 'Hoa Cúc Mùa Thu')
   assert.equal(row.price_vnd, 620000)
   assert.equal(row.status, 'available')
   assert.equal(row.active, 1)
@@ -610,7 +610,7 @@ test('29. admin can create valid normal product, new row exists in D1, and canon
   assert.ok(variant, 'Default variant must exist in D1 product_variants table')
   assert.equal(variant.option_type, 'size')
   assert.equal(variant.code, 'standard')
-  assert.equal(variant.label, 'TiÃªu chuáº©n')
+  assert.equal(variant.label, 'Tiêu chuẩn')
   assert.equal(variant.price_vnd, 620000)
   assert.equal(variant.active, 1)
 })
@@ -621,7 +621,7 @@ test('30. public catalogue can read created product', async () => {
   const testWorker = createTestWorker(d1)
 
   await createAdminProduct({
-    name: 'Hoa Lan TÃ­m',
+    name: 'Hoa Lan Tím',
     priceVnd: 880000,
     slug: 'hoa-lan-tim',
     status: 'available',
@@ -654,7 +654,7 @@ test('31. duplicate slug is rejected with 409 Conflict', async () => {
 
   // 'nang-diu' is seeded
   const result = await createAdminProduct({
-    name: 'Náº¯ng Dá»‹u Má»›i',
+    name: 'Nắng Dịu Mới',
     priceVnd: 600000,
     slug: 'nang-diu',
   }, {
@@ -756,7 +756,7 @@ test('35. arbitrary unknown fields are ignored safely and only whitelisted field
   const result = await createAdminProduct({
     dropDatabase: 'true',
     isAdmin: true,
-    name: 'Hoa An ToÃ n',
+    name: 'Hoa An Toàn',
     priceVnd: 510000,
     randomExtraField: 'ignore me',
     slug: 'hoa-an-toan',
@@ -766,7 +766,7 @@ test('35. arbitrary unknown fields are ignored safely and only whitelisted field
   })
 
   assert.equal(result.ok, true)
-  assert.equal(result.product.name, 'Hoa An ToÃ n')
+  assert.equal(result.product.name, 'Hoa An Toàn')
   assert.equal(result.product.priceVnd, 510000)
   assert.equal(result.product.randomExtraField, undefined)
 })
@@ -776,7 +776,7 @@ test('36. fake client role=admin or fake userId cannot bypass server authorizati
   const testWorker = createTestWorker(d1)
 
   const result = await createAdminProduct({
-    name: 'Hoa Giáº£ Máº¡o',
+    name: 'Hoa Giả Mạo',
     priceVnd: 500000,
     role: 'admin',
     slug: 'hoa-gia-mao',
@@ -800,7 +800,7 @@ test('37. cannot create slug no-watering-flower', async () => {
   const testWorker = createTestWorker(d1)
 
   const result = await createAdminProduct({
-    name: 'BÃ´ng Hoa KhÃ´ng Cáº§n TÆ°á»›i Thá»© Hai',
+    name: 'Bông Hoa Không Cần Tưới Thứ Hai',
     priceVnd: 500000,
     slug: 'no-watering-flower',
   }, {
@@ -819,7 +819,7 @@ test('38. cannot create a second priceless product', async () => {
   const testWorker = createTestWorker(d1)
 
   const result = await createAdminProduct({
-    name: 'Hoa VÃ´ GiÃ¡ Má»›i',
+    name: 'Hoa Vô Giá Mới',
     priceVnd: 500000,
     purchaseType: 'priceless',
     slug: 'hoa-vo-gia-moi',
@@ -840,7 +840,7 @@ test('39. existing protected product remains unchanged after failed creation att
 
   // Attempt creation of duplicate protected product
   await createAdminProduct({
-    name: 'BÃ´ng Hoa KhÃ´ng Cáº§n TÆ°á»›i NhÃ¡i',
+    name: 'Bông Hoa Không Cần Tưới Nhái',
     priceVnd: 100000,
     slug: 'no-watering-flower',
   }, {
@@ -865,8 +865,8 @@ test('40. Admin UI create flow uses authenticated adminClient', () => {
 test('41. UI handles validation error and server failure', () => {
   const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
 
-  assert.match(adminPageCode, /setCreateError\('TÃªn sáº£n pháº©m khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng\.'\)/u)
-  assert.match(adminPageCode, /setCreateError\('Slug sáº£n pháº©m khÃ´ng há»£p lá»‡/u)
+  assert.match(adminPageCode, /setCreateError\('Tên sản phẩm không được để trống\.'\)/u)
+  assert.match(adminPageCode, /setCreateError\('Slug sản phẩm không hợp lệ/u)
   assert.match(adminPageCode, /setCreateError\(result\.error\?\.message/u)
 })
 
@@ -874,5 +874,5 @@ test('42. UI refreshes with canonical created product after success', () => {
   const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
 
   assert.match(adminPageCode, /setProducts\(\(prev\) => \[result\.product, \.\.\.prev\]\)/u)
-  assert.ok(adminPageCode.includes('setSaveSuccess(`ÄÃ£ táº¡o thÃ nh cÃ´ng sáº£n pháº©m "${result.product.name}".`)'))
+  assert.ok(adminPageCode.includes('setSaveSuccess(`Đã tạo thành công sản phẩm "${result.product.name}".`)'))
 })
