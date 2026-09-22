@@ -17,6 +17,7 @@ import AccountPage from './pages/AccountPage'
 import DeliveryInformationPage from './pages/DeliveryInformationPage'
 import FlowerCarePage from './pages/FlowerCarePage'
 import FlowerAlreadyTakenPage from './pages/FlowerAlreadyTakenPage'
+import AdminPage from './pages/AdminPage'
 
 const TypographyTest = lazy(() => import('./pages/TypographyTest'))
 
@@ -118,6 +119,7 @@ function App() {
         <Route path="login" element={<AuthPage mode="login" />} />
         <Route path="register" element={<AuthPage mode="register" />} />
         <Route path="account" element={<AccountPage />} />
+        <Route path="admin" element={<AdminPage />} />
         <Route path="delivery-information" element={<DeliveryInformationPage />} />
         <Route path="flower-care" element={<FlowerCarePage />} />
         <Route path="flower-already-taken" element={<FlowerAlreadyTakenPage />} />

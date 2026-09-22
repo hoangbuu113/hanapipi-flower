@@ -1,4 +1,4 @@
-import { Heart, Menu, Search, ShoppingBag, UserRound, X } from 'lucide-react'
+import { Heart, Menu, Search, ShieldCheck, ShoppingBag, UserRound, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import Button from './Button'
@@ -113,6 +113,9 @@ function Navbar() {
           <Link aria-label="Những bó hoa đã lưu" className="utility-nav__link" to="/wishlist"><Heart aria-hidden="true" />{wishlistIds.length > 0 && <em>{wishlistIds.length}</em>}</Link>
           <button aria-label="Mở giỏ hàng" className="utility-nav__link" type="button" onClick={openCart}><ShoppingBag aria-hidden="true" />{cartCount > 0 && <em>{cartCount}</em>}</button>
           <Link aria-label={user ? 'Tài khoản của bạn' : 'Đăng nhập'} className="utility-nav__link" to={accountPath}><UserRound aria-hidden="true" /></Link>
+          {user?.role === 'admin' && (
+            <Link aria-label="Quản lý Hanapipi" className="utility-nav__link utility-nav__link--admin" to="/admin"><ShieldCheck aria-hidden="true" /></Link>
+          )}
         </nav>
 
         <button
@@ -150,6 +153,9 @@ function Navbar() {
                 </Link>
               ))}
               <Link className="mobile-nav__link" onClick={() => setIsOpen(false)} to={accountPath}>Tài khoản</Link>
+              {user?.role === 'admin' && (
+                <Link className="mobile-nav__link mobile-nav__link--admin" onClick={() => setIsOpen(false)} to="/admin">Quản trị</Link>
+              )}
           </div>
         </nav>
       </Container>

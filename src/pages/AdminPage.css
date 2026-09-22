@@ -1,0 +1,325 @@
+.admin-page {
+  padding-block: clamp(40px, 6vw, 80px) 120px;
+}
+
+.admin-page__header {
+  margin-bottom: clamp(32px, 4vw, 48px);
+}
+
+.admin-page__header h1 {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  line-height: 1.08;
+  color: var(--text-primary);
+}
+
+.admin-page__header p.eyebrow {
+  margin: 0 0 12px;
+  color: var(--accent-botanical);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-identity {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  padding: 24px;
+  background: var(--surface-subtle, #fcfbf9);
+  border: 1px solid var(--border);
+  margin-bottom: clamp(36px, 5vw, 56px);
+}
+
+.admin-identity__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-identity__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-identity__value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.admin-identity__value code {
+  font-family: monospace;
+  font-size: 12px;
+  background: var(--surface, #fff);
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+}
+
+.admin-state-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 380px;
+  padding: 48px 24px;
+  border: 1px solid var(--border);
+  margin-top: 32px;
+}
+
+.admin-state-container h2 {
+  margin: 0 0 12px;
+  font-family: var(--font-family-display);
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.admin-state-container p {
+  margin: 0 0 24px;
+  color: var(--text-muted);
+  font-size: 14px;
+  max-width: 480px;
+  line-height: 1.6;
+}
+
+.admin-state-container .button {
+  margin-top: 8px;
+}
+
+.admin-state-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.admin-catalogue-section {
+  margin-top: 40px;
+}
+
+.admin-catalogue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.admin-catalogue-header h2 {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.admin-catalogue-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-botanical);
+  background: var(--surface-subtle, #fcfbf9);
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+}
+
+.admin-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  background: var(--surface, #fff);
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-table th {
+  background: var(--surface-subtle, #fcfbf9);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.admin-table td {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tr:hover td {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.admin-product-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+}
+
+.admin-product-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 2px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--surface-subtle, #fcfbf9);
+  flex-shrink: 0;
+}
+
+.admin-product-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-product-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.admin-product-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.admin-slug-code {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.admin-price {
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.admin-price--priceless {
+  color: var(--accent-botanical);
+  font-style: italic;
+  font-weight: 600;
+}
+
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.admin-badge--available {
+  background: #eef7ee;
+  border-color: #c4e4c4;
+  color: #276727;
+}
+
+.admin-badge--preorder {
+  background: #fef8ee;
+  border-color: #f7dfb5;
+  color: #8f5c0b;
+}
+
+.admin-badge--seasonal {
+  background: #f2f5fa;
+  border-color: #ccd8ea;
+  color: #2e4d7a;
+}
+
+.admin-badge--bestseller {
+  background: #fdf5f3;
+  border-color: #f6d1c9;
+  color: #a34833;
+}
+
+.admin-badge--priceless {
+  background: #faf4ef;
+  border-color: #e8d7c6;
+  color: #8c5828;
+}
+
+.admin-badge--purchasable {
+  background: #f3f8f3;
+  border-color: #d1e6d1;
+  color: #2c6c2c;
+}
+
+.admin-badge--not-purchasable {
+  background: #fcf4f4;
+  border-color: #f5d4d4;
+  color: #9c3b3b;
+}
+
+.admin-catalogue-loading,
+.admin-catalogue-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 64px 24px;
+  border: 1px solid var(--border);
+  background: var(--surface, #fff);
+  gap: 12px;
+}
+
+.admin-catalogue-loading p,
+.admin-catalogue-error p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.admin-catalogue-error h3 {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .admin-identity {
+    grid-template-columns: 1fr;
+    padding: 18px;
+    gap: 12px;
+  }
+
+  .admin-table th,
+  .admin-table td {
+    padding: 12px 10px;
+  }
+}
