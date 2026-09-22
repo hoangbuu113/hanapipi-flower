@@ -94,6 +94,15 @@ function createMeRequest(options = {}) {
   return new Request(`${localOrigin}/api/v1/me${options.query ?? ''}`, { headers })
 }
 
+function createAdminRequest(options = {}) {
+  const headers = new Headers()
+  if (options.authorization) headers.set('Authorization', options.authorization)
+  return new Request(`${localOrigin}/api/v1/admin/me${options.query ?? ''}`, {
+    headers,
+    method: options.method ?? 'GET',
+  })
+}
+
 async function readJson(response) {
   return JSON.parse(await response.text())
 }
@@ -184,4 +193,160 @@ test('repeated verified requests do not create duplicate D1 users', async () => 
   }
 
   assert.equal(database.users.size, 1)
+})
+
+test('GET /api/v1/admin/me returns 401 when authentication is missing', async () => {
+  const database = new FakeD1Database()
+  const response = await createAuthWorker().fetch(createAdminRequest(), createEnv(database))
+  const body = await readJson(response)
+
+  assert.equal(response.status, 401)
+  assert.equal(body.error.code, 'AUTHENTICATION_REQUIRED')
+  assert.equal(database.users.size, 0)
+})
+
+test('GET /api/v1/admin/me returns 401 for an unverifiable Clerk token', async () => {
+  const database = new FakeD1Database()
+  const response = await createAuthWorker().fetch(createAdminRequest({
+    authorization: 'Bearer unit-test-invalid',
+  }), createEnv(database))
+  const body = await readJson(response)
+
+  assert.equal(response.status, 401)
+  assert.equal(body.error.code, 'AUTHENTICATION_REQUIRED')
+  assert.equal(database.users.size, 0)
+})
+
+test('GET /api/v1/admin/me returns 403 for a valid authenticated customer', async () => {
+  const database = new FakeD1Database()
+  const response = await createAuthWorker().fetch(createAdminRequest({
+    authorization: validAuthorization,
+  }), createEnv(database))
+  const body = await readJson(response)
+
+  assert.equal(response.status, 403)
+  assert.equal(body.error.code, 'FORBIDDEN')
+  assert.equal(body.error.message, 'Bạn không có quyền truy cập tài nguyên này.')
+})
+
+test('GET /api/v1/admin/me returns 200 for a valid authenticated admin', async () => {
+  const database = new FakeD1Database()
+  const timestamp = new Date().toISOString()
+  database.users.set(`clerk:${ownerSubject}`, {
+    created_at_utc: timestamp,
+    display_name: 'Quản trị viên',
+    id: 'usr_admin_test_123',
+    locale: 'vi-VN',
+    role: 'admin',
+    status: 'active',
+    updated_at_utc: timestamp,
+  })
+
+  const response = await createAuthWorker().fetch(createAdminRequest({
+    authorization: validAuthorization,
+  }), createEnv(database))
+  const body = await readJson(response)
+
+  assert.equal(response.status, 200)
+  assert.equal(body.data.authorized, true)
+  assert.equal(body.data.user.id, 'usr_admin_test_123')
+  assert.equal(body.data.user.role, 'admin')
+  assert.equal(body.data.user.status, 'active')
+  assert.doesNotMatch(JSON.stringify(body), new RegExp(ownerSubject, 'u'))
+})
+
+test('GET /api/v1/admin/me rejects caller-supplied role=admin in query or headers', async () => {
+  const database = new FakeD1Database()
+  const response = await createAuthWorker().fetch(createAdminRequest({
+    authorization: validAuthorization,
+    query: '?role=admin',
+  }), createEnv(database))
+  const body = await readJson(response)
+
+  assert.equal(response.status, 403)
+  assert.equal(body.error.code, 'FORBIDDEN')
+})
+
+test('GET /api/v1/admin/me rejects caller-supplied userId in query or headers', async () => {
+  const database = new FakeD1Database()
+  const response = await createAuthWorker().fetch(createAdminRequest({
+    authorization: validAuthorization,
+    query: '?userId=usr_admin_test_123&profileId=admin_profile',
+  }), createEnv(database))
+  const body = await readJson(response)
+
+  assert.equal(response.status, 403)
+  assert.equal(body.error.code, 'FORBIDDEN')
+})
+
+test('D1 role is the authorization source of truth', async () => {
+  const database = new FakeD1Database()
+  const worker = createAuthWorker()
+  const env = createEnv(database)
+
+  // 1. Initial request as customer -> 403
+  const customerRes = await worker.fetch(createAdminRequest({
+    authorization: validAuthorization,
+  }), env)
+  assert.equal(customerRes.status, 403)
+  const customerBody = await readJson(customerRes)
+  assert.equal(customerBody.error.code, 'FORBIDDEN')
+
+  // 2. Promote role to admin in D1
+  const user = database.users.get(`clerk:${ownerSubject}`)
+  assert.equal(user.role, 'customer')
+  user.role = 'admin'
+
+  // 3. Same Clerk identity request -> 200
+  const adminRes = await worker.fetch(createAdminRequest({
+    authorization: validAuthorization,
+  }), env)
+  assert.equal(adminRes.status, 200)
+  const adminBody = await readJson(adminRes)
+  assert.equal(adminBody.data.authorized, true)
+  assert.equal(adminBody.data.user.role, 'admin')
+
+  // 4. Demote role back to customer in D1 -> 403
+  user.role = 'customer'
+  const demotedRes = await worker.fetch(createAdminRequest({
+    authorization: validAuthorization,
+  }), env)
+  assert.equal(demotedRes.status, 403)
+  const demotedBody = await readJson(demotedRes)
+  assert.equal(demotedBody.error.code, 'FORBIDDEN')
+})
+
+test('GET /api/v1/admin/me returns 403 ACCOUNT_UNAVAILABLE for an inactive admin user', async () => {
+  const database = new FakeD1Database()
+  const timestamp = new Date().toISOString()
+  database.users.set(`clerk:${ownerSubject}`, {
+    created_at_utc: timestamp,
+    display_name: 'Quản trị viên',
+    id: 'usr_admin_disabled',
+    locale: 'vi-VN',
+    role: 'admin',
+    status: 'disabled',
+    updated_at_utc: timestamp,
+  })
+
+  const response = await createAuthWorker().fetch(createAdminRequest({
+    authorization: validAuthorization,
+  }), createEnv(database))
+  const body = await readJson(response)
+
+  assert.equal(response.status, 403)
+  assert.equal(body.error.code, 'ACCOUNT_UNAVAILABLE')
+})
+
+test('POST /api/v1/admin/me returns 405 METHOD_NOT_ALLOWED', async () => {
+  const database = new FakeD1Database()
+  const response = await createAuthWorker().fetch(createAdminRequest({
+    authorization: validAuthorization,
+    method: 'POST',
+  }), createEnv(database))
+  const body = await readJson(response)
+
+  assert.equal(response.status, 405)
+  assert.equal(body.error.code, 'METHOD_NOT_ALLOWED')
+  assert.equal(response.headers.get('Allow'), 'GET')
 })

@@ -89,3 +89,21 @@ Auth0 was retained as the fallback during planning but was not selected for the 
 ### STATUS
 
 ACTIVE
+
+## 2026-09-22 / Phase 17
+
+### DECISION
+
+Hanapipi authorization roles are server-authoritative in D1; Clerk proves identity but does not determine commerce/admin authorization.
+
+### WHY
+
+Privilege levels (e.g. `admin`, `customer`) and resource ownership must be enforced server-side against canonical database records. Identity metadata from the client or third-party identity claims cannot be trusted for administrative access or privilege escalation.
+
+### ALTERNATIVES CONSIDERED
+
+Using Clerk client metadata or JWT custom claims for admin authorization was rejected to keep authorization strictly coupled to the application data plane in D1 and prevent client-side claim forgery.
+
+### STATUS
+
+ACTIVE
