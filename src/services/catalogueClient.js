@@ -191,6 +191,19 @@ export function normalizeCatalogueProduct(product, variantsArg = null, relatedPr
     status,
     variants: allVariants ?? product.variants ?? [],
     wrappingOptions,
+    giftAddOns: Array.isArray(product.giftAddOns)
+      ? product.giftAddOns
+          .filter((g) => g.active !== false)
+          .map((g) => ({
+            active: g.active !== false,
+            id: g.id,
+            name: g.name,
+            note: g.shortDescription ?? g.note ?? '',
+            price: g.priceVnd !== undefined ? g.priceVnd : g.price ?? 0,
+            priceVnd: g.priceVnd !== undefined ? g.priceVnd : g.price ?? 0,
+            sortOrder: g.sortOrder ?? 0,
+          }))
+      : undefined,
   }
 }
 

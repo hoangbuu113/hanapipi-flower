@@ -694,3 +694,311 @@ export async function deleteAdminMedia(key, {
     }
   }
 }
+
+export async function fetchAdminProductVariants(productId, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (!productId || typeof productId !== 'string') {
+    return { error: { code: 'INVALID_ID', message: 'Mã sản phẩm không hợp lệ.' }, ok: false, status: 400, variants: [] }
+  }
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, ok: false, status: 401, variants: [] }
+  }
+
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, ok: false, status: 401, variants: [] }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/admin/products/${encodeURIComponent(productId)}/variants`, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+    })
+
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể tải danh sách tùy chọn của sản phẩm.' },
+        ok: false,
+        status: response.status,
+        variants: [],
+      }
+    }
+
+    return {
+      error: null,
+      ok: true,
+      status: response.status,
+      variants: Array.isArray(body?.data?.variants) ? body.data.variants : [],
+    }
+  } catch {
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, ok: false, status: 0, variants: [] }
+  }
+}
+
+export async function saveAdminProductVariants(productId, variants, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (!productId || typeof productId !== 'string') {
+    return { error: { code: 'INVALID_ID', message: 'Mã sản phẩm không hợp lệ.' }, ok: false, status: 400, variants: [] }
+  }
+  if (!Array.isArray(variants)) {
+    return { error: { code: 'INVALID_PAYLOAD', message: 'Danh sách tùy chọn không hợp lệ.' }, ok: false, status: 400, variants: [] }
+  }
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, ok: false, status: 401, variants: [] }
+  }
+
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, ok: false, status: 401, variants: [] }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/admin/products/${encodeURIComponent(productId)}/variants`, {
+      body: JSON.stringify({ variants }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'PUT',
+    })
+
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể lưu danh sách tùy chọn.' },
+        ok: false,
+        status: response.status,
+        variants: [],
+      }
+    }
+
+    return {
+      error: null,
+      ok: true,
+      status: response.status,
+      variants: Array.isArray(body?.data?.variants) ? body.data.variants : [],
+    }
+  } catch {
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, ok: false, status: 0, variants: [] }
+  }
+}
+
+export async function fetchAdminGiftAddOns({
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, items: [], ok: false, status: 401, total: 0 }
+  }
+
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, items: [], ok: false, status: 401, total: 0 }
+  }
+
+  try {
+    const response = await fetchImpl('/api/v1/admin/gift-add-ons', {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+    })
+
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể tải danh sách quà tặng kèm.' },
+        items: [],
+        ok: false,
+        status: response.status,
+        total: 0,
+      }
+    }
+
+    const items = Array.isArray(body?.data?.items) ? body.data.items : []
+    return {
+      error: null,
+      items,
+      ok: true,
+      status: response.status,
+      total: body?.data?.total ?? items.length,
+    }
+  } catch {
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, items: [], ok: false, status: 0, total: 0 }
+  }
+}
+
+export async function createAdminGiftAddOn(payload, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, item: null, ok: false, status: 401 }
+  }
+
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, item: null, ok: false, status: 401 }
+  }
+
+  try {
+    const response = await fetchImpl('/api/v1/admin/gift-add-ons', {
+      body: JSON.stringify(payload),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
+
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể tạo món quà mới.' },
+        item: null,
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    return {
+      error: null,
+      item: body?.data?.item ?? null,
+      ok: true,
+      status: response.status,
+    }
+  } catch {
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, item: null, ok: false, status: 0 }
+  }
+}
+
+export async function updateAdminGiftAddOn(id, fields, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (!id || typeof id !== 'string') {
+    return { error: { code: 'INVALID_ID', message: 'Mã món quà không hợp lệ.' }, item: null, ok: false, status: 400 }
+  }
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, item: null, ok: false, status: 401 }
+  }
+
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, item: null, ok: false, status: 401 }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/admin/gift-add-ons/${encodeURIComponent(id)}`, {
+      body: JSON.stringify(fields),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'PATCH',
+    })
+
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể cập nhật món quà.' },
+        item: null,
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    return {
+      error: null,
+      item: body?.data?.item ?? null,
+      ok: true,
+      status: response.status,
+    }
+  } catch {
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, item: null, ok: false, status: 0 }
+  }
+}
+
+export async function toggleAdminGiftAddOnActive(id, active, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (!id || typeof id !== 'string') {
+    return { error: { code: 'INVALID_ID', message: 'Mã món quà không hợp lệ.' }, item: null, ok: false, status: 400 }
+  }
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, item: null, ok: false, status: 401 }
+  }
+
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, item: null, ok: false, status: 401 }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/admin/gift-add-ons/${encodeURIComponent(id)}/toggle-active`, {
+      body: JSON.stringify({ active }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'PATCH',
+    })
+
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể thay đổi trạng thái món quà.' },
+        item: null,
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    return {
+      error: null,
+      item: body?.data?.item ?? null,
+      ok: true,
+      status: response.status,
+    }
+  } catch {
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, item: null, ok: false, status: 0 }
+  }
+}

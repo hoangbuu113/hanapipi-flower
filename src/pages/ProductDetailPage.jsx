@@ -124,8 +124,11 @@ function ProductDetailPage() {
   const activeWrappingId = selectedWrappingId ?? product.wrappingOptions?.[0]?.id
   const relatedProducts = (product.relatedProducts ?? []).slice(0, 4)
   const isWishlisted = wishlistIds.includes(product.id)
+  const effectiveGiftAddOns = (Array.isArray(product.giftAddOns) && product.giftAddOns.length > 0)
+    ? product.giftAddOns
+    : giftAddOns
   const selectedGiftAddOns = isPurchasable
-    ? giftAddOns.filter((addOn) => selectedGiftAddOnIds.includes(addOn.id))
+    ? effectiveGiftAddOns.filter((addOn) => selectedGiftAddOnIds.includes(addOn.id))
     : []
   const giftAddOnTotal = selectedGiftAddOns.reduce((total, addOn) => total + addOn.price, 0)
   const selectedUnitTotal = isPurchasable && selectedSize ? selectedSize.price + giftAddOnTotal : null
@@ -268,7 +271,7 @@ function ProductDetailPage() {
                 <legend>Thêm một món quà nhỏ</legend>
                 <p className="product-gift-options__intro">Chọn một hoặc nhiều món để gửi cùng bó hoa.</p>
                 <div className="product-gift-options__list">
-                  {giftAddOns.map((addOn) => {
+                  {effectiveGiftAddOns.map((addOn) => {
                     const isSelected = selectedGiftAddOnIds.includes(addOn.id)
                     return (
                       <button

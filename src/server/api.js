@@ -33,6 +33,7 @@ const V1_HEALTH_PATH = `${API_V1_PREFIX}/health`
 const V1_ME_PATH = `${API_V1_PREFIX}/me`
 const V1_ADMIN_ME_PATH = `${API_V1_PREFIX}/admin/me`
 const V1_ADMIN_PRODUCTS_PATH = `${API_V1_PREFIX}/admin/products`
+const V1_ADMIN_GIFT_ADD_ONS_PATH = `${API_V1_PREFIX}/admin/gift-add-ons`
 const V1_ADMIN_MEDIA_PATH = `${API_V1_PREFIX}/admin/media`
 const V1_MEDIA_PATH = `${API_V1_PREFIX}/media`
 const V1_CATALOGUE_PATH = `${API_V1_PREFIX}/catalogue`
@@ -427,6 +428,171 @@ async function handleCreateAdminProduct(request, env, requestId, dependencies) {
   }
 }
 
+async function handleGetAdminProductVariants(productId, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_PRODUCTS_PATH}/:id/variants`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(auth.status, auth.code, auth.message, requestId), route, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+  try {
+    const variants = await repositories.catalogue.getProductVariants(productId, { activeOnly: false })
+    return result(successResponse({ variants }, requestId), route)
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tải danh sách tùy chọn của sản phẩm.'
+    return result(errorResponse(status, code, message, requestId), route, { errorCode: code })
+  }
+}
+
+async function handleSaveAdminProductVariants(productId, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_PRODUCTS_PATH}/:id/variants`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(auth.status, auth.code, auth.message, requestId), route, { errorCode: auth.code })
+  }
+
+  let body = null
+  try {
+    body = await request.json()
+  } catch {
+    return result(errorResponse(400, 'INVALID_PAYLOAD', 'Dữ liệu yêu cầu không hợp lệ.', requestId), route, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  const variantsList = Array.isArray(body) ? body : (Array.isArray(body?.variants) ? body.variants : null)
+  if (!variantsList) {
+    return result(errorResponse(400, 'INVALID_PAYLOAD', 'Danh sách tùy chọn sản phẩm không hợp lệ.', requestId), route, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+  try {
+    const variants = await repositories.catalogue.saveProductVariants(productId, variantsList)
+    return result(successResponse({ variants }, requestId), route)
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể lưu tùy chọn của sản phẩm.'
+    return result(errorResponse(status, code, message, requestId), route, { errorCode: code })
+  }
+}
+
+async function handleListAdminGiftAddOns(request, env, requestId, dependencies) {
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(auth.status, auth.code, auth.message, requestId), V1_ADMIN_GIFT_ADD_ONS_PATH, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+  try {
+    const items = await repositories.catalogue.listAdminGiftAddOns()
+    return result(successResponse({ items, total: items.length }, requestId), V1_ADMIN_GIFT_ADD_ONS_PATH)
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tải danh sách quà tặng kèm.'
+    return result(errorResponse(status, code, message, requestId), V1_ADMIN_GIFT_ADD_ONS_PATH, { errorCode: code })
+  }
+}
+
+async function handleCreateAdminGiftAddOn(request, env, requestId, dependencies) {
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(auth.status, auth.code, auth.message, requestId), V1_ADMIN_GIFT_ADD_ONS_PATH, { errorCode: auth.code })
+  }
+
+  let body = null
+  try {
+    body = await request.json()
+  } catch {
+    return result(errorResponse(400, 'INVALID_PAYLOAD', 'Dữ liệu yêu cầu không hợp lệ.', requestId), V1_ADMIN_GIFT_ADD_ONS_PATH, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return result(errorResponse(400, 'INVALID_PAYLOAD', 'Dữ liệu yêu cầu không hợp lệ.', requestId), V1_ADMIN_GIFT_ADD_ONS_PATH, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+  try {
+    const item = await repositories.catalogue.createGiftAddOn(body)
+    return result(successResponse({ item }, requestId, { status: 201 }), V1_ADMIN_GIFT_ADD_ONS_PATH)
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tạo món quà mới.'
+    return result(errorResponse(status, code, message, requestId), V1_ADMIN_GIFT_ADD_ONS_PATH, { errorCode: code })
+  }
+}
+
+async function handleUpdateAdminGiftAddOn(id, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_GIFT_ADD_ONS_PATH}/:id`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(auth.status, auth.code, auth.message, requestId), route, { errorCode: auth.code })
+  }
+
+  let body = null
+  try {
+    body = await request.json()
+  } catch {
+    return result(errorResponse(400, 'INVALID_PAYLOAD', 'Dữ liệu yêu cầu không hợp lệ.', requestId), route, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return result(errorResponse(400, 'INVALID_PAYLOAD', 'Dữ liệu yêu cầu không hợp lệ.', requestId), route, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+  try {
+    const item = await repositories.catalogue.updateGiftAddOn(id, body)
+    return result(successResponse({ item }, requestId), route)
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể cập nhật thông tin món quà.'
+    return result(errorResponse(status, code, message, requestId), route, { errorCode: code })
+  }
+}
+
+async function handleToggleAdminGiftAddOn(id, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_GIFT_ADD_ONS_PATH}/:id/toggle-active`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(auth.status, auth.code, auth.message, requestId), route, { errorCode: auth.code })
+  }
+
+  let active = null
+  try {
+    const body = await request.json()
+    if (typeof body?.active === 'boolean') {
+      active = body.active
+    }
+  } catch {
+    // If no body provided, can toggle
+  }
+
+  const repositories = dependencies.createRepositories(env)
+  try {
+    if (active === null) {
+      const all = await repositories.catalogue.listAdminGiftAddOns()
+      const found = all.find((g) => g.id === id)
+      if (!found) {
+        return result(errorResponse(404, 'GIFT_ADD_ON_NOT_FOUND', 'Không tìm thấy món quà.', requestId), route, { errorCode: 'GIFT_ADD_ON_NOT_FOUND' })
+      }
+      active = !found.active
+    }
+
+    const item = await repositories.catalogue.setGiftAddOnActive(id, active)
+    return result(successResponse({ item }, requestId), route)
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể thay đổi trạng thái món quà.'
+    return result(errorResponse(status, code, message, requestId), route, { errorCode: code })
+  }
+}
+
 async function handleUploadAdminMedia(request, env, requestId, dependencies) {
   const auth = await dependencies.authorizeAdmin(request, env, dependencies)
   if (!auth.ok) {
@@ -629,6 +795,26 @@ function matchPublicMediaKey(pathname) {
   return null
 }
 
+function matchAdminProductVariants(pathname) {
+  if (!pathname.startsWith(`${V1_ADMIN_PRODUCTS_PATH}/`)) return null
+  const remainder = pathname.slice(V1_ADMIN_PRODUCTS_PATH.length + 1).trim()
+  const match = remainder.match(/^([^/]+)\/variants$/u)
+  if (!match) return null
+  return decodeURIComponent(match[1])
+}
+
+function matchAdminGiftAddOnId(pathname) {
+  if (!pathname.startsWith(`${V1_ADMIN_GIFT_ADD_ONS_PATH}/`)) return null
+  const remainder = pathname.slice(V1_ADMIN_GIFT_ADD_ONS_PATH.length + 1).trim()
+  if (remainder.endsWith('/toggle-active')) {
+    const id = remainder.slice(0, -'/toggle-active'.length).trim()
+    if (id.length > 0 && !id.includes('/')) return { action: 'toggle-active', id: decodeURIComponent(id) }
+  } else if (remainder.length > 0 && !remainder.includes('/')) {
+    return { action: null, id: decodeURIComponent(remainder) }
+  }
+  return null
+}
+
 function matchAdminProductParam(pathname) {
   if (pathname.startsWith(`${V1_ADMIN_PRODUCTS_PATH}/`)) {
     const idOrSlug = pathname.slice(V1_ADMIN_PRODUCTS_PATH.length + 1).trim()
@@ -739,16 +925,19 @@ async function handleGetProduct(slug, request, env, requestId, dependencies) {
     ), url.pathname, { errorCode: 'PRODUCT_NOT_FOUND' })
   }
 
-  const [variants, relatedProducts] = await Promise.all([
+  const [variants, relatedProducts, giftAddOns] = await Promise.all([
     repositories.catalogue.getProductVariants(product.id),
     repositories.catalogue.getRelatedProducts
       ? repositories.catalogue.getRelatedProducts(product.id)
       : [],
+    repositories.catalogue.getGiftAddOns({ activeOnly: true }),
   ])
 
   return result(successResponse({
+    giftAddOns,
     product: {
       ...product,
+      giftAddOns,
       relatedProducts,
       variants,
     },
@@ -859,6 +1048,44 @@ export function createApiRouter(options = {}) {
       return handleGetPublicMedia(publicMediaKey, request, env, requestId, {
         createMediaStorage: options.mediaStorageFactory ?? createMediaStorage,
       })
+    }
+
+    const adminProductVariantsId = matchAdminProductVariants(pathname)
+    if (adminProductVariantsId) {
+      if (!['GET', 'PUT', 'POST'].includes(request.method)) {
+        return methodNotAllowed(requestId, pathname, 'GET, PUT, POST')
+      }
+      const adminVariantDependencies = { authorizeAdmin, createRepositories, verifyIdentity }
+      if (request.method === 'GET') {
+        return handleGetAdminProductVariants(adminProductVariantsId, request, env, requestId, adminVariantDependencies)
+      }
+      return handleSaveAdminProductVariants(adminProductVariantsId, request, env, requestId, adminVariantDependencies)
+    }
+
+    if (pathname === V1_ADMIN_GIFT_ADD_ONS_PATH) {
+      if (!['GET', 'POST'].includes(request.method)) {
+        return methodNotAllowed(requestId, V1_ADMIN_GIFT_ADD_ONS_PATH, 'GET, POST')
+      }
+      const adminGiftDependencies = { authorizeAdmin, createRepositories, verifyIdentity }
+      if (request.method === 'GET') {
+        return handleListAdminGiftAddOns(request, env, requestId, adminGiftDependencies)
+      }
+      return handleCreateAdminGiftAddOn(request, env, requestId, adminGiftDependencies)
+    }
+
+    const adminGiftAddOn = matchAdminGiftAddOnId(pathname)
+    if (adminGiftAddOn) {
+      const adminGiftDependencies = { authorizeAdmin, createRepositories, verifyIdentity }
+      if (adminGiftAddOn.action === 'toggle-active') {
+        if (!['PATCH', 'POST'].includes(request.method)) {
+          return methodNotAllowed(requestId, pathname, 'PATCH, POST')
+        }
+        return handleToggleAdminGiftAddOn(adminGiftAddOn.id, request, env, requestId, adminGiftDependencies)
+      }
+      if (request.method !== 'PATCH') {
+        return methodNotAllowed(requestId, pathname, 'PATCH')
+      }
+      return handleUpdateAdminGiftAddOn(adminGiftAddOn.id, request, env, requestId, adminGiftDependencies)
     }
 
     const adminProductAction = matchAdminProductAction(pathname)

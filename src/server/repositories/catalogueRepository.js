@@ -556,6 +556,355 @@ export function createCatalogueRepository(db) {
 
       return this.getProductById(id)
     },
+
+    async saveProductVariants(productId, variantsList) {
+      if (typeof productId !== 'string' || !productId.trim() || productId.length > 100) {
+        const err = new Error('Mã sản phẩm không hợp lệ.')
+        err.code = 'INVALID_PRODUCT_ID'
+        err.status = 400
+        throw err
+      }
+
+      const product = await this.getProductById(productId) ?? await this.getProductBySlug(productId)
+      if (!product) {
+        const err = new Error('Không tìm thấy sản phẩm.')
+        err.code = 'PRODUCT_NOT_FOUND'
+        err.status = 404
+        throw err
+      }
+
+      if (product.purchaseType === 'priceless' || product.slug === 'no-watering-flower') {
+        const err = new Error('Sản phẩm vô giá không thể cấu hình kích thước hoặc kiểu gói mở bán.')
+        err.code = 'PROTECTED_PRODUCT'
+        err.status = 400
+        throw err
+      }
+
+      if (!Array.isArray(variantsList)) {
+        const err = new Error('Danh sách tùy chọn không hợp lệ.')
+        err.code = 'INVALID_VARIANTS'
+        err.status = 400
+        throw err
+      }
+
+      const activeVersion = await this.getCatalogueVersion()
+      const versionId = activeVersion?.version ?? product.catalogueVersion
+
+      const existingVariants = await this.getProductVariants(product.id, { activeOnly: false })
+      const existingById = new Map(existingVariants.map((v) => [v.id, v]))
+      const existingByTypeAndCode = new Map(existingVariants.map((v) => [`${v.optionType}:${v.code}`, v]))
+
+      const statements = []
+      const seenTypeAndCodes = new Set()
+
+      for (let i = 0; i < variantsList.length; i++) {
+        const item = variantsList[i]
+        if (!item || typeof item !== 'object') {
+          const err = new Error('Dữ liệu tùy chọn không hợp lệ.')
+          err.code = 'INVALID_VARIANT'
+          err.status = 400
+          throw err
+        }
+
+        const optionType = item.optionType
+        if (optionType !== 'size' && optionType !== 'wrapping') {
+          const err = new Error('Loại tùy chọn phải là kích thước (size) hoặc kiểu gói (wrapping).')
+          err.code = 'INVALID_OPTION_TYPE'
+          err.status = 400
+          throw err
+        }
+
+        if (typeof item.code !== 'string' || !item.code.trim() || item.code.length > 80) {
+          const err = new Error('Mã định danh tùy chọn không hợp lệ (1-80 ký tự).')
+          err.code = 'INVALID_VARIANT_CODE'
+          err.status = 400
+          throw err
+        }
+        const code = item.code.trim().toLowerCase()
+        const typeAndCodeKey = `${optionType}:${code}`
+        if (seenTypeAndCodes.has(typeAndCodeKey)) {
+          const err = new Error(`Mã tùy chọn trùng lặp: ${code}`)
+          err.code = 'DUPLICATE_VARIANT_CODE'
+          err.status = 400
+          throw err
+        }
+        seenTypeAndCodes.add(typeAndCodeKey)
+
+        if (typeof item.label !== 'string' || !item.label.trim() || item.label.length > 120) {
+          const err = new Error('Tên tùy chọn không được để trống (tối đa 120 ký tự).')
+          err.code = 'INVALID_VARIANT_LABEL'
+          err.status = 400
+          throw err
+        }
+        const label = item.label.trim()
+
+        let note = null
+        if (item.note != null && typeof item.note === 'string') {
+          note = item.note.trim().slice(0, 320) || null
+        }
+
+        let priceVnd = null
+        if (optionType === 'size') {
+          const price = item.priceVnd !== undefined ? item.priceVnd : item.price
+          if (typeof price !== 'number' || !Number.isInteger(price) || price < 0) {
+            const err = new Error('Giá kích thước phải là số nguyên không âm.')
+            err.code = 'INVALID_VARIANT_PRICE'
+            err.status = 400
+            throw err
+          }
+          priceVnd = price
+        } else if (optionType === 'wrapping') {
+          if (item.priceVnd != null && item.priceVnd !== 0) {
+            const err = new Error('Kiểu gói không hỗ trợ giá riêng trong phiên bản này.')
+            err.code = 'INVALID_VARIANT_PRICE'
+            err.status = 400
+            throw err
+          }
+          priceVnd = null
+        }
+
+        const active = item.active !== false ? 1 : 0
+        const sortOrder = Number.isInteger(item.sortOrder) && item.sortOrder >= 0 ? item.sortOrder : i
+
+        const existing = (item.id && existingById.get(item.id)) ?? existingByTypeAndCode.get(typeAndCodeKey)
+        if (existing) {
+          statements.push(
+            db.prepare(`
+              UPDATE product_variants
+              SET label = ?, note = ?, price_vnd = ?, active = ?, sort_order = ?
+              WHERE id = ?
+            `).bind(label, note, priceVnd, active, sortOrder, existing.id)
+          )
+        } else {
+          const variantId = item.id && typeof item.id === 'string' && item.id.trim()
+            ? item.id.trim()
+            : `product:${product.id}:${optionType}:${code}`
+          statements.push(
+            db.prepare(`
+              INSERT INTO product_variants (
+                id, product_id, option_type, code, label, note, price_vnd,
+                price_delta_vnd, active, sort_order, catalogue_version_id
+              ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?,
+                0, ?, ?, ?
+              )
+            `).bind(variantId, product.id, optionType, code, label, note, priceVnd, active, sortOrder, versionId)
+          )
+        }
+      }
+
+      // Clean up omitted variants for option types present in this payload
+      const optionTypesInPayload = new Set(variantsList.map((v) => v.optionType))
+      for (const existing of existingVariants) {
+        if (optionTypesInPayload.has(existing.optionType)) {
+          const wasKept = seenTypeAndCodes.has(`${existing.optionType}:${existing.code}`)
+            || variantsList.some((v) => v.id === existing.id)
+          if (!wasKept) {
+            let isReferenced = false
+            try {
+              const ref = await db.prepare(`
+                SELECT 1 FROM cart_items WHERE size_variant_id = ? OR wrapping_variant_id = ?
+                UNION ALL
+                SELECT 1 FROM order_items WHERE size_variant_id = ? OR wrapping_variant_id = ?
+                LIMIT 1
+              `).bind(existing.id, existing.id, existing.id, existing.id).first()
+              isReferenced = Boolean(ref)
+            } catch {
+              // In case table or query is not applicable in minimal test environments
+            }
+
+            if (isReferenced) {
+              statements.push(
+                db.prepare('UPDATE product_variants SET active = 0 WHERE id = ?').bind(existing.id)
+              )
+            } else {
+              statements.push(
+                db.prepare('DELETE FROM product_variants WHERE id = ?').bind(existing.id)
+              )
+            }
+          }
+        }
+      }
+
+      if (statements.length > 0) {
+        await db.batch(statements)
+      }
+
+      return this.getProductVariants(product.id, { activeOnly: false })
+    },
+
+    async listAdminGiftAddOns() {
+      const { results = [] } = await db.prepare(`
+        SELECT id, name, short_description, price_vnd, active, sort_order, catalogue_version_id
+        FROM gift_add_ons
+        ORDER BY sort_order, id
+      `).all()
+      return results.map(mapGiftAddOn)
+    },
+
+    async createGiftAddOn(data = {}) {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        const err = new Error('Dữ liệu quà tặng không hợp lệ.')
+        err.code = 'INVALID_PAYLOAD'
+        err.status = 400
+        throw err
+      }
+
+      if (typeof data.name !== 'string' || !data.name.trim() || data.name.trim().length > 120) {
+        const err = new Error('Tên món quà không được để trống (tối đa 120 ký tự).')
+        err.code = 'INVALID_NAME'
+        err.status = 400
+        throw err
+      }
+      const name = data.name.trim()
+
+      const price = data.priceVnd !== undefined ? data.priceVnd : data.price ?? 0
+      if (typeof price !== 'number' || !Number.isInteger(price) || price < 0) {
+        const err = new Error('Giá món quà phải là số nguyên không âm (0 là miễn phí).')
+        err.code = 'INVALID_PRICE'
+        err.status = 400
+        throw err
+      }
+
+      const shortDescription = (typeof data.shortDescription === 'string' && data.shortDescription.trim())
+        ? data.shortDescription.trim().slice(0, 320)
+        : (typeof data.note === 'string' && data.note.trim() ? data.note.trim().slice(0, 320) : name)
+
+      const active = data.active !== false ? 1 : 0
+
+      let id = (typeof data.id === 'string' && data.id.trim()) ? data.id.trim().toLowerCase() : null
+      if (!id) {
+        id = 'gift_' + globalThis.crypto.randomUUID().replaceAll('-', '').slice(0, 16)
+      }
+
+      const activeVersion = await this.getCatalogueVersion()
+      const versionId = activeVersion?.version ?? '2026.03.foundation'
+
+      const maxSortRow = await db.prepare('SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM gift_add_ons').first()
+      const sortOrder = Number.isInteger(data.sortOrder) && data.sortOrder >= 0
+        ? data.sortOrder
+        : (maxSortRow?.max_sort ?? -1) + 1
+
+      await db.prepare(`
+        INSERT INTO gift_add_ons (
+          id, name, short_description, price_vnd, active, sort_order, catalogue_version_id
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?
+        )
+      `).bind(id, name, shortDescription, price, active, sortOrder, versionId).run()
+
+      const created = await db.prepare('SELECT id, name, short_description, price_vnd, active, sort_order FROM gift_add_ons WHERE id = ?').bind(id).first()
+      return mapGiftAddOn(created)
+    },
+
+    async updateGiftAddOn(id, data = {}) {
+      if (typeof id !== 'string' || !id.trim() || id.length > 100) {
+        const err = new Error('Mã món quà không hợp lệ.')
+        err.code = 'INVALID_ID'
+        err.status = 400
+        throw err
+      }
+
+      const existing = await db.prepare('SELECT id FROM gift_add_ons WHERE id = ?').bind(id).first()
+      if (!existing) {
+        const err = new Error('Không tìm thấy món quà.')
+        err.code = 'GIFT_ADD_ON_NOT_FOUND'
+        err.status = 404
+        throw err
+      }
+
+      const updates = []
+      const bindings = []
+
+      if (data.name !== undefined) {
+        if (typeof data.name !== 'string' || !data.name.trim() || data.name.trim().length > 120) {
+          const err = new Error('Tên món quà không được để trống (tối đa 120 ký tự).')
+          err.code = 'INVALID_NAME'
+          err.status = 400
+          throw err
+        }
+        updates.push('name = ?')
+        bindings.push(data.name.trim())
+      }
+
+      if (data.shortDescription !== undefined || data.note !== undefined) {
+        const desc = data.shortDescription !== undefined ? data.shortDescription : data.note
+        if (typeof desc !== 'string' || !desc.trim() || desc.trim().length > 320) {
+          const err = new Error('Mô tả món quà không được để trống (tối đa 320 ký tự).')
+          err.code = 'INVALID_DESCRIPTION'
+          err.status = 400
+          throw err
+        }
+        updates.push('short_description = ?')
+        bindings.push(desc.trim())
+      }
+
+      if (data.priceVnd !== undefined || data.price !== undefined) {
+        const price = data.priceVnd !== undefined ? data.priceVnd : data.price
+        if (typeof price !== 'number' || !Number.isInteger(price) || price < 0) {
+          const err = new Error('Giá món quà phải là số nguyên không âm (0 là miễn phí).')
+          err.code = 'INVALID_PRICE'
+          err.status = 400
+          throw err
+        }
+        updates.push('price_vnd = ?')
+        bindings.push(price)
+      }
+
+      if (data.active !== undefined) {
+        if (typeof data.active !== 'boolean' && data.active !== 0 && data.active !== 1) {
+          const err = new Error('Trạng thái hoạt động không hợp lệ.')
+          err.code = 'INVALID_ACTIVE'
+          err.status = 400
+          throw err
+        }
+        updates.push('active = ?')
+        bindings.push(data.active ? 1 : 0)
+      }
+
+      if (data.sortOrder !== undefined) {
+        if (!Number.isInteger(data.sortOrder) || data.sortOrder < 0) {
+          const err = new Error('Thứ tự sắp xếp phải là số nguyên không âm.')
+          err.code = 'INVALID_SORT_ORDER'
+          err.status = 400
+          throw err
+        }
+        updates.push('sort_order = ?')
+        bindings.push(data.sortOrder)
+      }
+
+      if (updates.length > 0) {
+        bindings.push(id)
+        await db.prepare(`UPDATE gift_add_ons SET ${updates.join(', ')} WHERE id = ?`).bind(...bindings).run()
+      }
+
+      const row = await db.prepare('SELECT id, name, short_description, price_vnd, active, sort_order FROM gift_add_ons WHERE id = ?').bind(id).first()
+      return mapGiftAddOn(row)
+    },
+
+    async setGiftAddOnActive(id, active) {
+      if (typeof id !== 'string' || !id.trim() || id.length > 100) {
+        const err = new Error('Mã món quà không hợp lệ.')
+        err.code = 'INVALID_ID'
+        err.status = 400
+        throw err
+      }
+      if (typeof active !== 'boolean') {
+        throw new TypeError('active must be a boolean.')
+      }
+
+      const existing = await db.prepare('SELECT id FROM gift_add_ons WHERE id = ?').bind(id).first()
+      if (!existing) {
+        const err = new Error('Không tìm thấy món quà.')
+        err.code = 'GIFT_ADD_ON_NOT_FOUND'
+        err.status = 404
+        throw err
+      }
+
+      await db.prepare('UPDATE gift_add_ons SET active = ? WHERE id = ?').bind(active ? 1 : 0, id).run()
+      const row = await db.prepare('SELECT id, name, short_description, price_vnd, active, sort_order FROM gift_add_ons WHERE id = ?').bind(id).first()
+      return mapGiftAddOn(row)
+    },
   }
 }
 

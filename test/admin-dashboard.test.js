@@ -5,10 +5,16 @@ import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
 import {
   checkAdminAccess,
+  createAdminGiftAddOn,
   createAdminProduct,
   deleteAdminMedia,
   fetchAdminCatalogue,
+  fetchAdminGiftAddOns,
+  fetchAdminProductVariants,
+  saveAdminProductVariants,
   setAdminProductArchived,
+  toggleAdminGiftAddOnActive,
+  updateAdminGiftAddOn,
   updateAdminProduct,
   uploadAdminMedia,
 } from '../src/services/adminClient.js'
@@ -1495,4 +1501,356 @@ test('78. public GET with missing MEDIA_BUCKET fails safely with 503', async () 
   assert.equal(res.status, 503)
   const body = JSON.parse(await res.text())
   assert.equal(body.error.code, 'MEDIA_STORAGE_UNAVAILABLE')
+})
+
+test('79. unauthenticated and customer cannot access variants or gift add-ons', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+
+  // Unauthenticated
+  const unauthVariants = await fetchAdminProductVariants('nang-diu', {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => null,
+  })
+  assert.equal(unauthVariants.ok, false)
+  assert.equal(unauthVariants.status, 401)
+
+  const unauthGifts = await fetchAdminGiftAddOns({
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => null,
+  })
+  assert.equal(unauthGifts.ok, false)
+  assert.equal(unauthGifts.status, 401)
+
+  // Customer (403)
+  const custVariants = await fetchAdminProductVariants('nang-diu', {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+  assert.equal(custVariants.ok, false)
+  assert.equal(custVariants.status, 403)
+
+  const custSaveVariants = await saveAdminProductVariants('nang-diu', [], {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+  assert.equal(custSaveVariants.ok, false)
+  assert.equal(custSaveVariants.status, 403)
+
+  const custGifts = await fetchAdminGiftAddOns({
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+  assert.equal(custGifts.ok, false)
+  assert.equal(custGifts.status, 403)
+
+  const custCreateGift = await createAdminGiftAddOn({ name: 'Quà thử', priceVnd: 50000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+  assert.equal(custCreateGift.ok, false)
+  assert.equal(custCreateGift.status, 403)
+})
+
+test('80. authorized admin can fetch product variants (sizes and wrapping)', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const result = await fetchAdminProductVariants('nang-diu', {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 200)
+  assert.ok(Array.isArray(result.variants))
+  assert.ok(result.variants.some((v) => v.optionType === 'size'))
+  assert.ok(result.variants.some((v) => v.optionType === 'wrapping'))
+})
+
+test('81. authorized admin can save updated sizes and prices', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const payload = [
+    {
+      active: true,
+      code: 'small',
+      label: 'Nhỏ',
+      note: '10-12 cành',
+      optionType: 'size',
+      priceVnd: 450000,
+      sortOrder: 0,
+    },
+    {
+      active: true,
+      code: 'standard',
+      label: 'Tiêu chuẩn',
+      note: '15-18 cành',
+      optionType: 'size',
+      priceVnd: 590000,
+      sortOrder: 1,
+    },
+    {
+      active: true,
+      code: 'large',
+      label: 'Lớn',
+      note: '25-30 cành',
+      optionType: 'size',
+      priceVnd: 850000,
+      sortOrder: 2,
+    },
+  ]
+
+  const result = await saveAdminProductVariants('nang-diu', payload, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 200)
+  const sizes = result.variants.filter((v) => v.optionType === 'size')
+  assert.equal(sizes.length, 3)
+  assert.equal(sizes.find((s) => s.code === 'large')?.priceVnd, 850000)
+
+  // Verify in D1 directly
+  const d1Rows = sqlite.prepare("SELECT * FROM product_variants WHERE product_id = 'nang-diu' AND option_type = 'size'").all()
+  assert.equal(d1Rows.length, 3)
+})
+
+test('82. authorized admin can save updated wrapping options', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const payload = [
+    {
+      active: true,
+      code: 'ivory-matte',
+      label: 'Giấy ivory mờ',
+      note: 'Thanh lịch, tôn hoa',
+      optionType: 'wrapping',
+      priceVnd: null,
+      sortOrder: 0,
+    },
+    {
+      active: true,
+      code: 'pink-ribbon',
+      label: 'Ruy băng hồng phấn',
+      note: 'Ngọt ngào, nhẹ nhàng',
+      optionType: 'wrapping',
+      priceVnd: null,
+      sortOrder: 1,
+    },
+  ]
+
+  const result = await saveAdminProductVariants('nang-diu', payload, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 200)
+  const wrappings = result.variants.filter((v) => v.optionType === 'wrapping')
+  assert.equal(wrappings.length, 2)
+  assert.equal(wrappings[0].label, 'Giấy ivory mờ')
+})
+
+test('83. no-watering-flower rejects variant mutations', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const result = await saveAdminProductVariants('no-watering-flower', [
+    { active: true, code: 'standard', label: 'Tiêu chuẩn', optionType: 'size', priceVnd: 500000 },
+  ], {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 400)
+  assert.equal(result.error.code, 'PROTECTED_PRODUCT')
+})
+
+test('84. variant validation rejects invalid option types, negative prices, and empty labels', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  // Invalid optionType
+  const res1 = await saveAdminProductVariants('nang-diu', [
+    { active: true, code: 'test', label: 'Test', optionType: 'invalid_type', priceVnd: 1000 },
+  ], {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res1.ok, false)
+  assert.equal(res1.status, 400)
+  assert.equal(res1.error.code, 'INVALID_OPTION_TYPE')
+
+  // Negative price for size
+  const res2 = await saveAdminProductVariants('nang-diu', [
+    { active: true, code: 'small', label: 'Nhỏ', optionType: 'size', priceVnd: -50000 },
+  ], {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res2.ok, false)
+  assert.equal(res2.status, 400)
+  assert.equal(res2.error.code, 'INVALID_VARIANT_PRICE')
+
+  // Empty label
+  const res3 = await saveAdminProductVariants('nang-diu', [
+    { active: true, code: 'small', label: '   ', optionType: 'size', priceVnd: 50000 },
+  ], {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res3.ok, false)
+  assert.equal(res3.status, 400)
+  assert.equal(res3.error.code, 'INVALID_VARIANT_LABEL')
+})
+
+test('85. atomic batch rollback: invalid variant leaves previous variants unchanged', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const beforeRows = sqlite.prepare("SELECT * FROM product_variants WHERE product_id = 'nang-diu'").all()
+
+  // Attempt batch with 1 valid and 1 invalid
+  const res = await saveAdminProductVariants('nang-diu', [
+    { active: true, code: 'new-size', label: 'Cỡ mới', optionType: 'size', priceVnd: 990000 },
+    { active: true, code: 'bad-size', label: 'Lỗi', optionType: 'size', priceVnd: -1 },
+  ], {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res.ok, false)
+
+  const afterRows = sqlite.prepare("SELECT * FROM product_variants WHERE product_id = 'nang-diu'").all()
+  assert.equal(beforeRows.length, afterRows.length, 'No rows should be inserted/modified if batch validation fails')
+})
+
+test('86. authorized admin can list, create, edit, and toggle active for gift add-ons', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  // 1. List
+  const listRes = await fetchAdminGiftAddOns({
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(listRes.ok, true)
+  assert.equal(listRes.status, 200)
+  assert.equal(listRes.items.length, 4)
+
+  // 2. Create
+  const createRes = await createAdminGiftAddOn({
+    active: true,
+    name: 'Hộp trà hoa cúc',
+    priceVnd: 95000,
+    shortDescription: 'Trà thảo mộc thơm dịu',
+  }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(createRes.ok, true)
+  assert.equal(createRes.status, 201)
+  assert.equal(createRes.item.name, 'Hộp trà hoa cúc')
+  assert.equal(createRes.item.priceVnd, 95000)
+
+  // 3. Edit
+  const editRes = await updateAdminGiftAddOn(createRes.item.id, {
+    priceVnd: 105000,
+  }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(editRes.ok, true)
+  assert.equal(editRes.item.priceVnd, 105000)
+
+  // 4. Toggle active
+  const toggleRes = await toggleAdminGiftAddOnActive(createRes.item.id, false, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(toggleRes.ok, true)
+  assert.equal(toggleRes.item.active, false)
+
+  const toggleBack = await toggleAdminGiftAddOnActive(createRes.item.id, true, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(toggleBack.ok, true)
+  assert.equal(toggleBack.item.active, true)
+})
+
+test('87. gift add-on validation rejects negative prices and requires valid name', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  // Negative price
+  const res1 = await createAdminGiftAddOn({ name: 'Quà lỗi', priceVnd: -1000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res1.ok, false)
+  assert.equal(res1.status, 400)
+  assert.equal(res1.error.code, 'INVALID_PRICE')
+
+  // Empty name
+  const res2 = await createAdminGiftAddOn({ name: '   ', priceVnd: 50000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res2.ok, false)
+  assert.equal(res2.status, 400)
+  assert.equal(res2.error.code, 'INVALID_NAME')
+
+  // Free gift (0 VND) succeeds
+  const res3 = await createAdminGiftAddOn({ name: 'Thiệp viết tay đặc biệt', priceVnd: 0 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(res3.ok, true)
+  assert.equal(res3.item.priceVnd, 0)
+})
+
+test('88. public GET /api/v1/catalogue/products/:slug returns updated variants and active gift add-ons', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  // Save new size variant
+  await saveAdminProductVariants('nang-diu', [
+    { active: true, code: 'grand', label: 'Cỡ Đại', optionType: 'size', priceVnd: 1200000 },
+  ], {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  // Create active and inactive gift add-on
+  await createAdminGiftAddOn({ active: true, name: 'Quà công khai', priceVnd: 70000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  await createAdminGiftAddOn({ active: false, name: 'Quà ẩn', priceVnd: 80000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  // Public GET
+  const res = await testWorker.fetch('/api/v1/catalogue/products/nang-diu')
+  assert.equal(res.status, 200)
+  const body = JSON.parse(await res.text())
+
+  assert.ok(body.data.product.variants.some((v) => v.code === 'grand'), 'Updated variant must be present in public product')
+  assert.ok(body.data.giftAddOns.some((g) => g.name === 'Quà công khai'), 'Active gift add-on must be present in public response')
+  assert.ok(!body.data.giftAddOns.some((g) => g.name === 'Quà ẩn'), 'Inactive gift add-on must NOT be present in public response')
 })

@@ -5,9 +5,15 @@ import Container from '../components/Container'
 import { useAccount } from '../context/accountStore'
 import {
   checkAdminAccess,
+  createAdminGiftAddOn,
   createAdminProduct,
   fetchAdminCatalogue,
+  fetchAdminGiftAddOns,
+  fetchAdminProductVariants,
+  saveAdminProductVariants,
   setAdminProductArchived,
+  toggleAdminGiftAddOnActive,
+  updateAdminGiftAddOn,
   updateAdminProduct,
 } from '../services/adminClient'
 import { formatCurrency } from '../utils/formatCurrency'
@@ -69,6 +75,33 @@ function AdminPage() {
   const [createError, setCreateError] = useState(null)
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
   const [showCustomSlug, setShowCustomSlug] = useState(false)
+
+  // Product Options Configuration (Sizes & Wrapping)
+  const [configuringProduct, setConfiguringProduct] = useState(null)
+  const [variantsForm, setVariantsForm] = useState([])
+  const [isLoadingVariants, setIsLoadingVariants] = useState(false)
+  const [variantsError, setVariantsError] = useState(null)
+  const [isSavingVariants, setIsSavingVariants] = useState(false)
+  const [variantsSuccess, setVariantsSuccess] = useState(null)
+
+  // Gift Add-ons Management
+  const [giftAddOns, setGiftAddOns] = useState([])
+  const [isLoadingGiftAddOns, setIsLoadingGiftAddOns] = useState(true)
+  const [giftAddOnsError, setGiftAddOnsError] = useState(null)
+  const [giftAddOnsReloadKey, setGiftAddOnsReloadKey] = useState(0)
+  const [editingGiftAddOnId, setEditingGiftAddOnId] = useState(null)
+  const [editGiftAddOnForm, setEditGiftAddOnForm] = useState(null)
+  const [isSavingGiftAddOn, setIsSavingGiftAddOn] = useState(false)
+  const [giftAddOnSaveError, setGiftAddOnSaveError] = useState(null)
+  const [isCreatingGiftAddOn, setIsCreatingGiftAddOn] = useState(false)
+  const [createGiftAddOnForm, setCreateGiftAddOnForm] = useState({
+    active: true,
+    name: '',
+    priceVnd: 0,
+    shortDescription: '',
+  })
+  const [isSubmittingGiftAddOn, setIsSubmittingGiftAddOn] = useState(false)
+  const [createGiftAddOnError, setCreateGiftAddOnError] = useState(null)
 
   const handleOpenCreate = () => {
     setIsCreating(true)
@@ -333,6 +366,259 @@ function AdminPage() {
     setCatalogueError(null)
     setCatalogueReloadKey((k) => k + 1)
   }, [])
+
+  // 3. Fetch D1 Gift Add-Ons strictly after Admin Authorization
+  useEffect(() => {
+    let isCancelled = false
+    if (authStatus !== 'authorized') return undefined
+
+    fetchAdminGiftAddOns({ getToken })
+      .then((result) => {
+        if (isCancelled) return
+        if (result.ok && Array.isArray(result.items)) {
+          setGiftAddOns(result.items)
+          setGiftAddOnsError(null)
+        } else {
+          setGiftAddOns([])
+          setGiftAddOnsError(result.error)
+        }
+      })
+      .catch(() => {
+        if (isCancelled) return
+        setGiftAddOns([])
+        setGiftAddOnsError({ code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ để tải quà tặng kèm.' })
+      })
+      .finally(() => {
+        if (!isCancelled) setIsLoadingGiftAddOns(false)
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [authStatus, giftAddOnsReloadKey, getToken])
+
+  const handleRetryGiftAddOns = useCallback(() => {
+    setIsLoadingGiftAddOns(true)
+    setGiftAddOnsError(null)
+    setGiftAddOnsReloadKey((k) => k + 1)
+  }, [])
+
+  // Product Variants Handlers
+  const handleOpenVariants = async (product) => {
+    setConfiguringProduct(product)
+    setIsLoadingVariants(true)
+    setVariantsError(null)
+    setVariantsSuccess(null)
+
+    const result = await fetchAdminProductVariants(product.id, { getToken })
+    setIsLoadingVariants(false)
+
+    if (result.ok && Array.isArray(result.variants)) {
+      setVariantsForm(result.variants)
+    } else {
+      setVariantsForm([])
+      setVariantsError(result.error?.message || 'Không thể tải tùy chọn của sản phẩm.')
+    }
+  }
+
+  const handleCloseVariants = () => {
+    setConfiguringProduct(null)
+    setVariantsForm([])
+    setVariantsError(null)
+    setVariantsSuccess(null)
+  }
+
+  const handleAddSizeVariant = () => {
+    setVariantsForm((prev) => [
+      ...prev,
+      {
+        active: true,
+        code: `size-${Date.now().toString(36)}`,
+        label: 'Cỡ mới',
+        note: '',
+        optionType: 'size',
+        priceVnd: configuringProduct?.priceVnd ?? 500000,
+        sortOrder: prev.filter((v) => v.optionType === 'size').length,
+      },
+    ])
+  }
+
+  const handleAddWrappingVariant = () => {
+    setVariantsForm((prev) => [
+      ...prev,
+      {
+        active: true,
+        code: `wrap-${Date.now().toString(36)}`,
+        label: 'Kiểu gói mới',
+        note: '',
+        optionType: 'wrapping',
+        priceVnd: null,
+        sortOrder: prev.filter((v) => v.optionType === 'wrapping').length,
+      },
+    ])
+  }
+
+  const handleVariantChange = (index, field, value) => {
+    setVariantsForm((prev) => {
+      const next = [...prev]
+      next[index] = { ...next[index], [field]: value }
+      return next
+    })
+  }
+
+  const handleRemoveVariant = (index) => {
+    setVariantsForm((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSaveVariants = async () => {
+    if (!configuringProduct) return
+    setIsSavingVariants(true)
+    setVariantsError(null)
+    setVariantsSuccess(null)
+
+    for (const v of variantsForm) {
+      if (!v.label?.trim()) {
+        setVariantsError('Tên tùy chọn không được để trống.')
+        setIsSavingVariants(false)
+        return
+      }
+      if (v.optionType === 'size') {
+        const price = Number(v.priceVnd)
+        if (!Number.isInteger(price) || price < 0) {
+          setVariantsError('Giá kích thước phải là số nguyên không âm.')
+          setIsSavingVariants(false)
+          return
+        }
+      }
+    }
+
+    const payload = variantsForm.map((v) => ({
+      ...v,
+      label: v.label.trim(),
+      note: v.note?.trim() || null,
+      priceVnd: v.optionType === 'size' ? Number(v.priceVnd) : null,
+    }))
+
+    const result = await saveAdminProductVariants(configuringProduct.id, payload, { getToken })
+    setIsSavingVariants(false)
+
+    if (result.ok && Array.isArray(result.variants)) {
+      setVariantsForm(result.variants)
+      setVariantsSuccess('Đã lưu thành công các tùy chọn sản phẩm.')
+    } else {
+      setVariantsError(result.error?.message || 'Không thể lưu tùy chọn sản phẩm.')
+    }
+  }
+
+  // Gift Add-ons Handlers
+  const handleOpenCreateGiftAddOn = () => {
+    setIsCreatingGiftAddOn(true)
+    setCreateGiftAddOnForm({
+      active: true,
+      name: '',
+      priceVnd: 0,
+      shortDescription: '',
+    })
+    setCreateGiftAddOnError(null)
+  }
+
+  const handleCancelCreateGiftAddOn = () => {
+    setIsCreatingGiftAddOn(false)
+    setCreateGiftAddOnError(null)
+  }
+
+  const handleSaveCreateGiftAddOn = async (e) => {
+    e?.preventDefault()
+    if (!createGiftAddOnForm.name.trim()) {
+      setCreateGiftAddOnError('Tên món quà không được để trống.')
+      return
+    }
+    const price = Number(createGiftAddOnForm.priceVnd)
+    if (!Number.isInteger(price) || price < 0) {
+      setCreateGiftAddOnError('Giá món quà phải là số nguyên không âm (0 là miễn phí).')
+      return
+    }
+
+    setIsSubmittingGiftAddOn(true)
+    setCreateGiftAddOnError(null)
+
+    const result = await createAdminGiftAddOn({
+      active: createGiftAddOnForm.active,
+      name: createGiftAddOnForm.name.trim(),
+      priceVnd: price,
+      shortDescription: createGiftAddOnForm.shortDescription.trim() || undefined,
+    }, { getToken })
+
+    setIsSubmittingGiftAddOn(false)
+
+    if (result.ok && result.item) {
+      setGiftAddOns((prev) => [...prev, result.item])
+      setIsCreatingGiftAddOn(false)
+      setSaveSuccess(`Đã tạo thành công món quà "${result.item.name}".`)
+    } else {
+      setCreateGiftAddOnError(result.error?.message || 'Không thể tạo món quà mới.')
+    }
+  }
+
+  const handleStartEditGiftAddOn = (item) => {
+    setEditingGiftAddOnId(item.id)
+    setEditGiftAddOnForm({
+      active: Boolean(item.active),
+      name: item.name,
+      priceVnd: item.priceVnd ?? 0,
+      shortDescription: item.shortDescription ?? '',
+    })
+    setGiftAddOnSaveError(null)
+  }
+
+  const handleCancelEditGiftAddOn = () => {
+    setEditingGiftAddOnId(null)
+    setEditGiftAddOnForm(null)
+    setGiftAddOnSaveError(null)
+  }
+
+  const handleSaveEditGiftAddOn = async (id) => {
+    if (!editGiftAddOnForm) return
+    if (!editGiftAddOnForm.name.trim()) {
+      setGiftAddOnSaveError('Tên món quà không được để trống.')
+      return
+    }
+    const price = Number(editGiftAddOnForm.priceVnd)
+    if (!Number.isInteger(price) || price < 0) {
+      setGiftAddOnSaveError('Giá món quà phải là số nguyên không âm.')
+      return
+    }
+
+    setIsSavingGiftAddOn(true)
+    setGiftAddOnSaveError(null)
+
+    const result = await updateAdminGiftAddOn(id, {
+      active: editGiftAddOnForm.active,
+      name: editGiftAddOnForm.name.trim(),
+      priceVnd: price,
+      shortDescription: editGiftAddOnForm.shortDescription.trim(),
+    }, { getToken })
+
+    setIsSavingGiftAddOn(false)
+
+    if (result.ok && result.item) {
+      setGiftAddOns((prev) => prev.map((g) => (g.id === result.item.id ? result.item : g)))
+      setEditingGiftAddOnId(null)
+      setEditGiftAddOnForm(null)
+      setSaveSuccess(`Đã cập nhật món quà "${result.item.name}".`)
+    } else {
+      setGiftAddOnSaveError(result.error?.message || 'Không thể cập nhật món quà.')
+    }
+  }
+
+  const handleToggleGiftAddOnActive = async (item) => {
+    const nextActive = !item.active
+    const result = await toggleAdminGiftAddOnActive(item.id, nextActive, { getToken })
+    if (result.ok && result.item) {
+      setGiftAddOns((prev) => prev.map((g) => (g.id === result.item.id ? result.item : g)))
+      setSaveSuccess(`Đã ${nextActive ? 'hiện' : 'ẩn'} món quà "${item.name}".`)
+    }
+  }
 
   // Guard: Unauthenticated when Clerk loaded -> redirect to /login
   if (isLoaded && !isSignedIn) {
@@ -852,6 +1138,14 @@ function AdminPage() {
                                 Chỉnh sửa
                               </button>
                               <button
+                                className="button button--secondary button--small admin-variants-btn"
+                                disabled={isArchivePending}
+                                type="button"
+                                onClick={() => handleOpenVariants(product)}
+                              >
+                                Tùy chọn
+                              </button>
+                              <button
                                 className={`button button--small ${product.active ? 'button--text admin-archive-btn' : 'button--primary'}`}
                                 disabled={isArchivePending}
                                 type="button"
@@ -860,6 +1154,489 @@ function AdminPage() {
                                 {isArchivePending
                                   ? (product.active ? 'Đang lưu trữ...' : 'Đang khôi phục...')
                                   : (product.active ? 'Lưu trữ' : 'Khôi phục')}
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Product Options Modal (Sizes & Wrapping) */}
+        {configuringProduct && (
+          <div className="admin-modal-backdrop" onClick={handleCloseVariants} role="presentation">
+            <div
+              aria-labelledby="variants-modal-title"
+              className="admin-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+            >
+              <div className="admin-modal__header">
+                <div>
+                  <h3 id="variants-modal-title">Cấu hình tùy chọn: {configuringProduct.name}</h3>
+                  <p>Quản lý các kích thước và kiểu gói hiển thị trên trang chi tiết bó hoa.</p>
+                </div>
+                <button
+                  className="button button--text button--small"
+                  type="button"
+                  onClick={handleCloseVariants}
+                >
+                  Đóng
+                </button>
+              </div>
+
+              {isLoadingVariants ? (
+                <div className="admin-modal__loading">
+                  <div className="admin-spinner" />
+                  <p>Đang tải danh sách tùy chọn...</p>
+                </div>
+              ) : (
+                <div className="admin-modal__body">
+                  {/* Size Options Section */}
+                  <section className="admin-options-section">
+                    <div className="admin-options-section__header">
+                      <h4>Chọn kích thước ({variantsForm.filter((v) => v.optionType === 'size').length})</h4>
+                      <button
+                        className="button button--secondary button--small"
+                        type="button"
+                        onClick={handleAddSizeVariant}
+                      >
+                        + Thêm kích thước
+                      </button>
+                    </div>
+
+                    <div className="admin-options-list">
+                      {variantsForm.filter((v) => v.optionType === 'size').length === 0 ? (
+                        <p className="admin-options-empty">Chưa có kích thước nào cho sản phẩm này.</p>
+                      ) : (
+                        variantsForm.map((variant, index) => {
+                          if (variant.optionType !== 'size') return null
+                          return (
+                            <div className="admin-option-item" key={variant.id || `size-${index}`}>
+                              <div className="admin-option-item__fields">
+                                <div className="admin-option-field">
+                                  <label>Tên kích thước</label>
+                                  <input
+                                    className="admin-input-text"
+                                    placeholder="Ví dụ: Tiêu chuẩn, Lớn..."
+                                    type="text"
+                                    value={variant.label}
+                                    onChange={(e) => handleVariantChange(index, 'label', e.target.value)}
+                                  />
+                                </div>
+                                <div className="admin-option-field admin-option-field--price">
+                                  <label>Giá niêm yết (VND)</label>
+                                  <input
+                                    className="admin-input-text"
+                                    min="0"
+                                    step="1000"
+                                    type="number"
+                                    value={variant.priceVnd ?? ''}
+                                    onChange={(e) => handleVariantChange(index, 'priceVnd', Number(e.target.value))}
+                                  />
+                                </div>
+                                <div className="admin-option-field admin-option-field--note">
+                                  <label>Ghi chú (tùy chọn)</label>
+                                  <input
+                                    className="admin-input-text"
+                                    placeholder="Ví dụ: 12-15 cành..."
+                                    type="text"
+                                    value={variant.note || ''}
+                                    onChange={(e) => handleVariantChange(index, 'note', e.target.value)}
+                                  />
+                                </div>
+                              </div>
+                              <div className="admin-option-item__actions">
+                                <label className="admin-checkbox-label">
+                                  <input
+                                    checked={variant.active !== false}
+                                    type="checkbox"
+                                    onChange={(e) => handleVariantChange(index, 'active', e.target.checked)}
+                                  />
+                                  <span>Hoạt động</span>
+                                </label>
+                                <button
+                                  className="button button--text button--small admin-option-remove"
+                                  title="Xóa tùy chọn này"
+                                  type="button"
+                                  onClick={() => handleRemoveVariant(index)}
+                                >
+                                  Xóa
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </section>
+
+                  {/* Wrapping Options Section */}
+                  <section className="admin-options-section">
+                    <div className="admin-options-section__header">
+                      <h4>Kiểu gói ({variantsForm.filter((v) => v.optionType === 'wrapping').length})</h4>
+                      <button
+                        className="button button--secondary button--small"
+                        type="button"
+                        onClick={handleAddWrappingVariant}
+                      >
+                        + Thêm kiểu gói
+                      </button>
+                    </div>
+
+                    <div className="admin-options-list">
+                      {variantsForm.filter((v) => v.optionType === 'wrapping').length === 0 ? (
+                        <p className="admin-options-empty">Chưa có kiểu gói nào cho sản phẩm này.</p>
+                      ) : (
+                        variantsForm.map((variant, index) => {
+                          if (variant.optionType !== 'wrapping') return null
+                          return (
+                            <div className="admin-option-item" key={variant.id || `wrap-${index}`}>
+                              <div className="admin-option-item__fields">
+                                <div className="admin-option-field">
+                                  <label>Tên kiểu gói</label>
+                                  <input
+                                    className="admin-input-text"
+                                    placeholder="Ví dụ: Giấy ivory mờ..."
+                                    type="text"
+                                    value={variant.label}
+                                    onChange={(e) => handleVariantChange(index, 'label', e.target.value)}
+                                  />
+                                </div>
+                                <div className="admin-option-field admin-option-field--note">
+                                  <label>Mô tả / Ghi chú</label>
+                                  <input
+                                    className="admin-input-text"
+                                    placeholder="Ví dụ: Thanh lịch, làm nổi bật màu hoa..."
+                                    type="text"
+                                    value={variant.note || ''}
+                                    onChange={(e) => handleVariantChange(index, 'note', e.target.value)}
+                                  />
+                                </div>
+                              </div>
+                              <div className="admin-option-item__actions">
+                                <label className="admin-checkbox-label">
+                                  <input
+                                    checked={variant.active !== false}
+                                    type="checkbox"
+                                    onChange={(e) => handleVariantChange(index, 'active', e.target.checked)}
+                                  />
+                                  <span>Hoạt động</span>
+                                </label>
+                                <button
+                                  className="button button--text button--small admin-option-remove"
+                                  title="Xóa tùy chọn này"
+                                  type="button"
+                                  onClick={() => handleRemoveVariant(index)}
+                                >
+                                  Xóa
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </section>
+
+                  {variantsError && (
+                    <div className="admin-create-error" role="alert">
+                      <p>{variantsError}</p>
+                    </div>
+                  )}
+
+                  {variantsSuccess && (
+                    <div className="admin-save-success" role="status">
+                      <p>{variantsSuccess}</p>
+                    </div>
+                  )}
+
+                  <div className="admin-modal__footer">
+                    <button
+                      className="button button--primary"
+                      disabled={isSavingVariants}
+                      type="button"
+                      onClick={handleSaveVariants}
+                    >
+                      {isSavingVariants ? 'Đang lưu tùy chọn...' : 'Lưu tùy chọn'}
+                    </button>
+                    <button
+                      className="button button--text"
+                      disabled={isSavingVariants}
+                      type="button"
+                      onClick={handleCloseVariants}
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Gift Add-ons Management Section */}
+        <section aria-labelledby="gift-addons-mgmt-title" className="admin-gift-addons-section">
+          <div className="admin-catalogue-header">
+            <div>
+              <h2 id="gift-addons-mgmt-title">Quà tặng kèm (Dùng chung cho bó hoa)</h2>
+              <p className="admin-section-sub">
+                Quản lý các món quà tặng hiển thị ở mục "Thêm một món quà nhỏ" trên tất cả sản phẩm.
+              </p>
+            </div>
+            <div className="admin-catalogue-header-actions">
+              {!isLoadingGiftAddOns && !giftAddOnsError && (
+                <span className="admin-catalogue-count">
+                  {giftAddOns.length} món quà
+                </span>
+              )}
+              {!isLoadingGiftAddOns && !giftAddOnsError && !isCreatingGiftAddOn && (
+                <button
+                  className="button button--primary button--small admin-add-gift-btn"
+                  type="button"
+                  onClick={handleOpenCreateGiftAddOn}
+                >
+                  Thêm món quà
+                </button>
+              )}
+            </div>
+          </div>
+
+          {isLoadingGiftAddOns && (
+            <div className="admin-catalogue-loading" role="status">
+              <p>Đang tải danh sách quà tặng kèm từ D1...</p>
+            </div>
+          )}
+
+          {!isLoadingGiftAddOns && giftAddOnsError && (
+            <div className="admin-catalogue-error" role="alert">
+              <h3>Không thể tải quà tặng kèm</h3>
+              <p>{giftAddOnsError?.message || 'Lỗi kết nối máy chủ.'}</p>
+              <button className="button button--secondary" onClick={handleRetryGiftAddOns} type="button">
+                Thử lại
+              </button>
+            </div>
+          )}
+
+          {isCreatingGiftAddOn && (
+            <section aria-label="Tạo món quà mới" className="admin-create-panel">
+              <div className="admin-create-panel__header">
+                <h3>Thêm món quà tặng kèm mới</h3>
+                <p>Khách hàng có thể chọn gửi kèm khi mua bó hoa.</p>
+              </div>
+              <form className="admin-create-form" onSubmit={handleSaveCreateGiftAddOn}>
+                <div className="admin-form-grid">
+                  <div className="admin-form-group">
+                    <label htmlFor="gift-name">
+                      Tên món quà <span className="admin-required">*</span>
+                    </label>
+                    <input
+                      id="gift-name"
+                      className="admin-input-text"
+                      disabled={isSubmittingGiftAddOn}
+                      maxLength={120}
+                      placeholder="Ví dụ: Nến thơm mini"
+                      required
+                      type="text"
+                      value={createGiftAddOnForm.name}
+                      onChange={(e) => setCreateGiftAddOnForm((f) => ({ ...f, name: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label htmlFor="gift-price">
+                      Đơn giá (VND, 0 nếu miễn phí) <span className="admin-required">*</span>
+                    </label>
+                    <input
+                      id="gift-price"
+                      className="admin-input-text"
+                      disabled={isSubmittingGiftAddOn}
+                      min="0"
+                      placeholder="0"
+                      required
+                      step="1000"
+                      type="number"
+                      value={createGiftAddOnForm.priceVnd}
+                      onChange={(e) => setCreateGiftAddOnForm((f) => ({ ...f, priceVnd: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="admin-form-group admin-form-group--full">
+                  <label htmlFor="gift-desc">Mô tả ngắn</label>
+                  <input
+                    id="gift-desc"
+                    className="admin-input-text"
+                    disabled={isSubmittingGiftAddOn}
+                    maxLength={320}
+                    placeholder="Mô tả về món quà (ví dụ: Hương dịu, được chuẩn bị cùng bó hoa)..."
+                    type="text"
+                    value={createGiftAddOnForm.shortDescription}
+                    onChange={(e) => setCreateGiftAddOnForm((f) => ({ ...f, shortDescription: e.target.value }))}
+                  />
+                </div>
+
+                <div className="admin-form-group admin-form-group--checkbox">
+                  <label className="admin-checkbox-label">
+                    <input
+                      checked={createGiftAddOnForm.active}
+                      disabled={isSubmittingGiftAddOn}
+                      type="checkbox"
+                      onChange={(e) => setCreateGiftAddOnForm((f) => ({ ...f, active: e.target.checked }))}
+                    />
+                    <span>Hoạt động (Hiển thị cho khách hàng chọn)</span>
+                  </label>
+                </div>
+
+                {createGiftAddOnError && (
+                  <div className="admin-create-error" role="alert">
+                    <p>{createGiftAddOnError}</p>
+                  </div>
+                )}
+
+                <div className="admin-create-actions">
+                  <button
+                    className="button button--primary"
+                    disabled={isSubmittingGiftAddOn}
+                    type="submit"
+                  >
+                    {isSubmittingGiftAddOn ? 'Đang tạo món quà...' : 'Tạo món quà'}
+                  </button>
+                  <button
+                    className="button button--text"
+                    disabled={isSubmittingGiftAddOn}
+                    type="button"
+                    onClick={handleCancelCreateGiftAddOn}
+                  >
+                    Hủy
+                  </button>
+                </div>
+              </form>
+            </section>
+          )}
+
+          {!isLoadingGiftAddOns && !giftAddOnsError && (
+            <div className="admin-table-container">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Tên món quà</th>
+                    <th scope="col">Mô tả ngắn</th>
+                    <th scope="col">Đơn giá</th>
+                    <th scope="col">Trạng thái</th>
+                    <th scope="col">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {giftAddOns.map((item) => {
+                    const isEditing = editingGiftAddOnId === item.id
+                    return (
+                      <tr key={item.id} className={!item.active ? 'admin-row--archived' : undefined}>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-input-text"
+                              disabled={isSavingGiftAddOn}
+                              type="text"
+                              value={editGiftAddOnForm.name}
+                              onChange={(e) => setEditGiftAddOnForm((f) => ({ ...f, name: e.target.value }))}
+                            />
+                          ) : (
+                            <strong>{item.name}</strong>
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-input-text"
+                              disabled={isSavingGiftAddOn}
+                              type="text"
+                              value={editGiftAddOnForm.shortDescription}
+                              onChange={(e) => setEditGiftAddOnForm((f) => ({ ...f, shortDescription: e.target.value }))}
+                            />
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>{item.shortDescription || '—'}</span>
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="admin-input-price"
+                              disabled={isSavingGiftAddOn}
+                              min="0"
+                              step="1000"
+                              type="number"
+                              value={editGiftAddOnForm.priceVnd}
+                              onChange={(e) => setEditGiftAddOnForm((f) => ({ ...f, priceVnd: e.target.value }))}
+                            />
+                          ) : item.priceVnd === 0 ? (
+                            <span className="admin-badge admin-badge--available">Miễn phí</span>
+                          ) : (
+                            <span className="admin-price">{formatCurrency(item.priceVnd)}</span>
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <label className="admin-checkbox-label">
+                              <input
+                                checked={editGiftAddOnForm.active}
+                                disabled={isSavingGiftAddOn}
+                                type="checkbox"
+                                onChange={(e) => setEditGiftAddOnForm((f) => ({ ...f, active: e.target.checked }))}
+                              />
+                              <span>Hoạt động</span>
+                            </label>
+                          ) : item.active ? (
+                            <span className="admin-badge admin-badge--available">Hoạt động</span>
+                          ) : (
+                            <span className="admin-badge admin-badge--archived">Đã ẩn</span>
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <div className="admin-inline-actions">
+                              <button
+                                className="button button--primary button--small"
+                                disabled={isSavingGiftAddOn}
+                                type="button"
+                                onClick={() => handleSaveEditGiftAddOn(item.id)}
+                              >
+                                {isSavingGiftAddOn ? 'Đang lưu...' : 'Lưu'}
+                              </button>
+                              <button
+                                className="button button--text button--small"
+                                disabled={isSavingGiftAddOn}
+                                type="button"
+                                onClick={handleCancelEditGiftAddOn}
+                              >
+                                Hủy
+                              </button>
+                              {giftAddOnSaveError && (
+                                <span className="admin-edit-error" role="alert">
+                                  {giftAddOnSaveError}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="admin-inline-actions">
+                              <button
+                                className="button button--secondary button--small"
+                                type="button"
+                                onClick={() => handleStartEditGiftAddOn(item)}
+                              >
+                                Sửa
+                              </button>
+                              <button
+                                className={`button button--small ${item.active ? 'button--text' : 'button--primary'}`}
+                                type="button"
+                                onClick={() => handleToggleGiftAddOnActive(item)}
+                              >
+                                {item.active ? 'Tạm ẩn' : 'Hiện lại'}
                               </button>
                             </div>
                           )}
