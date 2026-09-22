@@ -1,5 +1,5 @@
 import { ArrowRight, ArrowUpRight } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Container from '../components/Container'
 import EditorialVideo from '../components/EditorialVideo'
@@ -12,13 +12,57 @@ import {
   socialMoments,
   testimonials,
 } from '../data/home'
-import { bestSellers } from '../data/products'
+import { fetchShopCatalogue } from '../services/catalogueClient'
 import './HomePage.css'
 
 function HomePage() {
   const [newsletterEmail, setNewsletterEmail] = useState('')
   const [newsletterError, setNewsletterError] = useState('')
   const [isSubscribed, setIsSubscribed] = useState(false)
+  const [products, setProducts] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [reloadIndex, setReloadIndex] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let isMounted = true
+
+    fetchShopCatalogue({ signal: controller.signal })
+      .then((result) => {
+        if (!isMounted) return
+        if (result.ok && Array.isArray(result.data)) {
+          setProducts(result.data)
+          setError(null)
+        } else {
+          setError(result.error ?? { code: 'API_ERROR', message: 'Đã có lỗi xảy ra khi tải danh mục.' })
+        }
+      })
+      .catch((err) => {
+        if (!isMounted || err?.name === 'AbortError') return
+        setError({ code: 'CLIENT_ERROR', message: 'Đã có lỗi xảy ra khi tải danh mục.' })
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      isMounted = false
+      controller.abort()
+    }
+  }, [reloadIndex])
+
+  function handleRetry() {
+    setIsLoading(true)
+    setError(null)
+    setReloadIndex((current) => current + 1)
+  }
+
+  const bestSellers = useMemo(() => {
+    return products.filter((product) => product.isBestSeller)
+  }, [products])
 
   function handleNewsletterSubmit(event) {
     event.preventDefault()
@@ -109,11 +153,25 @@ function HomePage() {
             </Link>
           </div>
 
-          <div className="product-grid">
-            {bestSellers.map((product, index) => (
-              <ProductCard key={product.id} priority={index < 2} product={product} />
-            ))}
-          </div>
+          {isLoading && products.length === 0 ? (
+            <div className="home-best-sellers-loading" role="status" aria-live="polite">
+              <p>Đang chuẩn bị những bó hoa được yêu thích...</p>
+            </div>
+          ) : error && products.length === 0 ? (
+            <div className="home-best-sellers-error" role="alert">
+              <p>Không thể tải danh sách hoa được yêu thích.</p>
+              <span className="home-error-message">{error.message || 'Đã có lỗi xảy ra khi tải danh mục.'}</span>
+              <button className="button button--secondary" type="button" onClick={handleRetry}>
+                Thử lại
+              </button>
+            </div>
+          ) : bestSellers.length > 0 ? (
+            <div className="product-grid">
+              {bestSellers.map((product, index) => (
+                <ProductCard key={product.id} priority={index < 2} product={product} />
+              ))}
+            </div>
+          ) : null}
         </Container>
       </section>
 
