@@ -107,3 +107,21 @@ Using Clerk client metadata or JWT custom claims for admin authorization was rej
 ### STATUS
 
 ACTIVE
+
+## 2026-09-22 / Phase 18
+
+### DECISION
+
+Server/D1 catalogue and pricing are authoritative; frontend static catalogue is temporary compatibility data until Phase 18B.
+
+### WHY
+
+Canonical product data, purchasability invariants (23 purchasable + 1 priceless Easter egg), and authoritative pricing must originate from the D1 database to prevent client-side pricing manipulation. Static `src/data/products.js` is temporarily retained for existing frontend views until they are migrated.
+
+### ALTERNATIVES CONSIDERED
+
+Migrating frontend Shop/Product Detail immediately in this task was rejected to keep changes small, focused, and verifiable. Reading static products in the server route was rejected as it would defeat server authority.
+
+### STATUS
+
+ACTIVE

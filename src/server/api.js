@@ -24,6 +24,8 @@ const V1_CONCIERGE_PATH = `${API_V1_PREFIX}/concierge`
 const V1_HEALTH_PATH = `${API_V1_PREFIX}/health`
 const V1_ME_PATH = `${API_V1_PREFIX}/me`
 const V1_ADMIN_ME_PATH = `${API_V1_PREFIX}/admin/me`
+const V1_CATALOGUE_PATH = `${API_V1_PREFIX}/catalogue`
+const V1_CATALOGUE_PRODUCTS_PATH = `${API_V1_PREFIX}/catalogue/products`
 const PREFLIGHT_HEADERS = ['authorization', 'content-type', 'idempotency-key', 'if-match']
 
 export const isApiPath = (pathname) => pathname === '/api' || pathname.startsWith('/api/')
@@ -144,6 +146,115 @@ async function handleAdminMe(request, env, requestId, dependencies) {
   }, requestId), V1_ADMIN_ME_PATH)
 }
 
+function matchCatalogueSlug(pathname) {
+  if (pathname.startsWith(`${V1_CATALOGUE_PRODUCTS_PATH}/`)) {
+    const slug = pathname.slice(V1_CATALOGUE_PRODUCTS_PATH.length + 1).trim()
+    if (slug.length > 0 && !slug.includes('/')) return decodeURIComponent(slug)
+  }
+  if (pathname.startsWith(`${V1_CATALOGUE_PATH}/`) && !pathname.startsWith(`${V1_CATALOGUE_PRODUCTS_PATH}/`)) {
+    const slug = pathname.slice(V1_CATALOGUE_PATH.length + 1).trim()
+    if (slug.length > 0 && !slug.includes('/') && slug !== 'products') return decodeURIComponent(slug)
+  }
+  return null
+}
+
+function parseCatalogueListOptions(url) {
+  const params = url.searchParams
+  const options = {}
+
+  const sort = params.get('sort')
+  if (sort && ['catalogue', 'newest', 'price_asc', 'price_desc'].includes(sort)) {
+    options.sort = sort
+  }
+
+  const purchaseType = params.get('purchaseType')
+  if (purchaseType && ['all', 'standard', 'priceless'].includes(purchaseType)) {
+    options.purchaseType = purchaseType
+  } else if (params.get('purchasable') === 'true') {
+    options.purchaseType = 'standard'
+  }
+
+  const limitParam = params.get('limit') ?? params.get('pageSize')
+  if (limitParam != null) {
+    const parsed = Number.parseInt(limitParam, 10)
+    if (Number.isInteger(parsed) && parsed > 0) {
+      options.limit = parsed
+    }
+  }
+
+  const offsetParam = params.get('offset')
+  if (offsetParam != null) {
+    const parsed = Number.parseInt(offsetParam, 10)
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      options.offset = parsed
+    }
+  }
+
+  const maxPriceParam = params.get('maxPriceVnd') ?? params.get('budget') ?? params.get('maxPrice')
+  if (maxPriceParam != null) {
+    const parsed = Number.parseInt(maxPriceParam, 10)
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      options.maxPriceVnd = parsed
+    }
+  }
+
+  return options
+}
+
+async function handleListCatalogue(request, env, requestId, dependencies) {
+  const url = new URL(request.url)
+  const repositories = dependencies.createRepositories(env)
+  const options = parseCatalogueListOptions(url)
+
+  const [catalogueResult, version] = await Promise.all([
+    repositories.catalogue.listProducts(options),
+    repositories.catalogue.getCatalogueVersion(),
+  ])
+
+  return result(successResponse({
+    items: catalogueResult.items,
+    limit: catalogueResult.limit,
+    offset: catalogueResult.offset,
+    products: catalogueResult.items,
+    total: catalogueResult.items.length,
+    version: version?.version ?? null,
+  }, requestId), url.pathname)
+}
+
+async function handleGetProduct(slug, request, env, requestId, dependencies) {
+  const url = new URL(request.url)
+  const repositories = dependencies.createRepositories(env)
+
+  const product = await repositories.catalogue.getProductBySlug(slug)
+    ?? await repositories.catalogue.getProductById(slug)
+
+  if (!product || !product.active) {
+    return result(errorResponse(
+      404,
+      'PRODUCT_NOT_FOUND',
+      'Không tìm thấy sản phẩm được yêu cầu.',
+      requestId,
+    ), url.pathname, { errorCode: 'PRODUCT_NOT_FOUND' })
+  }
+
+  const [variants, relatedProducts] = await Promise.all([
+    repositories.catalogue.getProductVariants(product.id),
+    repositories.catalogue.getRelatedProducts
+      ? repositories.catalogue.getRelatedProducts(product.id)
+      : [],
+  ])
+
+  return result(successResponse({
+    product: {
+      ...product,
+      relatedProducts,
+      variants,
+    },
+    relatedProducts,
+    variants,
+  }, requestId), url.pathname)
+}
+
 export function createApiRouter(options = {}) {
   const conciergeHandler = options.conciergeHandler ?? handleConciergeRequest
   const verifyIdentity = options.identityVerifier ?? createClerkIdentityVerifier({
@@ -198,6 +309,17 @@ export function createApiRouter(options = {}) {
         createRepositories,
         verifyIdentity,
       })
+    }
+
+    if (pathname === V1_CATALOGUE_PATH || pathname === V1_CATALOGUE_PRODUCTS_PATH) {
+      if (request.method !== 'GET') return methodNotAllowed(requestId, pathname, 'GET')
+      return handleListCatalogue(request, env, requestId, { createRepositories })
+    }
+
+    const catalogueSlug = matchCatalogueSlug(pathname)
+    if (catalogueSlug) {
+      if (request.method !== 'GET') return methodNotAllowed(requestId, pathname, 'GET')
+      return handleGetProduct(catalogueSlug, request, env, requestId, { createRepositories })
     }
 
     if (pathname === V1_CONCIERGE_PATH) {

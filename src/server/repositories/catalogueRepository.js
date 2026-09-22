@@ -190,6 +190,24 @@ export function createCatalogueRepository(db) {
       return results.map(mapVariant)
     },
 
+    async getRelatedProducts(productId, { activeOnly = true } = {}) {
+      if (typeof productId !== 'string' || productId.length === 0 || productId.length > 100) return []
+      const activeClause = activeOnly ? 'AND p.active = 1' : ''
+      const { results = [] } = await db.prepare(`
+        SELECT
+          p.id, p.slug, p.name, p.short_description, p.description, p.collection, p.purchase_type,
+          p.price_vnd, p.currency, p.status, p.badges_json, p.colors_json, p.moods_json,
+          p.occasions_json, p.composition_json, p.media_json, p.care_note, p.delivery_note,
+          p.is_best_seller, p.active, p.sort_order, p.catalogue_version_id, p.created_at_utc,
+          p.updated_at_utc
+        FROM product_relations pr
+        JOIN products p ON pr.related_product_id = p.id
+        WHERE pr.product_id = ? ${activeClause}
+        ORDER BY pr.sort_order, p.sort_order, p.id
+      `).bind(productId).all()
+      return results.map(mapProduct)
+    },
+
     async getBouquetOptions(optionType = null, { activeOnly = true } = {}) {
       if (optionType != null && !BOUQUET_OPTION_TYPES.has(optionType)) {
         throw new TypeError('Unsupported bouquet option type.')
