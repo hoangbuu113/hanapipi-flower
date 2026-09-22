@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import Container from '../components/Container'
 import { useAccount } from '../context/accountStore'
-import { checkAdminAccess, fetchAdminCatalogue, updateAdminProduct } from '../services/adminClient'
+import { checkAdminAccess, createAdminProduct, fetchAdminCatalogue, updateAdminProduct } from '../services/adminClient'
 import { formatCurrency } from '../utils/formatCurrency'
 import './AdminPage.css'
 
@@ -12,6 +12,16 @@ const STATUS_LABELS = {
   preorder: 'Đặt trước',
   seasonal: 'Theo mùa',
   archived: 'Lưu trữ',
+}
+
+const generateSlug = (text) => {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 function AdminPage() {
@@ -33,6 +43,110 @@ function AdminPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(null)
+
+  const [isCreating, setIsCreating] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    collection: '',
+    imageUrl: '',
+    isPurchasable: true,
+    name: '',
+    priceVnd: '',
+    shortDescription: '',
+    slug: '',
+    status: 'available',
+  })
+  const [isSubmittingCreate, setIsSubmittingCreate] = useState(false)
+  const [createError, setCreateError] = useState(null)
+  const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
+
+  const handleOpenCreate = () => {
+    setIsCreating(true)
+    setCreateForm({
+      collection: '',
+      imageUrl: '',
+      isPurchasable: true,
+      name: '',
+      priceVnd: '',
+      shortDescription: '',
+      slug: '',
+      status: 'available',
+    })
+    setCreateError(null)
+    setSaveSuccess(null)
+    setIsSlugManuallyEdited(false)
+  }
+
+  const handleCancelCreate = () => {
+    setIsCreating(false)
+    setCreateError(null)
+    setIsSlugManuallyEdited(false)
+  }
+
+  const handleNameChange = (name) => {
+    setCreateForm((prev) => {
+      const next = { ...prev, name }
+      if (!isSlugManuallyEdited) {
+        next.slug = generateSlug(name)
+      }
+      return next
+    })
+  }
+
+  const handleSlugChange = (slug) => {
+    setIsSlugManuallyEdited(true)
+    setCreateForm((prev) => ({ ...prev, slug: slug.toLowerCase() }))
+  }
+
+  const handleSaveCreate = async (e) => {
+    e?.preventDefault()
+    if (!createForm.name.trim()) {
+      setCreateError('Tên sản phẩm không được để trống.')
+      return
+    }
+
+    const slug = createForm.slug.trim().toLowerCase()
+    const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+    if (!slug || !SLUG_REGEX.test(slug)) {
+      setCreateError('Slug sản phẩm không hợp lệ (chỉ chứa chữ thường, số và dấu gạch ngang).')
+      return
+    }
+
+    if (slug === 'no-watering-flower') {
+      setCreateError('Không thể tạo sản phẩm trùng slug với sản phẩm được bảo vệ.')
+      return
+    }
+
+    const price = Number(createForm.priceVnd)
+    if (!Number.isInteger(price) || price <= 0) {
+      setCreateError('Giá sản phẩm phải là số nguyên dương hợp lệ.')
+      return
+    }
+
+    setIsSubmittingCreate(true)
+    setCreateError(null)
+
+    const payload = {
+      collection: createForm.collection.trim() || undefined,
+      imageUrl: createForm.imageUrl.trim() || undefined,
+      isPurchasable: createForm.isPurchasable,
+      name: createForm.name.trim(),
+      priceVnd: price,
+      shortDescription: createForm.shortDescription.trim() || undefined,
+      slug,
+      status: createForm.status,
+    }
+
+    const result = await createAdminProduct(payload, { getToken })
+    setIsSubmittingCreate(false)
+
+    if (result.ok && result.product) {
+      setProducts((prev) => [result.product, ...prev])
+      setIsCreating(false)
+      setSaveSuccess(`Đã tạo thành công sản phẩm "${result.product.name}".`)
+    } else {
+      setCreateError(result.error?.message || 'Không thể tạo sản phẩm mới.')
+    }
+  }
 
   const handleStartEdit = (product) => {
     setEditingProductId(product.id)
@@ -288,11 +402,22 @@ function AdminPage() {
             <div>
               <h2 id="catalogue-mgmt-title">Danh mục sản phẩm D1</h2>
             </div>
-            {!isCatalogueLoading && !catalogueError && (
-              <span className="admin-catalogue-count">
-                {products.length} sản phẩm
-              </span>
-            )}
+            <div className="admin-catalogue-header-actions">
+              {!isCatalogueLoading && !catalogueError && (
+                <span className="admin-catalogue-count">
+                  {products.length} sản phẩm
+                </span>
+              )}
+              {!isCatalogueLoading && !catalogueError && !isCreating && (
+                <button
+                  className="button button--primary button--small admin-add-btn"
+                  type="button"
+                  onClick={handleOpenCreate}
+                >
+                  Thêm sản phẩm
+                </button>
+              )}
+            </div>
           </div>
 
           {isCatalogueLoading && (
@@ -315,6 +440,163 @@ function AdminPage() {
             <div className="admin-save-success" role="status">
               <p>{saveSuccess}</p>
             </div>
+          )}
+
+          {isCreating && (
+            <section aria-label="Tạo sản phẩm mới" className="admin-create-panel">
+              <div className="admin-create-panel__header">
+                <h3>Thêm sản phẩm mới vào D1</h3>
+                <p>Điền thông tin để tạo sản phẩm bán thông thường.</p>
+              </div>
+              <form className="admin-create-form" onSubmit={handleSaveCreate}>
+                <div className="admin-form-grid">
+                  <div className="admin-form-group">
+                    <label htmlFor="create-name">
+                      Tên sản phẩm <span className="admin-required">*</span>
+                    </label>
+                    <input
+                      id="create-name"
+                      className="admin-input-text"
+                      disabled={isSubmittingCreate}
+                      maxLength={160}
+                      placeholder="Ví dụ: Nắng Dịu Ban Mai"
+                      required
+                      type="text"
+                      value={createForm.name}
+                      onChange={(e) => handleNameChange(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label htmlFor="create-slug">
+                      Slug định danh (URL) <span className="admin-required">*</span>
+                    </label>
+                    <input
+                      id="create-slug"
+                      className="admin-input-text"
+                      disabled={isSubmittingCreate}
+                      maxLength={100}
+                      placeholder="nang-diu-ban-mai"
+                      required
+                      type="text"
+                      value={createForm.slug}
+                      onChange={(e) => handleSlugChange(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label htmlFor="create-price">
+                      Giá niêm yết (VND) <span className="admin-required">*</span>
+                    </label>
+                    <input
+                      id="create-price"
+                      className="admin-input-text"
+                      disabled={isSubmittingCreate}
+                      min="1000"
+                      placeholder="Ví dụ: 650000"
+                      required
+                      step="1000"
+                      type="number"
+                      value={createForm.priceVnd}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, priceVnd: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label htmlFor="create-status">Trạng thái</label>
+                    <select
+                      id="create-status"
+                      className="admin-select-status"
+                      disabled={isSubmittingCreate}
+                      value={createForm.status}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, status: e.target.value }))}
+                    >
+                      <option value="available">Có sẵn</option>
+                      <option value="seasonal">Theo mùa</option>
+                      <option value="preorder">Đặt trước</option>
+                    </select>
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label htmlFor="create-collection">Bộ sưu tập</label>
+                    <input
+                      id="create-collection"
+                      className="admin-input-text"
+                      disabled={isSubmittingCreate}
+                      maxLength={160}
+                      placeholder="Ví dụ: Những ngày tươi sáng"
+                      type="text"
+                      value={createForm.collection}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, collection: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="admin-form-group">
+                    <label htmlFor="create-image">Đường dẫn ảnh chính (URL hoặc asset)</label>
+                    <input
+                      id="create-image"
+                      className="admin-input-text"
+                      disabled={isSubmittingCreate}
+                      maxLength={500}
+                      placeholder="https://... hoặc /assets/..."
+                      type="text"
+                      value={createForm.imageUrl}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, imageUrl: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="admin-form-group admin-form-group--full">
+                  <label htmlFor="create-short-desc">Mô tả ngắn</label>
+                  <input
+                    id="create-short-desc"
+                    className="admin-input-text"
+                    disabled={isSubmittingCreate}
+                    maxLength={320}
+                    placeholder="Mô tả tóm tắt về loại hoa, màu sắc..."
+                    type="text"
+                    value={createForm.shortDescription}
+                    onChange={(e) => setCreateForm((f) => ({ ...f, shortDescription: e.target.value }))}
+                  />
+                </div>
+
+                <div className="admin-form-group admin-form-group--checkbox">
+                  <label className="admin-checkbox-label">
+                    <input
+                      checked={createForm.isPurchasable}
+                      disabled={isSubmittingCreate}
+                      type="checkbox"
+                      onChange={(e) => setCreateForm((f) => ({ ...f, isPurchasable: e.target.checked }))}
+                    />
+                    <span>Có thể mua (Hiển thị & mở bán trên cửa hàng)</span>
+                  </label>
+                </div>
+
+                {createError && (
+                  <div className="admin-create-error" role="alert">
+                    <p>{createError}</p>
+                  </div>
+                )}
+
+                <div className="admin-create-actions">
+                  <button
+                    className="button button--primary"
+                    disabled={isSubmittingCreate}
+                    type="submit"
+                  >
+                    {isSubmittingCreate ? 'Đang tạo sản phẩm...' : 'Tạo sản phẩm'}
+                  </button>
+                  <button
+                    className="button button--text"
+                    disabled={isSubmittingCreate}
+                    type="button"
+                    onClick={handleCancelCreate}
+                  >
+                    Hủy
+                  </button>
+                </div>
+              </form>
+            </section>
           )}
 
           {!isCatalogueLoading && !catalogueError && (

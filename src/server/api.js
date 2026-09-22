@@ -206,6 +206,153 @@ async function handleUpdateAdminProduct(idOrSlug, request, env, requestId, depen
   }
 }
 
+async function handleCreateAdminProduct(request, env, requestId, dependencies) {
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: auth.code })
+  }
+
+  let body = null
+  try {
+    body = await request.json()
+  } catch {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  // Name validation
+  if (typeof body.name !== 'string' || !body.name.trim() || body.name.trim().length > 160) {
+    return result(errorResponse(
+      400,
+      'INVALID_NAME',
+      'Tên sản phẩm không được để trống và tối đa 160 ký tự.',
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: 'INVALID_NAME' })
+  }
+
+  // Slug validation
+  if (typeof body.slug !== 'string' || !body.slug.trim()) {
+    return result(errorResponse(
+      400,
+      'INVALID_SLUG',
+      'Slug sản phẩm không được để trống.',
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: 'INVALID_SLUG' })
+  }
+
+  const slug = body.slug.trim().toLowerCase()
+  const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+  if (!SLUG_REGEX.test(slug) || slug.length > 100) {
+    return result(errorResponse(
+      400,
+      'INVALID_SLUG',
+      'Slug sản phẩm không hợp lệ (chỉ chứa chữ thường, số và dấu gạch ngang, tối đa 100 ký tự).',
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: 'INVALID_SLUG' })
+  }
+
+  // Enforce priceless/protected product invariants
+  if (slug === 'no-watering-flower' || body.purchaseType === 'priceless') {
+    return result(errorResponse(
+      400,
+      'PROTECTED_PRODUCT',
+      'Không thể tạo sản phẩm vô giá hoặc trùng lặp sản phẩm được bảo vệ.',
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: 'PROTECTED_PRODUCT' })
+  }
+
+  // Price validation
+  const price = body.priceVnd
+  if (typeof price !== 'number' || !Number.isInteger(price) || price <= 0) {
+    return result(errorResponse(
+      400,
+      'INVALID_PRICE',
+      'Giá sản phẩm phải là số nguyên dương hợp lệ.',
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: 'INVALID_PRICE' })
+  }
+
+  // Status validation
+  const allowedStatuses = ['available', 'seasonal', 'preorder']
+  if (body.status !== undefined && (typeof body.status !== 'string' || !allowedStatuses.includes(body.status))) {
+    return result(errorResponse(
+      400,
+      'INVALID_STATUS',
+      'Trạng thái sản phẩm không hợp lệ (phải là có sẵn, theo mùa hoặc đặt trước).',
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: 'INVALID_STATUS' })
+  }
+
+  // Purchasability validation
+  if (body.isPurchasable !== undefined && typeof body.isPurchasable !== 'boolean') {
+    return result(errorResponse(
+      400,
+      'INVALID_PURCHASABILITY',
+      'Khả năng mua phải là giá trị boolean.',
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: 'INVALID_PURCHASABILITY' })
+  }
+
+  // Whitelist payload
+  const payload = {
+    name: body.name.trim(),
+    slug,
+    priceVnd: price,
+    status: body.status ?? 'available',
+    isPurchasable: body.isPurchasable !== false,
+  }
+
+  if (typeof body.shortDescription === 'string') payload.shortDescription = body.shortDescription
+  if (typeof body.description === 'string') payload.description = body.description
+  if (typeof body.collection === 'string') payload.collection = body.collection
+  if (typeof body.imageUrl === 'string') payload.imageUrl = body.imageUrl
+  if (typeof body.careNote === 'string') payload.careNote = body.careNote
+  if (typeof body.deliveryNote === 'string') payload.deliveryNote = body.deliveryNote
+  if (Array.isArray(body.badges)) payload.badges = body.badges
+  if (Array.isArray(body.colors)) payload.colors = body.colors
+  if (Array.isArray(body.moods)) payload.moods = body.moods
+  if (Array.isArray(body.occasions)) payload.occasions = body.occasions
+  if (Array.isArray(body.composition)) payload.composition = body.composition
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const created = await repositories.catalogue.createProduct(payload)
+    return result(
+      successResponse({ product: created }, requestId, { status: 201 }),
+      V1_ADMIN_PRODUCTS_PATH,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tạo sản phẩm mới.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), V1_ADMIN_PRODUCTS_PATH, { errorCode: code })
+  }
+}
+
 function matchAdminProductParam(pathname) {
   if (pathname.startsWith(`${V1_ADMIN_PRODUCTS_PATH}/`)) {
     const idOrSlug = pathname.slice(V1_ADMIN_PRODUCTS_PATH.length + 1).trim()
@@ -373,6 +520,15 @@ export function createApiRouter(options = {}) {
     if (pathname === V1_ADMIN_ME_PATH) {
       if (request.method !== 'GET') return methodNotAllowed(requestId, V1_ADMIN_ME_PATH, 'GET')
       return handleAdminMe(request, env, requestId, {
+        authorizeAdmin,
+        createRepositories,
+        verifyIdentity,
+      })
+    }
+
+    if (pathname === V1_ADMIN_PRODUCTS_PATH) {
+      if (request.method !== 'POST') return methodNotAllowed(requestId, V1_ADMIN_PRODUCTS_PATH, 'POST')
+      return handleCreateAdminProduct(request, env, requestId, {
         authorizeAdmin,
         createRepositories,
         verifyIdentity,

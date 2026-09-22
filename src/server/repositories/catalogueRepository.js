@@ -360,6 +360,172 @@ export function createCatalogueRepository(db) {
 
       return this.getProductById(product.id)
     },
+
+    async createProduct(data = {}) {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        const err = new Error('Dữ liệu sản phẩm không hợp lệ.')
+        err.code = 'INVALID_PAYLOAD'
+        err.status = 400
+        throw err
+      }
+
+      const activeVersion = await this.getCatalogueVersion()
+      if (!activeVersion?.version) {
+        const err = new Error('Không tìm thấy phiên bản danh mục hợp lệ.')
+        err.code = 'NO_ACTIVE_CATALOGUE_VERSION'
+        err.status = 500
+        throw err
+      }
+
+      // Enforce priceless & protected product invariants
+      if (data.slug === 'no-watering-flower' || data.purchaseType === 'priceless') {
+        const err = new Error('Không thể tạo sản phẩm vô giá hoặc trùng lặp sản phẩm được bảo vệ.')
+        err.code = 'PROTECTED_PRODUCT'
+        err.status = 400
+        throw err
+      }
+
+      // Slug validation & uniqueness check
+      if (typeof data.slug !== 'string' || !data.slug.trim()) {
+        const err = new Error('Slug sản phẩm không được để trống.')
+        err.code = 'INVALID_SLUG'
+        err.status = 400
+        throw err
+      }
+
+      const slug = data.slug.trim().toLowerCase()
+      const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+      if (!SLUG_REGEX.test(slug) || slug.length > 100) {
+        const err = new Error('Slug sản phẩm không hợp lệ (chỉ chứa chữ thường, số và dấu gạch ngang, tối đa 100 ký tự).')
+        err.code = 'INVALID_SLUG'
+        err.status = 400
+        throw err
+      }
+
+      const existing = await this.getProductBySlug(slug)
+      if (existing) {
+        const err = new Error('Slug sản phẩm đã tồn tại.')
+        err.code = 'SLUG_EXISTS'
+        err.status = 409
+        throw err
+      }
+
+      // Name validation
+      if (typeof data.name !== 'string' || !data.name.trim() || data.name.trim().length > 160) {
+        const err = new Error('Tên sản phẩm không được để trống và tối đa 160 ký tự.')
+        err.code = 'INVALID_NAME'
+        err.status = 400
+        throw err
+      }
+      const name = data.name.trim()
+
+      // Price validation (must be positive integer for standard sale product)
+      const price = data.priceVnd
+      if (typeof price !== 'number' || !Number.isInteger(price) || price <= 0) {
+        const err = new Error('Giá sản phẩm phải là số nguyên dương hợp lệ.')
+        err.code = 'INVALID_PRICE'
+        err.status = 400
+        throw err
+      }
+
+      // Status validation
+      const allowedStatuses = ['available', 'seasonal', 'preorder']
+      const status = data.status ?? 'available'
+      if (typeof status !== 'string' || !allowedStatuses.includes(status)) {
+        const err = new Error('Trạng thái sản phẩm không hợp lệ (phải là có sẵn, theo mùa hoặc đặt trước).')
+        err.code = 'INVALID_STATUS'
+        err.status = 400
+        throw err
+      }
+
+      // Purchasability -> active
+      const isPurchasable = data.isPurchasable !== false
+      const active = isPurchasable ? 1 : 0
+
+      // Optional text fields
+      const shortDescription = (typeof data.shortDescription === 'string' && data.shortDescription.trim())
+        ? data.shortDescription.trim().slice(0, 320)
+        : name.slice(0, 320)
+      const description = (typeof data.description === 'string' && data.description.trim())
+        ? data.description.trim().slice(0, 1200)
+        : shortDescription.slice(0, 1200)
+      const collection = (typeof data.collection === 'string' && data.collection.trim())
+        ? data.collection.trim().slice(0, 160)
+        : 'Bộ sưu tập mới'
+      const careNote = (typeof data.careNote === 'string' && data.careNote.trim())
+        ? data.careNote.trim().slice(0, 800)
+        : 'Đặt hoa nơi thoáng mát, thay nước mỗi ngày và cắt vát gốc hoa khoảng 1–2 cm.'
+      const deliveryNote = (typeof data.deliveryNote === 'string' && data.deliveryNote.trim())
+        ? data.deliveryNote.trim().slice(0, 800)
+        : 'Có thể giao trong ngày tại khu vực được hỗ trợ; thời gian sẽ được xác nhận theo địa chỉ.'
+
+      // Media bridge
+      const media = (typeof data.imageUrl === 'string' && data.imageUrl.trim())
+        ? [{
+            alt: name,
+            caption: null,
+            fit: 'cover',
+            position: 'center',
+            poster: null,
+            src: data.imageUrl.trim().slice(0, 500),
+            type: 'image',
+          }]
+        : []
+
+      // Metadata arrays
+      const badges = Array.isArray(data.badges) ? data.badges.filter((b) => typeof b === 'string') : []
+      const colors = Array.isArray(data.colors) ? data.colors.filter((c) => typeof c === 'string') : []
+      const moods = Array.isArray(data.moods) ? data.moods.filter((m) => typeof m === 'string') : []
+      const occasions = Array.isArray(data.occasions) ? data.occasions.filter((o) => typeof o === 'string') : []
+      const composition = Array.isArray(data.composition) ? data.composition.filter((c) => typeof c === 'string') : []
+
+      // Generate server ID
+      const id = 'prod_' + globalThis.crypto.randomUUID().replaceAll('-', '')
+
+      // Compute next sort order
+      const maxSortRow = await db.prepare('SELECT COALESCE(MAX(sort_order), -1) AS max_sort FROM products').first()
+      const sortOrder = (maxSortRow?.max_sort ?? -1) + 1
+
+      const now = new Date().toISOString()
+
+      // Default variant
+      const variantId = `product:${id}:size:standard`
+
+      const insertProductStmt = db.prepare(`
+        INSERT INTO products (
+          id, slug, name, short_description, description, collection, purchase_type,
+          price_vnd, currency, status, badges_json, colors_json, moods_json, occasions_json,
+          composition_json, media_json, care_note, delivery_note, is_best_seller, active,
+          sort_order, catalogue_version_id, created_at_utc, updated_at_utc
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, 'standard',
+          ?, 'VND', ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, 0, ?,
+          ?, ?, ?, ?
+        )
+      `).bind(
+        id, slug, name, shortDescription, description, collection,
+        price, status, JSON.stringify(badges), JSON.stringify(colors), JSON.stringify(moods), JSON.stringify(occasions),
+        JSON.stringify(composition), JSON.stringify(media), careNote, deliveryNote, active,
+        sortOrder, activeVersion.version, now, now
+      )
+
+      const insertVariantStmt = db.prepare(`
+        INSERT INTO product_variants (
+          id, product_id, option_type, code, label, note, price_vnd,
+          price_delta_vnd, active, sort_order, catalogue_version_id
+        ) VALUES (
+          ?, ?, 'size', 'standard', 'Tiêu chuẩn', NULL, ?,
+          0, ?, 0, ?
+        )
+      `).bind(
+        variantId, id, price, active, activeVersion.version
+      )
+
+      await db.batch([insertProductStmt, insertVariantStmt])
+
+      return this.getProductById(id)
+    },
   }
 }
 

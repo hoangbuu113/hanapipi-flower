@@ -12,7 +12,7 @@ export async function checkAdminAccess({
   } catch {
     return {
       authorized: false,
-      error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' },
+      error: { code: 'TOKEN_ERROR', message: 'KhÃ´ng thá»ƒ xÃ¡c thá»±c phiÃªn lÃ m viá»‡c.' },
       ok: false,
       status: 401,
       user: null,
@@ -22,7 +22,7 @@ export async function checkAdminAccess({
   if (!token) {
     return {
       authorized: false,
-      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' },
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Báº¡n cáº§n Ä‘Äƒng nháº­p Ä‘á»ƒ tiáº¿p tá»¥c.' },
       ok: false,
       status: 401,
       user: null,
@@ -48,7 +48,7 @@ export async function checkAdminAccess({
         authorized: false,
         error: body?.error ?? {
           code: 'API_ERROR',
-          message: 'Không thể kiểm tra quyền quản trị.',
+          message: 'KhÃ´ng thá»ƒ kiá»ƒm tra quyá»n quáº£n trá»‹.',
         },
         ok: false,
         status: response.status,
@@ -62,7 +62,7 @@ export async function checkAdminAccess({
       authorized: isAuthorized,
       error: isAuthorized ? null : {
         code: 'FORBIDDEN',
-        message: 'Bạn không có quyền truy cập tài nguyên này.',
+        message: 'Báº¡n khÃ´ng cÃ³ quyá»n truy cáº­p tÃ i nguyÃªn nÃ y.',
       },
       ok: isAuthorized,
       status: response.status,
@@ -71,7 +71,7 @@ export async function checkAdminAccess({
   } catch {
     return {
       authorized: false,
-      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' },
+      error: { code: 'NETWORK_ERROR', message: 'KhÃ´ng thá»ƒ káº¿t ná»‘i Ä‘áº¿n mÃ¡y chá»§.' },
       ok: false,
       status: 0,
       user: null,
@@ -105,7 +105,7 @@ export async function fetchAdminCatalogue({
         data: null,
         error: body?.error ?? {
           code: 'API_ERROR',
-          message: 'Không thể tải danh mục sản phẩm từ máy chủ.',
+          message: 'KhÃ´ng thá»ƒ táº£i danh má»¥c sáº£n pháº©m tá»« mÃ¡y chá»§.',
         },
         ok: false,
         status: response.status,
@@ -119,7 +119,7 @@ export async function fetchAdminCatalogue({
         data: null,
         error: {
           code: 'MALFORMED_RESPONSE',
-          message: 'Dữ liệu danh mục sản phẩm không hợp lệ.',
+          message: 'Dá»¯ liá»‡u danh má»¥c sáº£n pháº©m khÃ´ng há»£p lá»‡.',
         },
         ok: false,
         status: response.status,
@@ -167,7 +167,7 @@ export async function fetchAdminCatalogue({
       data: null,
       error: {
         code: 'NETWORK_ERROR',
-        message: 'Không thể kết nối đến máy chủ để tải danh mục.',
+        message: 'KhÃ´ng thá»ƒ káº¿t ná»‘i Ä‘áº¿n mÃ¡y chá»§ Ä‘á»ƒ táº£i danh má»¥c.',
       },
       ok: false,
       status: 0,
@@ -182,7 +182,7 @@ export async function updateAdminProduct(idOrSlug, fields, {
 } = {}) {
   if (!idOrSlug || typeof idOrSlug !== 'string') {
     return {
-      error: { code: 'INVALID_ID', message: 'Mã định danh sản phẩm không hợp lệ.' },
+      error: { code: 'INVALID_ID', message: 'MÃ£ Ä‘á»‹nh danh sáº£n pháº©m khÃ´ng há»£p lá»‡.' },
       ok: false,
       product: null,
       status: 400,
@@ -198,7 +198,7 @@ export async function updateAdminProduct(idOrSlug, fields, {
     token = await getToken()
   } catch {
     return {
-      error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' },
+      error: { code: 'TOKEN_ERROR', message: 'KhÃ´ng thá»ƒ xÃ¡c thá»±c phiÃªn lÃ m viá»‡c.' },
       ok: false,
       product: null,
       status: 401,
@@ -207,7 +207,7 @@ export async function updateAdminProduct(idOrSlug, fields, {
 
   if (!token) {
     return {
-      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' },
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Báº¡n cáº§n Ä‘Äƒng nháº­p Ä‘á»ƒ tiáº¿p tá»¥c.' },
       ok: false,
       product: null,
       status: 401,
@@ -235,7 +235,7 @@ export async function updateAdminProduct(idOrSlug, fields, {
       return {
         error: body?.error ?? {
           code: 'API_ERROR',
-          message: 'Không thể cập nhật sản phẩm.',
+          message: 'KhÃ´ng thá»ƒ cáº­p nháº­t sáº£n pháº©m.',
         },
         ok: false,
         product: null,
@@ -248,7 +248,7 @@ export async function updateAdminProduct(idOrSlug, fields, {
       return {
         error: {
           code: 'MALFORMED_RESPONSE',
-          message: 'Dữ liệu phản hồi từ máy chủ không hợp lệ.',
+          message: 'Dá»¯ liá»‡u pháº£n há»“i tá»« mÃ¡y chá»§ khÃ´ng há»£p lá»‡.',
         },
         ok: false,
         product: null,
@@ -286,7 +286,116 @@ export async function updateAdminProduct(idOrSlug, fields, {
     }
   } catch {
     return {
-      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ để cập nhật sản phẩm.' },
+      error: { code: 'NETWORK_ERROR', message: 'KhÃ´ng thá»ƒ káº¿t ná»‘i Ä‘áº¿n mÃ¡y chá»§ Ä‘á»ƒ cáº­p nháº­t sáº£n pháº©m.' },
+      ok: false,
+      product: null,
+      status: 0,
+    }
+  }
+}
+
+export async function createAdminProduct(payload, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return {
+      error: { code: 'TOKEN_ERROR', message: 'KhÃ´ng thá»ƒ xÃ¡c thá»±c phiÃªn lÃ m viá»‡c.' },
+      ok: false,
+      product: null,
+      status: 401,
+    }
+  }
+
+  if (!token) {
+    return {
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Báº¡n cáº§n Ä‘Äƒng nháº­p Ä‘á»ƒ tiáº¿p tá»¥c.' },
+      ok: false,
+      product: null,
+      status: 401,
+    }
+  }
+
+  try {
+    const response = await fetchImpl('/api/v1/admin/products', {
+      body: JSON.stringify(payload),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
+
+    let body = null
+    try {
+      body = await response.json()
+    } catch {
+      // Non-JSON response
+    }
+
+    if (!response.ok) {
+      return {
+        error: body?.error ?? {
+          code: 'API_ERROR',
+          message: 'KhÃ´ng thá»ƒ táº¡o sáº£n pháº©m má»›i.',
+        },
+        ok: false,
+        product: null,
+        status: response.status,
+      }
+    }
+
+    const rawProduct = body?.data?.product
+    if (!rawProduct || typeof rawProduct !== 'object') {
+      return {
+        error: {
+          code: 'MALFORMED_RESPONSE',
+          message: 'Dá»¯ liá»‡u pháº£n há»“i tá»« mÃ¡y chá»§ khÃ´ng há»£p lá»‡.',
+        },
+        ok: false,
+        product: null,
+        status: response.status,
+      }
+    }
+
+    const price = rawProduct.priceVnd !== undefined ? rawProduct.priceVnd : rawProduct.price ?? null
+    const purchaseType = rawProduct.purchaseType ?? (price == null ? 'priceless' : 'standard')
+    const isPurchasable = rawProduct.isPurchasable ?? (purchaseType !== 'priceless' && Number.isFinite(price))
+
+    const product = {
+      active: rawProduct.active !== false,
+      badges: Array.isArray(rawProduct.badges) ? rawProduct.badges : [],
+      collection: rawProduct.collection ?? null,
+      description: rawProduct.description ?? '',
+      id: rawProduct.id,
+      isBestSeller: Boolean(rawProduct.isBestSeller),
+      isPurchasable,
+      media: Array.isArray(rawProduct.media) ? rawProduct.media : [],
+      name: rawProduct.name,
+      priceVnd: price,
+      purchaseType,
+      shortDescription: rawProduct.shortDescription ?? '',
+      slug: rawProduct.slug ?? rawProduct.id,
+      sortOrder: rawProduct.sortOrder ?? 0,
+      status: rawProduct.status ?? 'available',
+    }
+
+    return {
+      error: null,
+      ok: true,
+      product,
+      status: response.status,
+    }
+  } catch {
+    return {
+      error: { code: 'NETWORK_ERROR', message: 'KhÃ´ng thá»ƒ káº¿t ná»‘i Ä‘áº¿n mÃ¡y chá»§ Ä‘á»ƒ táº¡o sáº£n pháº©m má»›i.' },
       ok: false,
       product: null,
       status: 0,

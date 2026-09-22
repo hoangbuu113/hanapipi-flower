@@ -128,6 +128,18 @@ export function normalizeCatalogueProduct(product, variantsArg = null, relatedPr
     images = staticFallback.images
   }
 
+  if (images.length === 0) {
+    images = [{
+      alt: product.name ?? 'Hanapipi Flower',
+      caption: null,
+      fit: 'cover',
+      position: 'center',
+      poster: null,
+      src: '',
+      type: 'image',
+    }]
+  }
+
   // 6. Badges, colors, occasions, moods, composition
   const badges = Array.isArray(product.badges) ? product.badges : (staticFallback?.badges ?? [])
   const colors = Array.isArray(product.colors)
