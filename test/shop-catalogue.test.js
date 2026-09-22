@@ -338,9 +338,9 @@ test('11. Error/retry state does not crash app', async () => {
   assert.equal(retryResult.data[0].id, 'test-product')
 })
 
-test('12. Product Detail remains static/unchanged', () => {
+test('12. SearchPage and static products remain intact', () => {
+  const searchFile = fs.readFileSync(path.resolve('src/pages/SearchPage.jsx'), 'utf8')
+  assert.ok(searchFile.includes("from '../data/products'"), 'SearchPage must still import from static products')
   const detailFile = fs.readFileSync(path.resolve('src/pages/ProductDetailPage.jsx'), 'utf8')
-  assert.ok(detailFile.includes("from '../data/products'"), 'ProductDetailPage must still import from static products')
-  assert.ok(!detailFile.includes('fetchShopCatalogue'), 'ProductDetailPage must not use fetchShopCatalogue in this phase')
-  assert.ok(!detailFile.includes('/api/v1/catalogue'), 'ProductDetailPage must not directly call catalogue API')
+  assert.ok(!detailFile.includes('fetchShopCatalogue'), 'ProductDetailPage must not use fetchShopCatalogue')
 })

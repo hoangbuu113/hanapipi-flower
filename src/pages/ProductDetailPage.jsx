@@ -1,10 +1,10 @@
 import { Check, ChevronRight, Heart, Minus, Plus } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Container from '../components/Container'
 import ProductCard from '../components/ProductCard'
-import { getProductBySlug, products } from '../data/products'
 import { createGiftAddOnSnapshot, giftAddOns } from '../data/giftAddOns'
+import { fetchProductDetail } from '../services/catalogueClient'
 import { formatCurrency } from '../utils/formatCurrency'
 import { getProductPriceLabel, isPurchasableProduct } from '../utils/productCommerce'
 import { useCommerce } from '../context/commerceStore'
@@ -12,17 +12,98 @@ import './ProductDetailPage.css'
 
 function ProductDetailPage() {
   const { slug } = useParams()
-  const product = getProductBySlug(slug)
+  const [product, setProduct] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [notFound, setNotFound] = useState(false)
+  const [reloadIndex, setReloadIndex] = useState(0)
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [selectedSizeId, setSelectedSizeId] = useState('standard')
-  const [selectedWrappingId, setSelectedWrappingId] = useState(product?.wrappingOptions?.[0]?.id)
+  const [selectedWrappingId, setSelectedWrappingId] = useState(null)
   const [quantity, setQuantity] = useState(1)
   const [selectedGiftAddOnIds, setSelectedGiftAddOnIds] = useState([])
   const [showCartFeedback, setShowCartFeedback] = useState(false)
   const activeVideoRef = useRef(null)
   const { addToCart, toggleWishlist, wishlistIds } = useCommerce()
 
-  if (!product) {
+  useEffect(() => {
+    const controller = new AbortController()
+    let isSubscribed = true
+
+    fetchProductDetail(slug, { signal: controller.signal })
+      .then((result) => {
+        if (!isSubscribed) return
+        if (result.ok && result.data) {
+          setProduct(result.data)
+          setError(null)
+          setNotFound(false)
+          setActiveImageIndex(0)
+          setShowCartFeedback(false)
+          if (result.data.wrappingOptions?.length > 0) {
+            setSelectedWrappingId(result.data.wrappingOptions[0].id)
+          }
+        } else if (result.notFound) {
+          setProduct(null)
+          setNotFound(true)
+          setError(null)
+        } else {
+          setProduct(null)
+          setNotFound(false)
+          setError(result.error ?? { code: 'API_ERROR', message: 'Đã có lỗi xảy ra khi tải thông tin bó hoa.' })
+        }
+      })
+      .catch((err) => {
+        if (!isSubscribed || err?.name === 'AbortError') return
+        setProduct(null)
+        setNotFound(false)
+        setError({ code: 'CLIENT_ERROR', message: 'Đã có lỗi xảy ra khi tải thông tin bó hoa.' })
+      })
+      .finally(() => {
+        if (isSubscribed) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      isSubscribed = false
+      controller.abort()
+    }
+  }, [slug, reloadIndex])
+
+  function handleRetry() {
+    setIsLoading(true)
+    setError(null)
+    setNotFound(false)
+    setReloadIndex((current) => current + 1)
+  }
+
+  if (isLoading && !product) {
+    return (
+      <main className="product-page product-loading">
+        <Container>
+          <p className="eyebrow">Hanapipi Flower</p>
+          <h1 className="product-loading-title">Đang chuẩn bị thông tin bó hoa...</h1>
+        </Container>
+      </main>
+    )
+  }
+
+  if (error && !product) {
+    return (
+      <main className="product-page product-error">
+        <Container>
+          <p className="eyebrow">Không thể tải thông tin</p>
+          <h1 className="product-error-title">Đã có lỗi xảy ra khi tải bó hoa.</h1>
+          <p className="product-error-message">{error.message || 'Không thể kết nối đến máy chủ.'}</p>
+          <button className="button button--secondary" type="button" onClick={handleRetry}>
+            Thử lại
+          </button>
+        </Container>
+      </main>
+    )
+  }
+
+  if (notFound || !product) {
     return (
       <main className="product-not-found">
         <Container>
@@ -35,22 +116,20 @@ function ProductDetailPage() {
   }
 
   const isPurchasable = isPurchasableProduct(product)
-  const galleryMedia = product.media ?? product.images
-  const activeMedia = galleryMedia[activeImageIndex]
+  const galleryMedia = product.media ?? product.images ?? []
+  const activeMedia = galleryMedia[activeImageIndex] ?? galleryMedia[0]
   const selectedSize = isPurchasable
-    ? product.sizeOptions.find((option) => option.id === selectedSizeId) ?? product.sizeOptions[1]
+    ? product.sizeOptions?.find((option) => option.id === selectedSizeId) ?? product.sizeOptions?.[1] ?? product.sizeOptions?.[0]
     : null
-  const relatedProducts = product.relatedProductIds
-    .map((id) => products.find((item) => item.id === id))
-    .filter(Boolean)
-    .slice(0, 4)
+  const activeWrappingId = selectedWrappingId ?? product.wrappingOptions?.[0]?.id
+  const relatedProducts = (product.relatedProducts ?? []).slice(0, 4)
   const isWishlisted = wishlistIds.includes(product.id)
   const selectedGiftAddOns = isPurchasable
     ? giftAddOns.filter((addOn) => selectedGiftAddOnIds.includes(addOn.id))
     : []
   const giftAddOnTotal = selectedGiftAddOns.reduce((total, addOn) => total + addOn.price, 0)
-  const selectedUnitTotal = isPurchasable ? selectedSize.price + giftAddOnTotal : null
-  const purchaseTotal = isPurchasable ? selectedUnitTotal * quantity : null
+  const selectedUnitTotal = isPurchasable && selectedSize ? selectedSize.price + giftAddOnTotal : null
+  const purchaseTotal = isPurchasable && selectedUnitTotal ? selectedUnitTotal * quantity : null
 
   function toggleGiftAddOn(addOnId) {
     setSelectedGiftAddOnIds((ids) => ids.includes(addOnId)
@@ -67,7 +146,7 @@ function ProductDetailPage() {
       quantity,
       sizeId: selectedSize.id,
       unitPrice: selectedSize.price,
-      wrappingId: selectedWrappingId,
+      wrappingId: activeWrappingId,
       giftAddOns: selectedGiftAddOns.map(createGiftAddOnSnapshot),
     })
     setShowCartFeedback(true)
@@ -169,9 +248,9 @@ function ProductDetailPage() {
                   <legend>Kiểu gói</legend>
                   <div className="product-wrapping-options">
                     {product.wrappingOptions.map((option) => (
-                      <label className={selectedWrappingId === option.id ? 'is-selected' : ''} key={option.id}>
+                      <label className={activeWrappingId === option.id ? 'is-selected' : ''} key={option.id}>
                         <input
-                          checked={selectedWrappingId === option.id}
+                          checked={activeWrappingId === option.id}
                           name="wrapping"
                           type="radio"
                           value={option.id}

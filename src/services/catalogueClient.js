@@ -22,7 +22,37 @@ function resolveImageSrc(apiSrc, fallbackSrc) {
   return fallbackSrc ?? apiSrc
 }
 
-export function normalizeCatalogueProduct(product) {
+function mapVariantsToSizeOptions(variants) {
+  if (!Array.isArray(variants)) return []
+  return variants
+    .filter((v) => v.optionType === 'size' && v.active)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    .map((v) => ({
+      code: v.code,
+      id: v.code,
+      label: v.label,
+      note: v.note,
+      price: v.priceVnd,
+      priceVnd: v.priceVnd,
+      variantId: v.id,
+    }))
+}
+
+function mapVariantsToWrappingOptions(variants) {
+  if (!Array.isArray(variants)) return []
+  return variants
+    .filter((v) => v.optionType === 'wrapping' && v.active)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    .map((v) => ({
+      code: v.code,
+      id: v.code,
+      label: v.label,
+      note: v.note,
+      variantId: v.id,
+    }))
+}
+
+export function normalizeCatalogueProduct(product, variantsArg = null, relatedProductsArg = null) {
   if (!product || typeof product !== 'object') {
     throw new TypeError('Invalid product: object expected')
   }
@@ -37,19 +67,56 @@ export function normalizeCatalogueProduct(product) {
   // 2. Status mapping
   const status = STATUS_MAP_FROM_API[product.status] ?? product.status ?? 'Có sẵn'
 
-  // 3. Media / Images
+  // 3. Variants (sizeOptions, wrappingOptions)
+  const allVariants = Array.isArray(variantsArg)
+    ? variantsArg
+    : Array.isArray(product.variants)
+      ? product.variants
+      : null
+
+  let sizeOptions = []
+  let wrappingOptions = []
+  if (purchaseType === 'priceless') {
+    sizeOptions = []
+    wrappingOptions = []
+  } else if (allVariants && allVariants.length > 0) {
+    sizeOptions = mapVariantsToSizeOptions(allVariants)
+    wrappingOptions = mapVariantsToWrappingOptions(allVariants)
+  } else {
+    sizeOptions = staticFallback?.sizeOptions ?? []
+    wrappingOptions = staticFallback?.wrappingOptions ?? []
+  }
+
+  // 4. Related products
+  const rawRelated = Array.isArray(relatedProductsArg)
+    ? relatedProductsArg
+    : Array.isArray(product.relatedProducts)
+      ? product.relatedProducts
+      : null
+
+  let relatedProducts = []
+  if (rawRelated) {
+    relatedProducts = rawRelated.map((p) => normalizeCatalogueProduct(p, null, []))
+  } else if (relatedProductsArg === null && staticFallback?.relatedProductIds) {
+    relatedProducts = staticFallback.relatedProductIds
+      .map((id) => staticProductById.get(id))
+      .filter(Boolean)
+      .map((p) => normalizeCatalogueProduct(p, null, []))
+  }
+
+  // 5. Media / Images
   let images = []
   if (Array.isArray(product.media) && product.media.length > 0) {
     images = product.media.map((item, index) => {
-      const staticImage = staticFallback?.images?.[index] ?? staticFallback?.images?.[0]
+      const staticImage = staticFallback?.media?.[index] ?? staticFallback?.images?.[index] ?? staticFallback?.images?.[0]
       return {
         alt: item.alt ?? staticImage?.alt ?? '',
-        caption: item.caption ?? null,
+        caption: item.caption ?? staticImage?.caption ?? null,
         fit: item.fit ?? staticImage?.fit ?? 'cover',
         position: item.position ?? staticImage?.position ?? 'center',
-        poster: item.poster ?? null,
+        poster: resolveImageSrc(item.poster, staticImage?.poster),
         src: resolveImageSrc(item.src, staticImage?.src),
-        type: item.type ?? 'image',
+        type: item.type ?? staticImage?.type ?? 'image',
       }
     })
   } else if (Array.isArray(product.images) && product.images.length > 0) {
@@ -61,7 +128,7 @@ export function normalizeCatalogueProduct(product) {
     images = staticFallback.images
   }
 
-  // 4. Badges, colors, occasions, moods, composition
+  // 6. Badges, colors, occasions, moods, composition
   const badges = Array.isArray(product.badges) ? product.badges : (staticFallback?.badges ?? [])
   const colors = Array.isArray(product.colors)
     ? product.colors
@@ -84,27 +151,33 @@ export function normalizeCatalogueProduct(product) {
     ...staticFallback,
     ...product,
     badges,
+    careNote: product.careNote ?? staticFallback?.careNote ?? '',
     colorPalette: colors,
     colors,
     composition,
     createdAt: product.createdAt ?? product.createdAtUtc ?? staticFallback?.createdAt,
     createdAtUtc: product.createdAtUtc ?? product.createdAt ?? staticFallback?.createdAt,
+    deliveryNote: product.deliveryNote ?? staticFallback?.deliveryNote ?? '',
     flowerComposition: composition,
     id: product.id,
     images,
     isBestSeller: Boolean(product.isBestSeller),
     isPurchasable,
-    media: product.media ?? images,
+    media: images,
     moods,
     name: product.name,
     occasions,
     price,
     priceVnd: price,
     purchaseType,
+    relatedProducts,
     shortDescription: product.shortDescription ?? '',
+    sizeOptions,
     slug: product.slug ?? product.id,
     sortOrder: product.sortOrder ?? 0,
     status,
+    variants: allVariants ?? product.variants ?? [],
+    wrappingOptions,
   }
 }
 
@@ -191,6 +264,134 @@ export async function fetchShopCatalogue({
         message: 'Không thể kết nối đến máy chủ để tải danh mục.',
       },
       isFallback: false,
+      ok: false,
+      status: 0,
+    }
+  }
+}
+
+export async function fetchProductDetail(slug, {
+  fetchImpl = globalThis.fetch,
+  signal,
+  endpoint = `/api/v1/catalogue/products/${encodeURIComponent(slug)}`,
+} = {}) {
+  if (!slug || typeof slug !== 'string') {
+    return {
+      data: null,
+      error: { code: 'INVALID_SLUG', message: 'Mã định danh sản phẩm không hợp lệ.' },
+      isFallback: false,
+      notFound: true,
+      ok: false,
+      status: 400,
+    }
+  }
+
+  try {
+    const response = await fetchImpl(endpoint, {
+      headers: {
+        Accept: 'application/json',
+      },
+      signal,
+    })
+
+    let body = null
+    try {
+      body = await response.json()
+    } catch {
+      // Non-JSON response
+    }
+
+    // 1. Intentional gate condition (HTTP 404 with API_NOT_FOUND)
+    if (response.status === 404 && (body?.error?.code === 'API_NOT_FOUND' || !body)) {
+      const staticProduct = staticProductById.get(slug)
+        ?? staticProducts.find((p) => p.slug === slug || p.id === slug)
+      if (!staticProduct) {
+        return {
+          data: null,
+          error: { code: 'PRODUCT_NOT_FOUND', message: 'Không tìm thấy sản phẩm được yêu cầu.' },
+          isFallback: true,
+          notFound: true,
+          ok: false,
+          status: 404,
+        }
+      }
+      return {
+        data: normalizeCatalogueProduct(staticProduct),
+        error: null,
+        isFallback: true,
+        notFound: false,
+        ok: true,
+        status: 404,
+      }
+    }
+
+    // 2. Genuine backend product not found
+    if (response.status === 404 && body?.error?.code === 'PRODUCT_NOT_FOUND') {
+      return {
+        data: null,
+        error: body.error,
+        isFallback: false,
+        notFound: true,
+        ok: false,
+        status: 404,
+      }
+    }
+
+    // 3. Other HTTP errors (500, etc.)
+    if (!response.ok) {
+      return {
+        data: null,
+        error: body?.error ?? {
+          code: 'API_ERROR',
+          message: 'Không thể tải thông tin sản phẩm từ máy chủ.',
+        },
+        isFallback: false,
+        notFound: response.status === 404,
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    // 4. Successful response (200) - validate body
+    const rawProduct = body?.data?.product
+    if (!rawProduct || typeof rawProduct !== 'object') {
+      return {
+        data: null,
+        error: {
+          code: 'MALFORMED_RESPONSE',
+          message: 'Dữ liệu sản phẩm không hợp lệ.',
+        },
+        isFallback: false,
+        notFound: false,
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    const rawVariants = body?.data?.variants ?? rawProduct.variants ?? []
+    const rawRelated = body?.data?.relatedProducts ?? rawProduct.relatedProducts ?? []
+    const normalized = normalizeCatalogueProduct(rawProduct, rawVariants, rawRelated)
+
+    return {
+      data: normalized,
+      error: null,
+      isFallback: false,
+      notFound: false,
+      ok: true,
+      status: response.status,
+    }
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw error
+    }
+    return {
+      data: null,
+      error: {
+        code: 'NETWORK_ERROR',
+        message: 'Không thể kết nối đến máy chủ để tải thông tin sản phẩm.',
+      },
+      isFallback: false,
+      notFound: false,
       ok: false,
       status: 0,
     }
