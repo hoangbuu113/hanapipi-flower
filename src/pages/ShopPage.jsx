@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
 import ProductCard from '../components/ProductCard'
-import { products } from '../data/products'
+import { fetchShopCatalogue } from '../services/catalogueClient'
 import { trapDialogFocus } from '../utils/focus'
 import { compareProductPrices, matchesProductPriceFilter } from '../utils/productCommerce'
 import './ShopPage.css'
@@ -63,6 +63,10 @@ function ShopPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState(defaultFilters)
   const [sort, setSort] = useState('featured')
+  const [products, setProducts] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [reloadIndex, setReloadIndex] = useState(0)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [isFilterClosing, setIsFilterClosing] = useState(false)
   const filterCloseTimerRef = useRef(null)
@@ -77,6 +81,42 @@ function ShopPage() {
     [filters, occasionFilter],
   )
   const selectedFilterCount = Object.values(activeFilters).filter((value) => value !== 'all').length
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let isSubscribed = true
+
+    fetchShopCatalogue({ signal: controller.signal })
+      .then((result) => {
+        if (!isSubscribed) return
+        if (result.ok && Array.isArray(result.data)) {
+          setProducts(result.data)
+          setError(null)
+        } else {
+          setError(result.error ?? { code: 'API_ERROR', message: 'Đã có lỗi xảy ra khi tải danh mục.' })
+        }
+      })
+      .catch((err) => {
+        if (!isSubscribed || err?.name === 'AbortError') return
+        setError({ code: 'CLIENT_ERROR', message: 'Đã có lỗi xảy ra khi tải danh mục.' })
+      })
+      .finally(() => {
+        if (isSubscribed) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      isSubscribed = false
+      controller.abort()
+    }
+  }, [reloadIndex])
+
+  function handleRetry() {
+    setIsLoading(true)
+    setError(null)
+    setReloadIndex((current) => current + 1)
+  }
 
   function openFilterSheet() {
     window.clearTimeout(filterCloseTimerRef.current)
@@ -145,8 +185,8 @@ function ShopPage() {
 
   const filteredProducts = useMemo(() => {
     const visibleProducts = products.filter((product) => (
-      (activeFilters.occasion === 'all' || product.occasions.includes(activeFilters.occasion)) &&
-      (activeFilters.color === 'all' || product.colorPalette.includes(activeFilters.color)) &&
+      (activeFilters.occasion === 'all' || product.occasions?.includes(activeFilters.occasion)) &&
+      (activeFilters.color === 'all' || product.colorPalette?.includes(activeFilters.color)) &&
       (activeFilters.status === 'all' || product.status === activeFilters.status) &&
       matchesProductPriceFilter(product, activeFilters.price)
     ))
@@ -158,7 +198,7 @@ function ShopPage() {
       }
       return Number(second.isBestSeller) - Number(first.isBestSeller)
     })
-  }, [activeFilters, sort])
+  }, [products, activeFilters, sort])
 
   function updateFilter(key, value) {
     if (key === 'occasion') {
@@ -213,7 +253,23 @@ function ShopPage() {
 
           <p className="shop-result-count">{filteredProducts.length} bó hoa được chọn cho bạn</p>
 
-          {filteredProducts.length > 0 ? (
+          {isLoading && products.length === 0 ? (
+            <div className="shop-loading-state" role="status" aria-live="polite">
+              <p>Đang chuẩn bị danh sách bó hoa...</p>
+            </div>
+          ) : error && products.length === 0 ? (
+            <div className="shop-error-state" role="alert">
+              <p>Không thể tải danh sách hoa.</p>
+              <span className="shop-error-message">{error.message || 'Đã có lỗi xảy ra khi tải danh mục.'}</span>
+              <button
+                className="button button--secondary"
+                type="button"
+                onClick={handleRetry}
+              >
+                Thử lại
+              </button>
+            </div>
+          ) : filteredProducts.length > 0 ? (
             <div className="shop-product-grid">
               {filteredProducts.map((product, index) => (
                 <ProductCard key={product.id} priority={index < 3} product={product} />

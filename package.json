@@ -13,7 +13,8 @@
     "test:d1": "node --import ./scripts/d1/register-catalogue-loader.js ./scripts/d1/validate-foundation.js",
     "test:auth": "node --import ./test/register-assets.js --test test/auth-api.test.js",
     "test:catalogue": "node --import ./test/register-assets.js --test test/catalogue-api.test.js",
-    "test:frontend": "node --import ./test/register-assets.js --test test/frontend-auth.test.js",
+    "test:frontend": "node --import ./test/register-assets.js --test test/frontend-auth.test.js test/shop-catalogue.test.js",
+    "test:shop": "node --import ./test/register-assets.js --test test/shop-catalogue.test.js",
     "lint": "oxlint",
     "test:worker": "node --import ./test/register-assets.js --test test/worker-api.test.js",
     "preview": "vite preview"

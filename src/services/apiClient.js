@@ -63,3 +63,8 @@ export async function fetchCurrentUser({ getToken, fetchImpl = globalThis.fetch 
   }
 }
 
+export {
+  fetchShopCatalogue,
+  normalizeCatalogueProduct,
+} from './catalogueClient.js'
+

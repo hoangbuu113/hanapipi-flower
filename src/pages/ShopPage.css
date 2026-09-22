@@ -130,7 +130,9 @@
   line-height: 1.2;
 }
 
-.shop-empty-state {
+.shop-empty-state,
+.shop-loading-state,
+.shop-error-state {
   display: grid;
   min-height: 300px;
   place-content: center;
@@ -142,11 +144,20 @@
   text-align: center;
 }
 
-.shop-empty-state p {
+.shop-empty-state p,
+.shop-loading-state p,
+.shop-error-state p {
   margin: 0;
   font-family: var(--font-family-display);
   font-size: 25px;
   font-weight: 600;
+}
+
+.shop-error-state .shop-error-message {
+  max-width: 440px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .shop-filter-modal {
