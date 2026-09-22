@@ -201,6 +201,43 @@
   font-weight: 700;
 }
 
+.finder-loading,
+.finder-error-state {
+  display: flex;
+  min-height: 240px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 48px;
+  padding: 32px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+}
+
+.finder-loading p,
+.finder-error-state p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.finder-error-state .finder-error-message {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.finder-no-results {
+  margin: 36px 0;
+  padding: 24px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
 .concierge-loading {
   display: flex;
   max-width: 860px;

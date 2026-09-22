@@ -339,8 +339,8 @@ test('11. Error/retry state does not crash app', async () => {
 })
 
 test('12. Static products remain intact for unmigrated consumers', () => {
-  const flowerFinderFile = fs.readFileSync(path.resolve('src/pages/FlowerFinderPage.jsx'), 'utf8')
-  assert.ok(flowerFinderFile.includes("from '../data/products'"), 'FlowerFinderPage must still import from static products')
+  const flowerAlreadyTakenFile = fs.readFileSync(path.resolve('src/pages/FlowerAlreadyTakenPage.jsx'), 'utf8')
+  assert.ok(flowerAlreadyTakenFile.includes("from '../data/products'"), 'FlowerAlreadyTakenPage must still import from static products')
   const detailFile = fs.readFileSync(path.resolve('src/pages/ProductDetailPage.jsx'), 'utf8')
   assert.ok(!detailFile.includes('fetchShopCatalogue'), 'ProductDetailPage must not use fetchShopCatalogue')
   assert.equal(staticProducts.length, 24, 'Static products data must remain intact')

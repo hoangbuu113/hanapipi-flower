@@ -1,9 +1,9 @@
 import { ArrowLeft, ArrowRight, Check, MessageCircle } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Container from '../components/Container'
 import ProductCard from '../components/ProductCard'
-import { products } from '../data/products'
+import { fetchShopCatalogue } from '../services/catalogueClient'
 import { openConcierge } from '../utils/conciergeEvents'
 import {
   buildRecommendationCopy,
@@ -24,11 +24,52 @@ function StepFinder() {
   const [step, setStep] = useState(1)
   const [answers, setAnswers] = useState({})
   const [error, setError] = useState('')
+  const [products, setProducts] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [catalogueError, setCatalogueError] = useState(null)
+  const [reloadIndex, setReloadIndex] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let isMounted = true
+
+    fetchShopCatalogue({ signal: controller.signal })
+      .then((result) => {
+        if (!isMounted) return
+        if (result.ok && Array.isArray(result.data)) {
+          setProducts(result.data)
+          setCatalogueError(null)
+        } else {
+          setCatalogueError(result.error ?? { code: 'API_ERROR', message: 'Đã có lỗi xảy ra khi tải danh mục.' })
+        }
+      })
+      .catch((err) => {
+        if (!isMounted || err?.name === 'AbortError') return
+        setCatalogueError({ code: 'CLIENT_ERROR', message: 'Đã có lỗi xảy ra khi tải danh mục.' })
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      isMounted = false
+      controller.abort()
+    }
+  }, [reloadIndex])
+
+  function handleRetry() {
+    setIsLoading(true)
+    setCatalogueError(null)
+    setReloadIndex((current) => current + 1)
+  }
+
   const question = questions[step - 1]
   const criteria = useMemo(() => criteriaFromStepAnswers(answers), [answers])
   const recommendations = useMemo(
     () => step === 5 ? rankProducts(products, criteria, 6) : [],
-    [criteria, step],
+    [products, criteria, step],
   )
 
   function next() {
@@ -44,6 +85,26 @@ function StepFinder() {
     setAnswers({})
     setError('')
     setStep(1)
+  }
+
+  if (isLoading && products.length === 0) {
+    return (
+      <div className="finder-loading" role="status" aria-live="polite">
+        <p>Đang chuẩn bị danh mục hoa...</p>
+      </div>
+    )
+  }
+
+  if (catalogueError && products.length === 0) {
+    return (
+      <div className="finder-error-state" role="alert">
+        <p>Không thể tải danh mục hoa.</p>
+        <span className="finder-error-message">{catalogueError.message || 'Đã có lỗi xảy ra khi tải danh mục.'}</span>
+        <button className="button button--secondary" type="button" onClick={handleRetry}>
+          Thử lại
+        </button>
+      </div>
+    )
   }
 
   if (!started) {
@@ -71,14 +132,20 @@ function StepFinder() {
           </div>
           <button className="button button--text" type="button" onClick={restart}>Bắt đầu lại</button>
         </header>
-        <div className="finder-results__grid">
-          {recommendations.map((recommendation) => (
-            <article className="finder-result" key={recommendation.product.id}>
-              <ProductCard product={recommendation.product} />
-              <p>Vì sao phù hợp: {buildRecommendationCopy(recommendation, criteria).reason}</p>
-            </article>
-          ))}
-        </div>
+        {recommendations.length > 0 ? (
+          <div className="finder-results__grid">
+            {recommendations.map((recommendation) => (
+              <article className="finder-result" key={recommendation.product.id}>
+                <ProductCard product={recommendation.product} />
+                <p>Vì sao phù hợp: {buildRecommendationCopy(recommendation, criteria).reason}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="finder-no-results">
+            <p>Chưa tìm thấy bó hoa hoàn toàn phù hợp với tiêu chí đã chọn.</p>
+          </div>
+        )}
         <Link className="button button--secondary finder-all-link" to="/shop">Xem tất cả bó hoa</Link>
       </section>
     )
