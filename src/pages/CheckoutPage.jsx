@@ -1,22 +1,26 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '@clerk/clerk-react'
 import Container from '../components/Container'
 import CheckoutSummary from '../components/CheckoutSummary'
 import DeliverySelector from '../components/DeliverySelector'
 import { useAccount } from '../context/accountStore'
 import { useCommerce } from '../context/commerceStore'
+import { createOrder } from '../services/apiClient'
 import { cartHasGiftAddOn, cartSubtotal } from '../utils/cart'
 import { isDeliveryDateAvailable } from '../utils/delivery'
-import { createOrderCode } from '../utils/order'
 import './CheckoutPage.css'
 
 const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer: false, receiverName: '', receiverPhone: '', city: '', district: '', ward: '', address: '', message: '', cardSenderName: '', anonymousSender: false, payment: 'cod' }
 
 function CheckoutPage() {
   const { addOrder, user } = useAccount()
-  const { cartItems, clearCart, deliveryDraft } = useCommerce()
+  const { cartItems, clearCart, deliveryDraft, hasUnavailableItems } = useCommerce()
+  const { getToken, isSignedIn } = useAuth()
   const [form, setForm] = useState(() => ({ ...initialForm, buyerName: user?.name ?? '', buyerPhone: user?.phone ?? '', email: user?.email ?? '' }))
   const [errors, setErrors] = useState({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
   const navigate = useNavigate()
   const subtotal = cartSubtotal(cartItems)
   const includesHandwrittenCard = cartHasGiftAddOn(cartItems, 'handwritten-card')
@@ -26,7 +30,11 @@ function CheckoutPage() {
     senderName: form.anonymousSender ? '' : form.cardSenderName.trim(),
   }
 
-  function update(key, value) { setForm((current) => ({ ...current, [key]: value })); setErrors((current) => ({ ...current, [key]: '' })) }
+  function update(key, value) {
+    setForm((current) => ({ ...current, [key]: value }))
+    setErrors((current) => ({ ...current, [key]: '' }))
+    setSubmitError(null)
+  }
   function validate() {
     const next = {}
     const phonePattern = /^(0\d{9}|\+84\d{9})$/
@@ -44,23 +52,79 @@ function CheckoutPage() {
     setErrors(next)
     return Object.keys(next).length === 0
   }
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault()
+    if (isSubmitting) return
+    setSubmitError(null)
     if (!validate()) return
-    const orderCode = createOrderCode()
-    const receiver = form.receiverIsBuyer ? { name: form.buyerName.trim(), phone: form.buyerPhone.trim() } : { name: form.receiverName.trim(), phone: form.receiverPhone.trim() }
-    addOrder({
-      code: orderCode, status: 'Đã ghi nhận', timestamp: new Date().toISOString(), total: subtotal,
-      buyer: { name: form.buyerName.trim(), phone: form.buyerPhone.trim(), email: form.email.trim() }, receiver,
-      address: { city: form.city, district: form.district, ward: form.ward, detail: form.address.trim() },
-      delivery: deliveryDraft,
-      message: form.message.trim(),
-      gifting: { ...giftingPreview, includesHandwrittenCard },
-      payment: form.payment === 'cod' ? 'Thanh toán khi nhận hoa' : 'Chuyển khoản ngân hàng',
-      items: cartItems,
-    })
-    clearCart()
-    navigate(`/checkout/success/${orderCode}`)
+
+    if (hasUnavailableItems) {
+      setSubmitError('Giỏ hoa có sản phẩm không còn khả dụng. Vui lòng quay lại giỏ hàng để cập nhật.')
+      return
+    }
+
+    if (!isSignedIn) {
+      setSubmitError('Vui lòng đăng nhập để hoàn tất đặt hoa.')
+      return
+    }
+
+    const receiver = form.receiverIsBuyer
+      ? { name: form.buyerName.trim(), phone: form.buyerPhone.trim() }
+      : { name: form.receiverName.trim(), phone: form.receiverPhone.trim() }
+
+    const payload = {
+      address: {
+        city: form.city,
+        detail: form.address.trim(),
+        district: form.district,
+        ward: form.ward,
+      },
+      buyer: {
+        email: form.email.trim(),
+        name: form.buyerName.trim(),
+        phone: form.buyerPhone.trim(),
+      },
+      recipient: receiver,
+      delivery: {
+        date: deliveryDraft.date,
+        slot: deliveryDraft.slot,
+      },
+      gifting: {
+        anonymous: Boolean(form.anonymousSender),
+        message: form.message.trim(),
+        senderName: form.anonymousSender ? '' : form.cardSenderName.trim(),
+      },
+      items: cartItems.map((item) => ({
+        giftAddOnIds: (item.giftAddOns || [])
+          .filter((g) => g.active !== false)
+          .map((g) => (typeof g === 'string' ? g : g.id)),
+        productId: item.productId || item.product?.id || item.slug || item.product?.slug || item.id,
+        quantity: item.quantity,
+        sizeId: item.sizeId || item.size?.id || item.size?.code,
+        wrappingId: item.wrappingId || item.wrapping?.id || item.wrapping?.code || null,
+      })),
+      paymentMethod: form.payment === 'cod' ? 'cod_mock' : 'bank_transfer_mock',
+    }
+
+    setIsSubmitting(true)
+    try {
+      const result = await createOrder({ getToken, order: payload })
+      if (!result.ok) {
+        if (result.error?.fieldErrors) {
+          setErrors((current) => ({ ...current, ...result.error.fieldErrors }))
+        }
+        setSubmitError(result.error?.message || 'Không thể tạo đơn hoa. Vui lòng thử lại.')
+        return
+      }
+
+      addOrder(result.order)
+      clearCart()
+      navigate(`/checkout/success/${result.order.code || result.order.orderCode}`)
+    } catch {
+      setSubmitError('Đã xảy ra lỗi khi gửi thông tin đơn hoa. Vui lòng thử lại.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (!cartItems.length) return <main className="checkout-empty"><Container><p className="eyebrow">Giỏ hoa đang chờ bạn</p><h1>Chưa có bó hoa nào để thanh toán.</h1><p>Hãy quay lại giỏ hàng hoặc chọn một thiết kế thật vừa vặn.</p><Link className="button button--secondary" to="/cart">Quay lại giỏ hàng</Link></Container></main>
@@ -78,7 +142,17 @@ function CheckoutPage() {
       <p className="checkout-gifting-reassurance">Đơn giao đến người nhận không kèm hóa đơn hoặc thông tin giá.</p>
     </FormSection>
     <FormSection title="Phương thức thanh toán"><div className="checkout-payment"><label><input checked={form.payment === 'cod'} name="payment" type="radio" onChange={() => update('payment', 'cod')} /> Thanh toán khi nhận hoa</label><label><input checked={form.payment === 'bank'} name="payment" type="radio" onChange={() => update('payment', 'bank')} /> Chuyển khoản ngân hàng</label></div><p className="checkout-demo-note">Đây là bản demo, chưa phát sinh thanh toán.</p></FormSection>
-    <button className="button button--primary checkout-submit" type="submit">Đặt hoa</button>
+    {submitError && (
+      <p className="checkout-error checkout-submit-error" role="alert">
+        {submitError}
+        {!isSignedIn && (
+          <> <Link to="/login" style={{ textDecoration: 'underline' }}>Đăng nhập ngay</Link></>
+        )}
+      </p>
+    )}
+    <button className="button button--primary checkout-submit" disabled={isSubmitting} type="submit">
+      {isSubmitting ? 'Đang gửi thông tin...' : 'Đặt hoa'}
+    </button>
   </form><CheckoutSummary cartItems={cartItems} deliveryDraft={deliveryDraft} gifting={giftingPreview} subtotal={subtotal} /></div></Container></main>
 }
 

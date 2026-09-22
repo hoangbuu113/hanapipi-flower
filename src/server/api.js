@@ -38,6 +38,7 @@ const V1_ADMIN_MEDIA_PATH = `${API_V1_PREFIX}/admin/media`
 const V1_MEDIA_PATH = `${API_V1_PREFIX}/media`
 const V1_CATALOGUE_PATH = `${API_V1_PREFIX}/catalogue`
 const V1_CATALOGUE_PRODUCTS_PATH = `${API_V1_PREFIX}/catalogue/products`
+const V1_ORDERS_PATH = `${API_V1_PREFIX}/orders`
 const PREFLIGHT_HEADERS = ['authorization', 'content-type', 'idempotency-key', 'if-match']
 
 export const isApiPath = (pathname) => pathname === '/api' || pathname.startsWith('/api/')
@@ -135,6 +136,60 @@ async function handleCurrentUser(request, env, requestId, dependencies) {
   }
 
   return result(successResponse({ user: publicUser(auth.user) }, requestId), V1_ME_PATH)
+}
+
+async function handleCreateOrder(request, env, requestId, dependencies) {
+  const auth = await dependencies.authenticateUser(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), V1_ORDERS_PATH, { errorCode: auth.code })
+  }
+
+  let body = null
+  try {
+    body = await request.json()
+  } catch {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), V1_ORDERS_PATH, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), V1_ORDERS_PATH, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const created = await repositories.orders.createForUser(auth.user, body)
+    return result(
+      successResponse({ order: created }, requestId, { status: 201 }),
+      V1_ORDERS_PATH,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tạo đơn hàng.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+      err.fieldErrors ? { fieldErrors: err.fieldErrors } : undefined,
+    ), V1_ORDERS_PATH, { errorCode: code })
+  }
 }
 
 async function handleAdminMe(request, env, requestId, dependencies) {
@@ -1007,6 +1062,15 @@ export function createApiRouter(options = {}) {
     if (pathname === V1_ME_PATH) {
       if (request.method !== 'GET') return methodNotAllowed(requestId, V1_ME_PATH, 'GET')
       return handleCurrentUser(request, env, requestId, {
+        authenticateUser,
+        createRepositories,
+        verifyIdentity,
+      })
+    }
+
+    if (pathname === V1_ORDERS_PATH) {
+      if (request.method !== 'POST') return methodNotAllowed(requestId, V1_ORDERS_PATH, 'POST')
+      return handleCreateOrder(request, env, requestId, {
         authenticateUser,
         createRepositories,
         verifyIdentity,

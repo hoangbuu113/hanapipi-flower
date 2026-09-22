@@ -1,4 +1,5 @@
 import { createCatalogueRepository } from './repositories/catalogueRepository.js'
+import { createOrderRepository } from './repositories/orderRepository.js'
 import { createUserRepository } from './repositories/userRepository.js'
 
 export function getDatabaseBinding(env) {
@@ -11,8 +12,13 @@ export function getDatabaseBinding(env) {
 
 export function createDatabaseRepositories(env) {
   const db = getDatabaseBinding(env)
+  const catalogue = createCatalogueRepository(db)
   return {
-    catalogue: createCatalogueRepository(db),
+    catalogue,
+    orders: createOrderRepository(db, {
+      catalogue,
+      fulfilmentKey: env.ORDER_FULFILMENT_KEY,
+    }),
     users: createUserRepository(db),
   }
 }
