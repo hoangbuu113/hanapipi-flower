@@ -6,9 +6,11 @@ import test from 'node:test'
 import {
   checkAdminAccess,
   createAdminProduct,
+  deleteAdminMedia,
   fetchAdminCatalogue,
   setAdminProductArchived,
   updateAdminProduct,
+  uploadAdminMedia,
 } from '../src/services/adminClient.js'
 import { createWorker } from '../src/worker.js'
 
@@ -1158,4 +1160,291 @@ test('58. Admin archive UI updates only after canonical server success and prote
   assert.match(adminPageCode, /product\.slug === 'no-watering-flower'/u)
   assert.match(adminPageCode, /isProtected \?/u)
   assert.doesNotMatch(adminPageCode, /filter\(.*archive/u)
+})
+
+test('59. normal form has Tên sản phẩm and does NOT show Slug định danh (URL) by default', () => {
+  const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+
+  assert.match(adminPageCode, /Tên sản phẩm <span className="admin-required">\*<\/span>/u)
+  assert.doesNotMatch(adminPageCode, /Slug định danh \(URL\)/u, 'Must NOT show Slug định danh (URL) by default')
+  assert.match(adminPageCode, /Đường dẫn: <code>\/san-pham\//u, 'Must show clean path preview')
+  assert.match(adminPageCode, /Tùy chỉnh đường dẫn/u, 'Must have toggle for custom path')
+})
+
+test('60. product name auto-generates Vietnamese-safe slug and renders preview', () => {
+  const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+
+  assert.match(adminPageCode, /generateSlug\(name\)/u)
+  assert.match(adminPageCode, /\/san-pham\/\{createForm\.slug/u)
+})
+
+test('61. Tùy chỉnh đường dẫn reveals advanced path control and manual override is preserved', () => {
+  const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+
+  assert.match(adminPageCode, /showCustomSlug &&/u)
+  assert.match(adminPageCode, /<label htmlFor="create-slug">Đường dẫn<\/label>/u)
+  assert.match(adminPageCode, /Đường dẫn được tự tạo từ tên sản phẩm\./u)
+  assert.match(adminPageCode, /if \(!isSlugManuallyEdited\)/u, 'Must preserve manual edit on name change')
+  assert.match(adminPageCode, /Đặt lại theo tên sản phẩm/u, 'Must provide reset action')
+})
+
+test('62. normal UI no longer exposes manual image URL text field and uses ProductImageUploader', () => {
+  const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+
+  assert.doesNotMatch(adminPageCode, /Đường dẫn ảnh chính \(URL hoặc asset\)/u, 'Must not expose manual image URL field')
+  assert.match(adminPageCode, /<ProductImageUploader/u, 'Must use ProductImageUploader component')
+})
+
+test('63. ProductImageUploader accepts images and provides smooth delete and replace', () => {
+  const uploaderCode = fs.readFileSync(path.resolve('src/components/admin/ProductImageUploader.jsx'), 'utf8')
+
+  assert.match(uploaderCode, /accept="image\/jpeg,image\/png,image\/webp"/u)
+  assert.match(uploaderCode, /Ảnh sản phẩm/u)
+  assert.match(uploaderCode, /\+ Chọn ảnh/u)
+  assert.match(uploaderCode, /JPG, PNG hoặc WebP/u)
+  assert.match(uploaderCode, /Kéo ảnh vào đây hoặc chọn từ thiết bị/u)
+  assert.match(uploaderCode, /Thay ảnh/u)
+  assert.match(uploaderCode, /Xóa ảnh/u)
+  assert.match(uploaderCode, /Đang tải ảnh\.\.\./u)
+  assert.match(uploaderCode, /Đang xóa\.\.\./u)
+  assert.match(uploaderCode, /deleteAdminMedia\(previousKey/u, 'Replaces upload before deleting old image')
+})
+
+test('64. guest upload to /api/v1/admin/media returns 401', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+
+  const fakeFile = new Blob(['fake-image-bytes'], { type: 'image/jpeg' })
+  const result = await uploadAdminMedia(fakeFile, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 401)
+  assert.equal(result.error.code, 'AUTHENTICATION_REQUIRED')
+})
+
+test('65. customer upload to /api/v1/admin/media returns 403', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  const now = new Date().toISOString()
+  sqlite.exec(`
+    INSERT INTO users (id, auth_provider, provider_subject, role, status, locale, created_at_utc, updated_at_utc)
+    VALUES ('usr_customer_001', 'clerk', 'user_customer_subject', 'customer', 'active', 'vi-VN', '${now}', '${now}')
+  `)
+  const testWorker = createTestWorker(d1)
+
+  const fakeFile = new Blob(['fake-image-bytes'], { type: 'image/jpeg' })
+  const result = await uploadAdminMedia(fakeFile, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 403)
+  assert.equal(result.error.code, 'FORBIDDEN')
+})
+
+test('66. admin upload succeeds and generates safe storage key and url', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const fakeFile = new Blob(['fake-jpeg-content-12345'], { type: 'image/jpeg' })
+  const result = await uploadAdminMedia(fakeFile, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 201)
+  assert.ok(result.data.key.startsWith('prod_media_'), 'Key must have safe prod_media_ prefix')
+  assert.ok(result.data.key.endsWith('.jpg'), 'Key must have .jpg extension')
+  assert.equal(result.data.url, `/api/v1/media/${result.data.key}`)
+  assert.equal(result.data.contentType, 'image/jpeg')
+  assert.ok(result.data.size > 0)
+})
+
+test('67. unsupported MIME type is rejected with 400', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const fakeExe = new Blob(['fake-exe-content'], { type: 'application/x-msdownload' })
+  const result = await uploadAdminMedia(fakeExe, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 400)
+  assert.equal(result.error.code, 'INVALID_MEDIA_TYPE')
+})
+
+test('68. oversized file (>10 MB) is rejected with 400', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  // 11 MB oversized blob
+  const bigBuffer = new Uint8Array(11 * 1024 * 1024)
+  const bigFile = new Blob([bigBuffer], { type: 'image/png' })
+
+  const result = await uploadAdminMedia(bigFile, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 400)
+  assert.equal(result.error.code, 'FILE_TOO_LARGE')
+})
+
+test('69. public endpoint serves uploaded media with proper headers', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const testImageBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]) // PNG magic bytes
+  const fakePng = new Blob([testImageBytes], { type: 'image/png' })
+  const uploadResult = await uploadAdminMedia(fakePng, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(uploadResult.ok, true)
+
+  // Public GET (no auth token required!)
+  const publicRes = await testWorker.fetch(uploadResult.data.url)
+  assert.equal(publicRes.status, 200)
+  assert.equal(publicRes.headers.get('Content-Type'), 'image/png')
+  assert.equal(publicRes.headers.get('Cache-Control'), 'public, max-age=31536000, immutable')
+
+  const publicBuffer = new Uint8Array(await publicRes.arrayBuffer())
+  assert.deepEqual(publicBuffer, testImageBytes)
+})
+
+test('70. admin can delete uploaded media', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const fakeFile = new Blob(['image-to-delete'], { type: 'image/webp' })
+  const uploadResult = await uploadAdminMedia(fakeFile, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(uploadResult.ok, true)
+
+  // Delete as admin
+  const deleteResult = await deleteAdminMedia(uploadResult.data.key, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(deleteResult.ok, true)
+  assert.equal(deleteResult.data.deleted, true)
+
+  // After deletion, public GET should return 404
+  const publicRes = await testWorker.fetch(uploadResult.data.url)
+  assert.equal(publicRes.status, 404)
+})
+
+test('71. guest cannot delete media and customer cannot delete media', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const guestRes = await deleteAdminMedia('prod_media_sample.jpg', {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+  })
+  assert.equal(guestRes.status, 401)
+
+  const customerRes = await deleteAdminMedia('prod_media_sample.jpg', {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+  assert.equal(customerRes.status, 403)
+})
+
+test('72. invalid media key deletion returns 400', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const badKeyRes = await deleteAdminMedia('../etc/passwd', {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(badKeyRes.status, 400)
+  assert.equal(badKeyRes.error.code, 'INVALID_MEDIA_KEY')
+})
+
+test('73. product creation works with uploaded media URL stored in D1 media_json', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const fakeFile = new Blob(['uploaded-flower-image'], { type: 'image/jpeg' })
+  const uploadResult = await uploadAdminMedia(fakeFile, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(uploadResult.ok, true)
+
+  const createResult = await createAdminProduct({
+    imageUrl: uploadResult.data.url,
+    name: 'Hoa Hồng Tự Tải',
+    priceVnd: 750000,
+    slug: 'hoa-hong-tu-tai',
+  }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(createResult.ok, true)
+  assert.equal(createResult.status, 201)
+  assert.equal(createResult.product.media?.[0]?.src, uploadResult.data.url)
+
+  // Inspect D1 directly: only media URL stored, no binary/base64
+  const row = sqlite.prepare('SELECT media_json FROM products WHERE slug = ?').get('hoa-hong-tu-tai')
+  const media = JSON.parse(row.media_json)
+  assert.equal(media[0].src, uploadResult.data.url)
+  assert.doesNotMatch(row.media_json, /data:image|base64/u, 'D1 must not store base64 blobs')
+})
+
+test('74. no-watering-flower romantic gallery remains untouched and protected', async () => {
+  const { sqlite } = createSeededDatabase()
+  const rowBefore = sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('no-watering-flower')
+  const mediaBefore = JSON.parse(rowBefore.media_json)
+
+  assert.ok(mediaBefore.length >= 4, 'no-watering-flower must have its full personal gallery')
+  assert.ok(mediaBefore.some((m) => m.type === 'video'), 'Gallery must contain video item')
+})
+
+test('75. existing Edit/Add/Archive/Restore flows remain intact', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  // Edit price
+  const editRes = await updateAdminProduct('nang-diu', { priceVnd: 660000 }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(editRes.ok, true)
+  assert.equal(editRes.product.priceVnd, 660000)
+
+  // Archive
+  const archiveRes = await setAdminProductArchived('nang-diu', true, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(archiveRes.ok, true)
+  assert.equal(archiveRes.product.active, false)
+
+  // Restore
+  const restoreRes = await setAdminProductArchived('nang-diu', false, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(restoreRes.ok, true)
+  assert.equal(restoreRes.product.active, true)
 })

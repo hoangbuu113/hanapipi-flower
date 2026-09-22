@@ -545,9 +545,151 @@ export async function createAdminProduct(payload, {
     }
   } catch {
     return {
-      error: { code: 'NETWORK_ERROR', message: 'KhÃ´ng thá»ƒ káº¿t ná»‘i Ä‘áº¿n mÃ¡y chá»§ Ä‘á»ƒ táº¡o sáº£n pháº©m má»›i.' },
+      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ để tạo sản phẩm mới.' },
       ok: false,
       product: null,
+      status: 0,
+    }
+  }
+}
+
+export async function uploadAdminMedia(file, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+  endpoint = '/api/v1/admin/media',
+} = {}) {
+  if (!file) {
+    return {
+      data: null,
+      error: { code: 'INVALID_FILE', message: 'Vui lòng chọn tệp hình ảnh để tải lên.' },
+      ok: false,
+      status: 400,
+    }
+  }
+
+  let token = null
+  if (typeof getToken === 'function') {
+    try {
+      token = await getToken()
+    } catch {
+      return {
+        data: null,
+        error: { code: 'AUTH_ERROR', message: 'Không thể xác thực quyền quản trị.' },
+        ok: false,
+        status: 401,
+      }
+    }
+  }
+
+  const headers = {}
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  try {
+    const response = await fetchImpl(endpoint, {
+      body: formData,
+      headers,
+      method: 'POST',
+    })
+
+    const body = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      return {
+        data: null,
+        error: body?.error || {
+          code: 'UPLOAD_FAILED',
+          message: 'Không thể tải ảnh lên máy chủ.',
+        },
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    return {
+      data: body?.data || null,
+      error: null,
+      ok: true,
+      status: response.status,
+    }
+  } catch {
+    return {
+      data: null,
+      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ để tải ảnh lên.' },
+      ok: false,
+      status: 0,
+    }
+  }
+}
+
+export async function deleteAdminMedia(key, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+  endpointPrefix = '/api/v1/admin/media',
+} = {}) {
+  if (!key || typeof key !== 'string') {
+    return {
+      data: null,
+      error: { code: 'INVALID_KEY', message: 'Mã tệp hình ảnh không hợp lệ.' },
+      ok: false,
+      status: 400,
+    }
+  }
+
+  let token = null
+  if (typeof getToken === 'function') {
+    try {
+      token = await getToken()
+    } catch {
+      return {
+        data: null,
+        error: { code: 'AUTH_ERROR', message: 'Không thể xác thực quyền quản trị.' },
+        ok: false,
+        status: 401,
+      }
+    }
+  }
+
+  const headers = {}
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  try {
+    const response = await fetchImpl(`${endpointPrefix}/${encodeURIComponent(key)}`, {
+      headers,
+      method: 'DELETE',
+    })
+
+    const body = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      return {
+        data: null,
+        error: body?.error || {
+          code: 'DELETE_FAILED',
+          message: 'Không thể xóa ảnh khỏi máy chủ.',
+        },
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    return {
+      data: body?.data || null,
+      error: null,
+      ok: true,
+      status: response.status,
+    }
+  } catch {
+    return {
+      data: null,
+      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ để xóa ảnh.' },
+      ok: false,
       status: 0,
     }
   }

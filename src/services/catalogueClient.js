@@ -15,7 +15,8 @@ function resolveImageSrc(apiSrc, fallbackSrc) {
     (apiSrc.startsWith('http://') ||
       apiSrc.startsWith('https://') ||
       apiSrc.startsWith('data:') ||
-      apiSrc.startsWith('/assets/'))
+      apiSrc.startsWith('/assets/') ||
+      apiSrc.startsWith('/api/'))
   ) {
     return apiSrc
   }

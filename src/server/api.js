@@ -17,6 +17,14 @@ import {
   validateMutationOrigin,
 } from './request.js'
 
+import {
+  ALLOWED_MEDIA_TYPES,
+  MAX_MEDIA_SIZE_BYTES,
+  createMediaStorage,
+  generateMediaKey,
+  isValidMediaKey,
+} from './mediaStorage.js'
+
 export const API_VERSION = 'v1'
 const API_V1_PREFIX = '/api/v1'
 const LEGACY_CONCIERGE_PATH = '/api/concierge'
@@ -25,6 +33,8 @@ const V1_HEALTH_PATH = `${API_V1_PREFIX}/health`
 const V1_ME_PATH = `${API_V1_PREFIX}/me`
 const V1_ADMIN_ME_PATH = `${API_V1_PREFIX}/admin/me`
 const V1_ADMIN_PRODUCTS_PATH = `${API_V1_PREFIX}/admin/products`
+const V1_ADMIN_MEDIA_PATH = `${API_V1_PREFIX}/admin/media`
+const V1_MEDIA_PATH = `${API_V1_PREFIX}/media`
 const V1_CATALOGUE_PATH = `${API_V1_PREFIX}/catalogue`
 const V1_CATALOGUE_PRODUCTS_PATH = `${API_V1_PREFIX}/catalogue/products`
 const PREFLIGHT_HEADERS = ['authorization', 'content-type', 'idempotency-key', 'if-match']
@@ -417,6 +427,199 @@ async function handleCreateAdminProduct(request, env, requestId, dependencies) {
   }
 }
 
+async function handleUploadAdminMedia(request, env, requestId, dependencies) {
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), V1_ADMIN_MEDIA_PATH, { errorCode: auth.code })
+  }
+
+  let mimeType = ''
+  let buffer = null
+
+  const contentTypeHeader = request.headers.get('content-type') || ''
+  if (contentTypeHeader.includes('multipart/form-data')) {
+    let formData
+    try {
+      formData = await request.formData()
+    } catch {
+      return result(errorResponse(
+        400,
+        'INVALID_MULTIPART_PAYLOAD',
+        'Dữ liệu tải lên không hợp lệ.',
+        requestId,
+      ), V1_ADMIN_MEDIA_PATH, { errorCode: 'INVALID_MULTIPART_PAYLOAD' })
+    }
+
+    const file = formData.get('file') || formData.get('image')
+    if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') {
+      return result(errorResponse(
+        400,
+        'INVALID_PAYLOAD',
+        'Vui lòng chọn tệp hình ảnh để tải lên.',
+        requestId,
+      ), V1_ADMIN_MEDIA_PATH, { errorCode: 'INVALID_PAYLOAD' })
+    }
+
+    mimeType = file.type?.toLowerCase() || ''
+    buffer = new Uint8Array(await file.arrayBuffer())
+  } else {
+    mimeType = contentTypeHeader.split(';')[0]?.trim()?.toLowerCase() || ''
+    buffer = new Uint8Array(await request.arrayBuffer())
+  }
+
+  if (!ALLOWED_MEDIA_TYPES.has(mimeType)) {
+    return result(errorResponse(
+      400,
+      'INVALID_MEDIA_TYPE',
+      'Định dạng tệp không được hỗ trợ. Vui lòng chọn ảnh JPG, PNG hoặc WebP.',
+      requestId,
+    ), V1_ADMIN_MEDIA_PATH, { errorCode: 'INVALID_MEDIA_TYPE' })
+  }
+
+  if (buffer.byteLength === 0) {
+    return result(errorResponse(
+      400,
+      'EMPTY_FILE',
+      'Tệp ảnh không được để trống.',
+      requestId,
+    ), V1_ADMIN_MEDIA_PATH, { errorCode: 'EMPTY_FILE' })
+  }
+
+  if (buffer.byteLength > MAX_MEDIA_SIZE_BYTES) {
+    return result(errorResponse(
+      400,
+      'FILE_TOO_LARGE',
+      'Dung lượng ảnh vượt quá giới hạn tối đa (10 MB).',
+      requestId,
+    ), V1_ADMIN_MEDIA_PATH, { errorCode: 'FILE_TOO_LARGE' })
+  }
+
+  const key = generateMediaKey(mimeType)
+  const mediaStorage = dependencies.createMediaStorage ? dependencies.createMediaStorage(env) : createMediaStorage(env)
+
+  try {
+    await mediaStorage.put(key, buffer, mimeType)
+  } catch {
+    return result(errorResponse(
+      500,
+      'STORAGE_ERROR',
+      'Không thể lưu trữ tệp hình ảnh.',
+      requestId,
+    ), V1_ADMIN_MEDIA_PATH, { errorCode: 'STORAGE_ERROR' })
+  }
+
+  return result(
+    successResponse({
+      contentType: mimeType,
+      key,
+      size: buffer.byteLength,
+      url: `/api/v1/media/${key}`,
+    }, requestId, { status: 201 }),
+    V1_ADMIN_MEDIA_PATH,
+  )
+}
+
+async function handleDeleteAdminMedia(key, request, env, requestId, dependencies) {
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), `${V1_ADMIN_MEDIA_PATH}/${key}`, { errorCode: auth.code })
+  }
+
+  if (!isValidMediaKey(key)) {
+    return result(errorResponse(
+      400,
+      'INVALID_MEDIA_KEY',
+      'Mã tệp hình ảnh không hợp lệ.',
+      requestId,
+    ), `${V1_ADMIN_MEDIA_PATH}/${key}`, { errorCode: 'INVALID_MEDIA_KEY' })
+  }
+
+  const mediaStorage = dependencies.createMediaStorage ? dependencies.createMediaStorage(env) : createMediaStorage(env)
+  try {
+    await mediaStorage.delete(key)
+  } catch {
+    return result(errorResponse(
+      500,
+      'STORAGE_ERROR',
+      'Không thể xóa tệp hình ảnh khỏi lưu trữ.',
+      requestId,
+    ), `${V1_ADMIN_MEDIA_PATH}/${key}`, { errorCode: 'STORAGE_ERROR' })
+  }
+
+  return result(
+    successResponse({ deleted: true, key }, requestId),
+    `${V1_ADMIN_MEDIA_PATH}/${key}`,
+  )
+}
+
+async function handleGetPublicMedia(key, request, env, requestId, dependencies) {
+  if (!isValidMediaKey(key)) {
+    return result(errorResponse(
+      404,
+      'MEDIA_NOT_FOUND',
+      'Không tìm thấy tệp hình ảnh.',
+      requestId,
+    ), `${V1_MEDIA_PATH}/${key}`, { errorCode: 'MEDIA_NOT_FOUND' })
+  }
+
+  const mediaStorage = dependencies.createMediaStorage ? dependencies.createMediaStorage(env) : createMediaStorage(env)
+  let item = null
+  try {
+    item = await mediaStorage.get(key)
+  } catch {
+    return result(errorResponse(
+      500,
+      'STORAGE_ERROR',
+      'Không thể tải tệp hình ảnh.',
+      requestId,
+    ), `${V1_MEDIA_PATH}/${key}`, { errorCode: 'STORAGE_ERROR' })
+  }
+
+  if (!item) {
+    return result(errorResponse(
+      404,
+      'MEDIA_NOT_FOUND',
+      'Không tìm thấy tệp hình ảnh.',
+      requestId,
+    ), `${V1_MEDIA_PATH}/${key}`, { errorCode: 'MEDIA_NOT_FOUND' })
+  }
+
+  const response = new Response(item.body, {
+    headers: {
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Type': item.httpMetadata?.contentType || 'image/jpeg',
+    },
+  })
+
+  return result(response, `${V1_MEDIA_PATH}/${key}`)
+}
+
+function matchAdminMediaKey(pathname) {
+  if (pathname.startsWith(`${V1_ADMIN_MEDIA_PATH}/`)) {
+    const key = pathname.slice(V1_ADMIN_MEDIA_PATH.length + 1).trim()
+    if (key.length > 0 && !key.includes('/')) return decodeURIComponent(key)
+  }
+  return null
+}
+
+function matchPublicMediaKey(pathname) {
+  if (pathname.startsWith(`${V1_MEDIA_PATH}/`)) {
+    const key = pathname.slice(V1_MEDIA_PATH.length + 1).trim()
+    if (key.length > 0 && !key.includes('/')) return decodeURIComponent(key)
+  }
+  return null
+}
+
 function matchAdminProductParam(pathname) {
   if (pathname.startsWith(`${V1_ADMIN_PRODUCTS_PATH}/`)) {
     const idOrSlug = pathname.slice(V1_ADMIN_PRODUCTS_PATH.length + 1).trim()
@@ -614,6 +817,39 @@ export function createApiRouter(options = {}) {
         return handleListAdminProducts(request, env, requestId, adminProductDependencies)
       }
       return handleCreateAdminProduct(request, env, requestId, adminProductDependencies)
+    }
+
+    if (pathname === V1_ADMIN_MEDIA_PATH) {
+      if (request.method !== 'POST') {
+        return methodNotAllowed(requestId, V1_ADMIN_MEDIA_PATH, 'POST')
+      }
+      return handleUploadAdminMedia(request, env, requestId, {
+        authorizeAdmin,
+        createMediaStorage: options.mediaStorageFactory ?? createMediaStorage,
+        verifyIdentity,
+      })
+    }
+
+    const adminMediaKey = matchAdminMediaKey(pathname)
+    if (adminMediaKey) {
+      if (request.method !== 'DELETE') {
+        return methodNotAllowed(requestId, pathname, 'DELETE')
+      }
+      return handleDeleteAdminMedia(adminMediaKey, request, env, requestId, {
+        authorizeAdmin,
+        createMediaStorage: options.mediaStorageFactory ?? createMediaStorage,
+        verifyIdentity,
+      })
+    }
+
+    const publicMediaKey = matchPublicMediaKey(pathname)
+    if (publicMediaKey) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        return methodNotAllowed(requestId, pathname, 'GET, HEAD')
+      }
+      return handleGetPublicMedia(publicMediaKey, request, env, requestId, {
+        createMediaStorage: options.mediaStorageFactory ?? createMediaStorage,
+      })
     }
 
     const adminProductAction = matchAdminProductAction(pathname)

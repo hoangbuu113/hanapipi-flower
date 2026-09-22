@@ -11,6 +11,7 @@ import {
   updateAdminProduct,
 } from '../services/adminClient'
 import { formatCurrency } from '../utils/formatCurrency'
+import ProductImageUploader from '../components/admin/ProductImageUploader'
 import './AdminPage.css'
 
 const STATUS_LABELS = {
@@ -55,6 +56,7 @@ function AdminPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [createForm, setCreateForm] = useState({
     collection: '',
+    imageKey: null,
     imageUrl: '',
     isPurchasable: true,
     name: '',
@@ -66,11 +68,13 @@ function AdminPage() {
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false)
   const [createError, setCreateError] = useState(null)
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
+  const [showCustomSlug, setShowCustomSlug] = useState(false)
 
   const handleOpenCreate = () => {
     setIsCreating(true)
     setCreateForm({
       collection: '',
+      imageKey: null,
       imageUrl: '',
       isPurchasable: true,
       name: '',
@@ -82,12 +86,14 @@ function AdminPage() {
     setCreateError(null)
     setSaveSuccess(null)
     setIsSlugManuallyEdited(false)
+    setShowCustomSlug(false)
   }
 
   const handleCancelCreate = () => {
     setIsCreating(false)
     setCreateError(null)
     setIsSlugManuallyEdited(false)
+    setShowCustomSlug(false)
   }
 
   const handleNameChange = (name) => {
@@ -103,6 +109,11 @@ function AdminPage() {
   const handleSlugChange = (slug) => {
     setIsSlugManuallyEdited(true)
     setCreateForm((prev) => ({ ...prev, slug: slug.toLowerCase() }))
+  }
+
+  const handleResetSlugToName = () => {
+    setIsSlugManuallyEdited(false)
+    setCreateForm((prev) => ({ ...prev, slug: generateSlug(prev.name) }))
   }
 
   const handleSaveCreate = async (e) => {
@@ -511,24 +522,49 @@ function AdminPage() {
                       value={createForm.name}
                       onChange={(e) => handleNameChange(e.target.value)}
                     />
+                    <div className="admin-slug-preview-row">
+                      <span className="admin-slug-preview">
+                        Đường dẫn: <code>/san-pham/{createForm.slug || '...'}</code>
+                      </span>
+                      {!showCustomSlug ? (
+                        <button
+                          className="button button--text button--small admin-slug-toggle"
+                          type="button"
+                          onClick={() => setShowCustomSlug(true)}
+                        >
+                          Tùy chỉnh đường dẫn
+                        </button>
+                      ) : (
+                        <button
+                          className="button button--text button--small admin-slug-reset"
+                          title="Tạo lại đường dẫn dựa trên tên sản phẩm hiện tại"
+                          type="button"
+                          onClick={handleResetSlugToName}
+                        >
+                          Đặt lại theo tên sản phẩm
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="admin-form-group">
-                    <label htmlFor="create-slug">
-                      Slug định danh (URL) <span className="admin-required">*</span>
-                    </label>
-                    <input
-                      id="create-slug"
-                      className="admin-input-text"
-                      disabled={isSubmittingCreate}
-                      maxLength={100}
-                      placeholder="nang-diu-ban-mai"
-                      required
-                      type="text"
-                      value={createForm.slug}
-                      onChange={(e) => handleSlugChange(e.target.value)}
-                    />
-                  </div>
+                  {showCustomSlug && (
+                    <div className="admin-form-group admin-custom-slug-panel">
+                      <label htmlFor="create-slug">Đường dẫn</label>
+                      <input
+                        id="create-slug"
+                        className="admin-input-text"
+                        disabled={isSubmittingCreate}
+                        maxLength={100}
+                        placeholder="nang-diu-ban-mai"
+                        type="text"
+                        value={createForm.slug}
+                        onChange={(e) => handleSlugChange(e.target.value)}
+                      />
+                      <span className="admin-helper-text">
+                        Đường dẫn được tự tạo từ tên sản phẩm.
+                      </span>
+                    </div>
+                  )}
 
                   <div className="admin-form-group">
                     <label htmlFor="create-price">
@@ -577,17 +613,15 @@ function AdminPage() {
                     />
                   </div>
 
-                  <div className="admin-form-group">
-                    <label htmlFor="create-image">Đường dẫn ảnh chính (URL hoặc asset)</label>
-                    <input
-                      id="create-image"
-                      className="admin-input-text"
+                  <div className="admin-form-group admin-form-group--uploader">
+                    <ProductImageUploader
                       disabled={isSubmittingCreate}
-                      maxLength={500}
-                      placeholder="https://... hoặc /assets/..."
-                      type="text"
+                      getToken={getToken}
+                      mediaKey={createForm.imageKey}
                       value={createForm.imageUrl}
-                      onChange={(e) => setCreateForm((f) => ({ ...f, imageUrl: e.target.value }))}
+                      onChange={({ key, url }) =>
+                        setCreateForm((f) => ({ ...f, imageKey: key, imageUrl: url }))
+                      }
                     />
                   </div>
                 </div>

@@ -522,3 +522,216 @@
   gap: 12px;
   margin-top: 8px;
 }
+
+/* Slug auto-generation & custom path */
+.admin-slug-preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.admin-slug-preview {
+  color: var(--color-ink-muted, #767676);
+}
+
+.admin-slug-preview code {
+  font-family: var(--font-mono, monospace);
+  color: var(--color-ink, #212121);
+  background: var(--color-surface-soft, #f7f6f4);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.admin-slug-toggle,
+.admin-slug-reset {
+  padding: 0;
+  font-size: 11px;
+  color: var(--color-ink-muted, #767676);
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.admin-slug-toggle:hover,
+.admin-slug-reset:hover {
+  color: var(--color-ink, #212121);
+}
+
+.admin-custom-slug-panel {
+  background: var(--color-surface-soft, #faf9f7);
+  border: 1px dashed var(--color-border, #e5e3df);
+  padding: 10px 12px;
+}
+
+.admin-helper-text {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--color-ink-muted, #767676);
+}
+
+/* Reusable Product Image Uploader */
+.admin-image-uploader {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-image-uploader__label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-ink, #212121);
+}
+
+.admin-image-uploader__input {
+  display: none;
+}
+
+.admin-image-uploader__dropzone {
+  border: 1px dashed var(--color-border, #d8d5ce);
+  background: var(--color-surface-soft, #faf9f7);
+  padding: 16px;
+  text-align: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.admin-image-uploader__dropzone--dragging {
+  border-color: var(--color-ink, #212121);
+  background: var(--color-surface, #ffffff);
+}
+
+.admin-image-uploader__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-image-uploader__btn {
+  margin-bottom: 2px;
+}
+
+.admin-image-uploader__formats {
+  font-size: 11px;
+  color: var(--color-ink, #212121);
+  font-weight: 500;
+  margin: 0;
+}
+
+.admin-image-uploader__hint {
+  font-size: 11px;
+  color: var(--color-ink-muted, #767676);
+  margin: 0;
+}
+
+.admin-image-uploader__preview-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border, #e5e3df);
+  background: var(--color-surface, #ffffff);
+  transition: opacity 0.2s ease;
+}
+
+.admin-image-uploader__preview--fading {
+  opacity: 0;
+}
+
+.admin-image-uploader__thumb-wrapper {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--color-surface-soft, #f7f6f4);
+}
+
+.admin-image-uploader__thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.admin-image-uploader__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--color-ink, #212121);
+}
+
+.admin-image-uploader__overlay p {
+  margin: 0;
+}
+
+.admin-image-uploader__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-image-uploader__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-ink-muted, #767676);
+  padding: 12px;
+}
+
+.admin-image-uploader__status p {
+  margin: 0;
+}
+
+.admin-image-uploader__error {
+  padding: 8px 12px;
+  background: #fdf5f5;
+  border: 1px solid #f5d4d4;
+  color: var(--error, #b83232);
+  font-size: 12px;
+}
+
+.admin-image-uploader__error p {
+  margin: 0;
+}
+
+.admin-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border, #d8d5ce);
+  border-top-color: var(--color-ink, #212121);
+  border-radius: 50%;
+  animation: admin-spin 0.6s linear infinite;
+}
+
+@keyframes admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-spinner {
+    animation: none;
+    border-top-color: var(--color-border, #d8d5ce);
+    opacity: 0.7;
+  }
+  .admin-image-uploader__preview-container {
+    transition: none;
+  }
+}

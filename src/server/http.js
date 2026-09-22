@@ -108,7 +108,9 @@ export function withBaselineSecurityHeaders(response, request) {
 
 export function withApiHeaders(response, request, requestId, allowedOrigin = null) {
   const headers = new Headers(response.headers)
-  headers.set('Cache-Control', 'no-store')
+  if (!headers.has('Cache-Control')) {
+    headers.set('Cache-Control', 'no-store')
+  }
   headers.set('X-Request-ID', requestId)
   headers.set('Access-Control-Expose-Headers', 'X-Request-ID')
   if (allowedOrigin) {
