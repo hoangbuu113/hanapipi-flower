@@ -4,6 +4,7 @@ import { getProductById } from '../data/products'
 import { isDeliveryDateAvailable } from '../utils/delivery'
 import { buildCartItemKey, normalizeGiftAddOns, normalizeStoredCartItems } from '../utils/cart'
 import { isPurchasableProduct } from '../utils/productCommerce'
+import { normalizeStoredWishlistIds } from '../utils/wishlist'
 
 const cartStorageKey = 'hanapipi-flower:cart'
 const wishlistStorageKey = 'hanapipi-flower:wishlist'
@@ -42,7 +43,7 @@ export function CommerceProvider({ children }) {
   const [deliveryDraft, setDeliveryDraft] = useState(cartState.delivery)
   const [wishlistIds, setWishlistIds] = useState(() => {
     const stored = readStorage(wishlistStorageKey, [])
-    return Array.isArray(stored) ? stored : []
+    return normalizeStoredWishlistIds(stored)
   })
   const [isCartOpen, setIsCartOpen] = useState(false)
 
