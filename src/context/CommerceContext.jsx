@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CommerceContext } from './commerceStore'
-import { getProductById } from '../data/products'
 import { isDeliveryDateAvailable } from '../utils/delivery'
-import { buildCartItemKey, normalizeGiftAddOns, normalizeStoredCartItems } from '../utils/cart'
-import { isPurchasableProduct } from '../utils/productCommerce'
+import { buildCartItemKey, normalizeGiftAddOns, normalizeStoredCartItems, normalizeStoredGiftAddOns } from '../utils/cart'
 import { normalizeStoredWishlistIds } from '../utils/wishlist'
+import { resolveCartItems } from '../services/cartResolver'
 
 const cartStorageKey = 'hanapipi-flower:cart'
 const wishlistStorageKey = 'hanapipi-flower:wishlist'
+
+const emptyCart = {
+  error: null,
+  hasUnavailableItems: false,
+  isFallback: false,
+  items: [],
+  ok: true,
+  subtotal: 0,
+}
 
 function readStorage(key, fallback) {
   try {
@@ -20,12 +28,7 @@ function readStorage(key, fallback) {
 
 function readCartStorage() {
   const stored = readStorage(cartStorageKey, [])
-  const normalizeStoredItems = (items) => normalizeStoredCartItems(
-    items,
-    (productId) => isPurchasableProduct(getProductById(productId)),
-  )
-
-  if (Array.isArray(stored)) return { delivery: { date: null, slot: null }, items: normalizeStoredItems(stored) }
+  const items = normalizeStoredCartItems(Array.isArray(stored) ? stored : stored?.items)
   const storedDelivery = stored?.delivery ?? { date: null, slot: null }
   const delivery = isDeliveryDateAvailable(storedDelivery.date)
     ? storedDelivery
@@ -33,13 +36,13 @@ function readCartStorage() {
 
   return {
     delivery,
-    items: Array.isArray(stored?.items) ? normalizeStoredItems(stored.items) : [],
+    items,
   }
 }
 
 export function CommerceProvider({ children }) {
   const [cartState] = useState(readCartStorage)
-  const [cartItems, setCartItems] = useState(cartState.items)
+  const [storedCartItems, setStoredCartItems] = useState(cartState.items)
   const [deliveryDraft, setDeliveryDraft] = useState(cartState.delivery)
   const [wishlistIds, setWishlistIds] = useState(() => {
     const stored = readStorage(wishlistStorageKey, [])
@@ -47,56 +50,131 @@ export function CommerceProvider({ children }) {
   })
   const [isCartOpen, setIsCartOpen] = useState(false)
 
-  useEffect(() => { window.localStorage.setItem(cartStorageKey, JSON.stringify({ items: cartItems, delivery: deliveryDraft })) }, [cartItems, deliveryDraft])
-  useEffect(() => { window.localStorage.setItem(wishlistStorageKey, JSON.stringify(wishlistIds)) }, [wishlistIds])
+  const hasItems = storedCartItems.length > 0
+  const [isFetching, setIsFetching] = useState(hasItems)
+  const [rawCartError, setRawCartError] = useState(null)
+  const [reloadIndex, setReloadIndex] = useState(0)
+  const [resolvedCart, setResolvedCart] = useState(emptyCart)
+
+  useEffect(() => {
+    window.localStorage.setItem(cartStorageKey, JSON.stringify({ delivery: deliveryDraft, items: storedCartItems }))
+  }, [storedCartItems, deliveryDraft])
+
+  useEffect(() => {
+    window.localStorage.setItem(wishlistStorageKey, JSON.stringify(wishlistIds))
+  }, [wishlistIds])
+
+  useEffect(() => {
+    if (!hasItems) return
+
+    const controller = new AbortController()
+    let isSubscribed = true
+
+    resolveCartItems(storedCartItems, { signal: controller.signal })
+      .then((result) => {
+        if (!isSubscribed) return
+        if (result.ok) {
+          setResolvedCart(result)
+          setRawCartError(null)
+        } else {
+          setRawCartError(result.error)
+        }
+      })
+      .catch((err) => {
+        if (!isSubscribed || err?.name === 'AbortError') return
+        setRawCartError({ code: 'CLIENT_ERROR', message: 'Đã có lỗi xảy ra khi tải giỏ hàng.' })
+      })
+      .finally(() => {
+        if (isSubscribed) {
+          setIsFetching(false)
+        }
+      })
+
+    return () => {
+      isSubscribed = false
+      controller.abort()
+    }
+  }, [hasItems, storedCartItems, reloadIndex])
+
+  const isCartLoading = hasItems && isFetching
+  const currentResolvedCart = hasItems ? resolvedCart : emptyCart
+  const cartError = hasItems ? rawCartError : null
+  const effectiveCartItems = useMemo(() => {
+    if (!hasItems) return []
+    return currentResolvedCart.items.length > 0 ? currentResolvedCart.items : storedCartItems
+  }, [hasItems, currentResolvedCart.items, storedCartItems])
 
   const value = useMemo(() => ({
-    cartItems,
-    wishlistIds,
-    isCartOpen,
+    cartCount: storedCartItems.reduce((total, item) => total + item.quantity, 0),
+    cartError,
+    cartItems: effectiveCartItems,
+    cartSubtotal: currentResolvedCart.subtotal,
     deliveryDraft,
-    cartCount: cartItems.reduce((total, item) => total + item.quantity, 0),
-    toggleWishlist: (productId) => setWishlistIds((ids) => ids.includes(productId) ? ids.filter((id) => id !== productId) : [...ids, productId]),
-    addToCart: ({ productId, sizeId, wrappingId, quantity, unitPrice, giftAddOns = [] }) => setCartItems((items) => {
-      if (!isPurchasableProduct(getProductById(productId))) return items
+    hasUnavailableItems: currentResolvedCart.hasUnavailableItems,
+    isCartLoading,
+    isCartOpen,
+    rawCartItems: storedCartItems,
+    retryCart: () => {
+      setIsFetching(true)
+      setRawCartError(null)
+      setReloadIndex((current) => current + 1)
+    },
+    wishlistIds,
+    toggleWishlist: (productId) => setWishlistIds((ids) => (ids.includes(productId) ? ids.filter((id) => id !== productId) : [...ids, productId])),
+    addToCart: ({ productId, sizeId, wrappingId, quantity, unitPrice, giftAddOns = [] }) => {
+      setIsFetching(true)
+      setStoredCartItems((items) => {
+        const addOns = normalizeStoredGiftAddOns(giftAddOns)
+        const key = buildCartItemKey({ giftAddOns: normalizeGiftAddOns(addOns), productId, sizeId, wrappingId })
+        const found = items.find((item) => item.key === key)
+        return found
+          ? items.map((item) => (item.key === key ? { ...item, quantity: item.quantity + quantity } : item))
+          : [...items, { giftAddOns: addOns, key, productId, quantity, sizeId, unitPrice, wrappingId }]
+      })
+    },
+    addCustomBouquet: (bouquet) => {
+      setIsFetching(true)
+      setStoredCartItems((items) => [
+        ...items,
+        { ...bouquet, custom: true, key: `custom:${Date.now()}`, quantity: 1 },
+      ])
+    },
+    updateQuantity: (key, quantity) => {
+      setIsFetching(true)
+      setStoredCartItems((items) => (quantity < 1
+        ? items.filter((item) => item.key !== key)
+        : items.map((item) => (item.key === key ? { ...item, quantity } : item))))
+    },
+    removeGiftAddOn: (key, addOnId) => {
+      setIsFetching(true)
+      setStoredCartItems((items) => {
+        const selectedItem = items.find((item) => item.key === key)
+        if (!selectedItem || selectedItem.custom) return items
 
-      const addOns = normalizeGiftAddOns(giftAddOns)
-      const key = buildCartItemKey({ productId, sizeId, wrappingId, giftAddOns: addOns })
-      const found = items.find((item) => item.key === key)
-      return found
-        ? items.map((item) => item.key === key ? { ...item, quantity: item.quantity + quantity } : item)
-        : [...items, { key, productId, sizeId, wrappingId, quantity, unitPrice, giftAddOns: addOns }]
-    }),
-    addCustomBouquet: (bouquet) => setCartItems((items) => [
-      ...items,
-      { ...bouquet, custom: true, key: `custom:${Date.now()}`, quantity: 1 },
-    ]),
-    updateQuantity: (key, quantity) => setCartItems((items) => quantity < 1 ? items.filter((item) => item.key !== key) : items.map((item) => item.key === key ? { ...item, quantity } : item)),
-    removeGiftAddOn: (key, addOnId) => setCartItems((items) => {
-      const selectedItem = items.find((item) => item.key === key)
-      if (!selectedItem || selectedItem.custom) return items
+        const giftAddOns = (selectedItem.giftAddOns || []).filter((addOn) => addOn.id !== addOnId)
+        const nextKey = buildCartItemKey({ ...selectedItem, giftAddOns: normalizeGiftAddOns(giftAddOns) })
+        const matchingItem = items.find((item) => item.key === nextKey && item.key !== key)
 
-      const giftAddOns = normalizeGiftAddOns(selectedItem.giftAddOns).filter((addOn) => addOn.id !== addOnId)
-      const nextKey = buildCartItemKey({ ...selectedItem, giftAddOns })
-      const matchingItem = items.find((item) => item.key === nextKey && item.key !== key)
+        if (matchingItem) {
+          return items
+            .filter((item) => item.key !== key)
+            .map((item) => (item.key === nextKey ? { ...item, quantity: item.quantity + selectedItem.quantity } : item))
+        }
 
-      if (matchingItem) {
-        return items
-          .filter((item) => item.key !== key)
-          .map((item) => item.key === nextKey ? { ...item, quantity: item.quantity + selectedItem.quantity } : item)
-      }
-
-      return items.map((item) => item.key === key ? { ...item, key: nextKey, giftAddOns } : item)
-    }),
-    removeFromCart: (key) => setCartItems((items) => items.filter((item) => item.key !== key)),
+        return items.map((item) => (item.key === key ? { ...item, giftAddOns, key: nextKey } : item))
+      })
+    },
+    removeFromCart: (key) => {
+      setStoredCartItems((items) => items.filter((item) => item.key !== key))
+    },
     setDeliveryDraft: (draft) => setDeliveryDraft(draft),
     clearCart: () => {
-      setCartItems([])
+      setStoredCartItems([])
       setDeliveryDraft({ date: null, slot: null })
     },
     openCart: () => setIsCartOpen(true),
     closeCart: () => setIsCartOpen(false),
-  }), [cartItems, deliveryDraft, isCartOpen, wishlistIds])
+  }), [cartError, currentResolvedCart.hasUnavailableItems, currentResolvedCart.subtotal, deliveryDraft, effectiveCartItems, isCartLoading, isCartOpen, storedCartItems, wishlistIds])
 
   return <CommerceContext.Provider value={value}>{children}</CommerceContext.Provider>
 }

@@ -10,36 +10,20 @@ export function normalizeGiftAddOns(value) {
     }))
 }
 
-export function normalizeStoredCartItems(items, isPurchasableProductId) {
-  if (!Array.isArray(items)) return []
-
-  return items.reduce((normalizedItems, item) => {
-    if (!item) return normalizedItems
-    if (item.custom) return [...normalizedItems, item]
-    if (!isPurchasableProductId(item.productId)) return normalizedItems
-
-    const giftAddOns = normalizeGiftAddOns(item.giftAddOns)
-    const key = buildCartItemKey({ ...item, giftAddOns })
-    const quantity = Number.isFinite(Number(item.quantity)) ? Math.max(1, Number(item.quantity)) : 1
-    const matchingIndex = normalizedItems.findIndex((entry) => entry.key === key)
-    if (matchingIndex < 0) return [...normalizedItems, { ...item, key, quantity, giftAddOns }]
-
-    return normalizedItems.map((entry, index) => index === matchingIndex
-      ? { ...entry, quantity: entry.quantity + quantity }
-      : entry)
-  }, [])
-}
+export { normalizeStoredCartItem, normalizeStoredCartItems, normalizeStoredGiftAddOns } from './cartStorage'
 
 export function giftAddOnsSubtotal(item) {
   return normalizeGiftAddOns(item?.giftAddOns).reduce((total, addOn) => total + addOn.price, 0)
 }
 
 export function cartItemUnitTotal(item) {
+  if (item?.isAvailable === false) return 0
   const basePrice = Number.isFinite(Number(item?.unitPrice)) ? Number(item.unitPrice) : 0
   return basePrice + giftAddOnsSubtotal(item)
 }
 
 export function cartItemLineTotal(item) {
+  if (item?.isAvailable === false) return 0
   const quantity = Number.isFinite(Number(item?.quantity)) ? Math.max(0, Number(item.quantity)) : 0
   return cartItemUnitTotal(item) * quantity
 }
