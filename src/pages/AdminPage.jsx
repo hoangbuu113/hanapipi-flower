@@ -28,6 +28,7 @@ import {
 } from '../utils/order'
 import { formatCurrency } from '../utils/formatCurrency'
 import ProductImageUploader from '../components/admin/ProductImageUploader'
+import { resolveMediaSrc } from '../utils/media'
 import './AdminPage.css'
 
 const STATUS_LABELS = {
@@ -1303,7 +1304,7 @@ function AdminPage() {
                     const isPriceless = product.purchaseType === 'priceless' || product.priceVnd == null
                     const isProtected = product.slug === 'no-watering-flower' || isPriceless
                     const isArchivePending = archiveProductId === product.id
-                    const imageSrc = product.media?.[0]?.src
+                    const imageSrc = resolveMediaSrc(product.media?.[0]?.src)
                     const statusLabel = STATUS_LABELS[product.status] || product.status
 
                     return (

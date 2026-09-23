@@ -1,4 +1,5 @@
 import { products as staticProducts } from '../data/products.js'
+import { resolveMediaSrc } from '../utils/media.js'
 
 export const STATUS_MAP_FROM_API = {
   available: 'Có sẵn',
@@ -10,17 +11,12 @@ const staticProductById = new Map(staticProducts.map((product) => [product.id, p
 
 function resolveImageSrc(apiSrc, fallbackSrc) {
   if (!apiSrc) return fallbackSrc ?? ''
-  if (
-    typeof apiSrc === 'string' &&
-    (apiSrc.startsWith('http://') ||
-      apiSrc.startsWith('https://') ||
-      apiSrc.startsWith('data:') ||
-      apiSrc.startsWith('/assets/') ||
-      apiSrc.startsWith('/api/'))
-  ) {
-    return apiSrc
-  }
-  return fallbackSrc ?? apiSrc
+  const resolved = resolveMediaSrc(apiSrc)
+  // resolveMediaSrc returns the original src (or an R2 URL) when it can
+  // resolve; prefer the static fallback when the original was an opaque
+  // seeded path that resolveMediaSrc turned into an R2 URL but a Vite-
+  // bundled static import is available for the storefront.
+  return resolved === apiSrc ? apiSrc : (fallbackSrc ?? resolved)
 }
 
 function mapVariantsToSizeOptions(variants) {
