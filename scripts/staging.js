@@ -36,9 +36,13 @@ async function deployStaging() {
     env: { ...process.env, CLOUDFLARE_ENV: 'staging' },
   })
   const verified = await verifyStagingBuild()
+  const deployEnv = { ...process.env }
+  // CLOUDFLARE_ENV selects a Wrangler environment at deploy time. The generated
+  // snapshot already contains the resolved staging target, so do not re-select it.
+  delete deployEnv.CLOUDFLARE_ENV
 
   run(process.execPath, [wranglerCli, 'deploy', '--config', path.relative(projectRoot, verified.configPath)], {
-    env: { ...process.env, CLOUDFLARE_ENV: 'staging' },
+    env: deployEnv,
   })
 }
 
@@ -50,6 +54,7 @@ try {
     process.stdout.write(`Staging Worker: ${result.worker}\n`)
     process.stdout.write(`Staging D1: ${result.d1}\n`)
     process.stdout.write(`Staging R2: ${result.r2}\n`)
+    process.stdout.write(`Staging API_V1_ENABLED: ${result.apiV1Enabled}\n`)
   } else if (mode === 'deploy') {
     await deployStaging()
   } else {

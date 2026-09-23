@@ -6,6 +6,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const configPath = path.resolve(projectRoot, 'dist', 'server', 'wrangler.json')
 
 const expected = {
+  apiV1Enabled: 'true',
   name: 'hanapipi-flower',
   d1: 'hanapipi-flower-staging',
   r2: 'hanapipi-media-staging',
@@ -43,6 +44,9 @@ export async function verifyStagingBuild() {
   if (r2?.bucket_name !== expected.r2) {
     mismatches.push(`R2 MEDIA_BUCKET is ${JSON.stringify(r2?.bucket_name)}, expected ${JSON.stringify(expected.r2)}`)
   }
+  if (config.vars?.API_V1_ENABLED !== expected.apiV1Enabled) {
+    mismatches.push(`API_V1_ENABLED is ${JSON.stringify(config.vars?.API_V1_ENABLED)}, expected ${JSON.stringify(expected.apiV1Enabled)}`)
+  }
 
   if (mismatches.length > 0) {
     throw new Error(`Staging build verification failed:\n- ${mismatches.join('\n- ')}`)
@@ -53,6 +57,7 @@ export async function verifyStagingBuild() {
     worker: config.name,
     d1: d1.database_name,
     r2: r2.bucket_name,
+    apiV1Enabled: config.vars.API_V1_ENABLED,
   }
 }
 
@@ -65,6 +70,7 @@ if (isMain) {
     process.stdout.write(`Staging Worker: ${result.worker}\n`)
     process.stdout.write(`Staging D1: ${result.d1}\n`)
     process.stdout.write(`Staging R2: ${result.r2}\n`)
+    process.stdout.write(`Staging API_V1_ENABLED: ${result.apiV1Enabled}\n`)
   } catch (error) {
     process.stderr.write(`${error.message}\n`)
     process.exitCode = 1
