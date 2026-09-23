@@ -1,4 +1,3 @@
-import { products } from '../data/products.js'
 import { normalizeGiftAddOns } from './cart'
 
 export function getCartItemPresentation(item) {
@@ -10,13 +9,12 @@ export function getCartItemPresentation(item) {
       name: item.name,
     }
   }
-  const product = products.find((entry) => entry.id === item.productId)
   const size = (item.size && typeof item.size === 'object' && item.size.label)
     ? item.size
-    : product?.sizeOptions?.find((option) => option.id === item.sizeId)
+    : (item.sizeOptions?.find((option) => option.id === item.sizeId) ?? null)
   const wrapping = (item.wrapping && typeof item.wrapping === 'object' && item.wrapping.label)
     ? item.wrapping
-    : product?.wrappingOptions?.find((option) => option.id === item.wrappingId)
+    : (item.wrappingOptions?.find((option) => option.id === item.wrappingId) ?? null)
 
   const sizeLabel = typeof item.size === 'string' ? item.size : size?.label
   const wrappingLabel = typeof item.wrapping === 'string' ? item.wrapping : wrapping?.label
@@ -24,7 +22,7 @@ export function getCartItemPresentation(item) {
   return {
     details: [sizeLabel, wrappingLabel].filter(Boolean).join(' · '),
     giftAddOns: normalizeGiftAddOns(item.giftAddOns),
-    name: item.name || product?.name || 'Bó hoa Hanapipi',
+    name: item.name || 'Bó hoa Hanapipi',
   }
 }
 

@@ -142,6 +142,13 @@
   line-height: 1.55;
 }
 
+.flower-taken-page__error-notice {
+  margin: 16px 0 0;
+  color: var(--error);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 @media (max-width: 719px) {
   .flower-taken-page { padding-top: 28px; }
   .flower-taken-page__layout { grid-template-columns: 1fr; gap: 38px; }

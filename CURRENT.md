@@ -4,35 +4,26 @@ Phase 18 in progress: Secure Admin order management and fulfilment workflow is i
 
 # LAST VERIFIED TASK
 
-Added Admin Order Fulfilment Workflow:
-- Added migration `drizzle/0005_add_order_delivering_status.sql` in D1/SQLite:
-  - Expands `orders.status` CHECK constraint: `IN ('received', 'confirmed', 'preparing', 'delivering', 'out_for_delivery', 'completed', 'cancelled')`.
-  - Recreates child tables `order_items` and `order_item_add_ons` within transaction to prevent foreign key errors.
-  - Registered migration in `schema_versions`.
-- Implemented `src/server/repositories/orderRepository.js`:
-  - `listForAdmin(adminUser)`: Verifies admin role, queries all orders newest first, attaches snapshot item counts and summaries, never exposes decrypted PII or ciphertext.
-  - `getForAdmin(adminUser, idOrCode, options)`: Decrypts fulfilment PII (`buyer`, `recipient`, `address`, `gifting`), reconstructs snapshot items/add-ons, attaches payment presentation DTO, and queries `audit_events` for order history (`auditHistory`).
-  - `confirmPayment(adminUser, idOrCode, options)`: Verifies `payment_status === 'pending'`, conditionally updates `payment_status = 'paid'` and (if `status === 'received'`) `status = 'preparing'`, records `audit_events` (`action: 'order_payment_confirmed'`, `status_before: 'received'`, `status_after: 'preparing'`), returns updated order. Idempotent if already `paid`.
-  - `updateStatus(adminUser, idOrCode, requestedStatus, options)`: Enforces strict state machine transitions (`received` → `preparing` (requires `paid`), `preparing` → `delivering`, `delivering` → `completed`). Rejects invalid backwards/skipped jumps. Conditionally updates `orders.status` and writes `audit_events` (`action: 'order_status_updated'`).
-- Implemented `src/server/api.js`:
-  - Routes: `GET /api/v1/admin/orders`, `GET /api/v1/admin/orders/:id`, `POST /api/v1/admin/orders/:id/confirm-payment`, `POST /api/v1/admin/orders/:id/status`.
-  - Route matchers, 405 Method Not Allowed, origin validation on mutations, and 401/403 guards.
-- Implemented `src/services/adminClient.js`:
-  - `fetchAdminOrders`, `fetchAdminOrderDetail`, `confirmAdminOrderPayment`, `updateAdminOrderStatus`.
-- Updated `src/utils/order.js`:
-  - Formatter mappings: `received` → `'Đã tiếp nhận'`, `preparing`/`processing` → `'Đang chuẩn bị'`, `delivering`/`out_for_delivery` → `'Đang giao'`, `completed` → `'Hoàn tất'`.
-  - Payment status mappings: `pending`/`mock_pending` → `'Chờ thanh toán'`, `paid` → `'Đã thanh toán'`.
-- Updated `src/pages/CheckoutSuccessPage.jsx` & `CheckoutSuccessPage.css`:
-  - Replaces pending QR block with `bank-transfer-box--paid` displaying `❀ Hanapipi đã xác nhận thanh toán` when `payment_status === 'paid'`.
-- Implemented `src/pages/AdminPage.jsx` & `AdminPage.css`:
-  - Orders Fulfilment section with order code, timestamp, recipient, delivery date/slot, total VND, payment badge, status badge, and detail action.
-  - Order Detail Modal: customer/recipient contact, decrypted address & gifting message, ordered items with snapshots, payment details, audit trail history, and context-sensitive action buttons (`Xác nhận đã nhận thanh toán`, `Bắt đầu giao hàng`, `Đánh dấu hoàn tất`) with loading states.
-- Automated test suites:
-  - `test/admin-orders.test.js`: 38/38 pass.
-  - `test:admin`: 151/151 pass.
-  - `test:order`: 134/134 pass.
-  - `test:frontend`: 368/368 pass.
-  - `test:d1`: passed (5 migrations validated).
+Migrated remaining secondary runtime consumers away from static catalogue data:
+- `ConciergeWidget.jsx`:
+  - Product recommendation grounding and candidate resolution uses `fetchShopCatalogue` from `catalogueClient.js`.
+  - Canonical D1 product data (name, price, media) wins over static data.
+  - Inactive/archived products are excluded from purchasable recommendations.
+  - API errors/offline states gracefully fall back to local responses without crashing.
+  - Removed direct import of `src/data/products.js`.
+- `FlowerAlreadyTakenPage.jsx`:
+  - Product lookup uses `fetchProductDetail('no-watering-flower')` from `catalogueClient.js`.
+  - Preserves `no-watering-flower` special invariants: priceless (`priceVnd: null`), non-purchasable (`isPurchasable: false`), protected, and private gallery behavior (`personalFlowerMedia`).
+  - Added loading skeleton and safe error/retry UI.
+  - Removed direct import of `src/data/products.js`.
+- `src/utils/order.js`:
+  - Removed unused static `products` import from `getCartItemPresentation`; uses snapshot/resolved item names, sizes, and wrapping directly.
+- `catalogueClient.js`:
+  - Retained intentional `404 + API_NOT_FOUND` compatibility fallback to static catalogue while `API_V1_ENABLED=false` remains default.
+- Automated tests:
+  - Added `test/secondary-catalogue.test.js`: 13/13 passed.
+  - `test:frontend`: 382/382 passed.
+  - `test:shop`: 12/12 passed.
   - `lint`: 0 warnings, 0 errors.
   - `build`: passed, packaged 5 D1 migration files.
   - `git diff --check`: passed.
@@ -40,7 +31,7 @@ Added Admin Order Fulfilment Workflow:
 
 # CURRENT ARCHITECTURE STATE
 
-React/Vite/Sites serves the SPA through a Cloudflare Worker. Server catalogue/pricing read and mutation authority exists in D1. Server order creation and customer order read authority exists in D1 with AES-GCM encrypted fulfilment PII. Bank-transfer payment presentation with VietQR generation exists on the Worker/D1 with manual/pending confirmation. Admin order fulfilment workflow (`received` / `pending` → Admin confirms payment → `preparing` → `delivering` → `completed`) is implemented with server-authoritative state machine and audit event logging. Media storage authority exists in Cloudflare R2 (`MEDIA_BUCKET`), with D1 storing only media references. Frontend Shop, Product Detail, SearchPage, Homepage, FlowerFinderPage, WishlistPage, Cart, Checkout, and Orders load/submit to D1 APIs with transitional fallback. Admin UI at `/admin` loads both active and archived rows strictly from `GET /api/v1/admin/products`, edits content and commerce fields through `PATCH /api/v1/admin/products/:id`, creates through `POST /api/v1/admin/products`, soft-archives/restores through the explicit action endpoints, uploads/deletes media via `/api/v1/admin/media`, manages sizes/wrapping via `GET/PUT /api/v1/admin/products/:id/variants`, manages gift add-ons via `/api/v1/admin/gift-add-ons`, and manages orders via `/api/v1/admin/orders`. Static `src/data/products.js` is temporarily retained for unmigrated secondary consumers (ConciergeWidget, FlowerAlreadyTakenPage). Clerk React provider wraps the frontend. API v1 remains globally gated closed with `API_V1_ENABLED=false`.
+React/Vite/Sites serves the SPA through a Cloudflare Worker. Server catalogue/pricing read and mutation authority exists in D1. Server order creation and customer order read authority exists in D1 with AES-GCM encrypted fulfilment PII. Bank-transfer payment presentation with VietQR generation exists on the Worker/D1 with manual/pending confirmation. Admin order fulfilment workflow (`received` / `pending` → Admin confirms payment → `preparing` → `delivering` → `completed`) is implemented with server-authoritative state machine and audit event logging. Media storage authority exists in Cloudflare R2 (`MEDIA_BUCKET`), with D1 storing only media references. All frontend consumers (Shop, Product Detail, SearchPage, Homepage, FlowerFinderPage, WishlistPage, Cart, Checkout, Orders, ConciergeWidget, FlowerAlreadyTakenPage) load/submit through D1 APIs with intentional gate fallback in `catalogueClient.js` (`404 + API_NOT_FOUND`). Admin UI at `/admin` loads both active and archived rows strictly from `GET /api/v1/admin/products`, edits content and commerce fields through `PATCH /api/v1/admin/products/:id`, creates through `POST /api/v1/admin/products`, soft-archives/restores through the explicit action endpoints, uploads/deletes media via `/api/v1/admin/media`, manages sizes/wrapping via `GET/PUT /api/v1/admin/products/:id/variants`, manages gift add-ons via `/api/v1/admin/gift-add-ons`, and manages orders via `/api/v1/admin/orders`. Static `src/data/products.js` is retained solely as the intentional API gate fallback inside `catalogueClient.js`. Clerk React provider wraps the frontend. API v1 remains globally gated closed with `API_V1_ENABLED=false`.
 
 **`products.active` semantics**: `active` conflates BOTH visibility AND purchasability. `active = 0` hides from public catalogue AND makes non-purchasable. Archive/Delete implementation must account for this dual meaning.
 
@@ -48,15 +39,15 @@ React/Vite/Sites serves the SPA through a Cloudflare Worker. Server catalogue/pr
 
 # WHAT IS WORKING
 
-Storefront routes and mock commerce flows exist. Catalogue invariant is 24 total / 23 purchasable / 1 priceless. Worker-based Groq concierge and local fallback exist. Clerk token verification, stable-sub D1 mapping, duplicate-safe user upsert, unauthenticated protection, frontend Clerk session, Email OTP verification, `/api/v1/me` hydration, sign-out, server-side `requireAdmin` authorization, `/api/v1/admin/me`, `/admin` route protection, D1-backed catalogue listing/detail, Admin product content and commerce editing, Admin product creation with auto-slug generation and R2-backed real image upload, Admin soft archive/restore, Admin product configuration options management (sizes, wrapping, gift add-ons), protected active+archived Admin listing, `no-watering-flower` invariant enforcement, frontend Shop, Product Detail, SearchPage, Homepage, FlowerFinderPage, WishlistPage, and Cart catalogue API integration, server-authoritative Checkout order creation with AES-GCM PII encryption and D1 snapshot persistence, customer Orders history / read model with server-side owner PII decryption and snapshot immutability, real bank-transfer QR payment presentation (manual/pending confirmation), and Admin order fulfilment workflow (`received` / `pending` → Admin confirms payment → `preparing` → `delivering` → `completed`) are verified.
+Storefront routes and mock commerce flows exist. Catalogue invariant is 24 total / 23 purchasable / 1 priceless. Worker-based Groq concierge and local fallback exist. Clerk token verification, stable-sub D1 mapping, duplicate-safe user upsert, unauthenticated protection, frontend Clerk session, Email OTP verification, `/api/v1/me` hydration, sign-out, server-side `requireAdmin` authorization, `/api/v1/admin/me`, `/admin` route protection, D1-backed catalogue listing/detail, Admin product content and commerce editing, Admin product creation with auto-slug generation and R2-backed real image upload, Admin soft archive/restore, Admin product configuration options management (sizes, wrapping, gift add-ons), protected active+archived Admin listing, `no-watering-flower` invariant enforcement, frontend Shop, Product Detail, SearchPage, Homepage, FlowerFinderPage, WishlistPage, Cart, ConciergeWidget, and FlowerAlreadyTakenPage catalogue API integration, server-authoritative Checkout order creation with AES-GCM PII encryption and D1 snapshot persistence, customer Orders history / read model with server-side owner PII decryption and snapshot immutability, real bank-transfer QR payment presentation (manual/pending confirmation), and Admin order fulfilment workflow (`received` / `pending` → Admin confirms payment → `preparing` → `delivering` → `completed`) are verified.
 
 # WHAT IS PARTIAL
 
-Secondary catalogue consumers (FlowerAlreadyTakenPage, ConciergeWidget) have not switched to D1 catalogue API yet. Hard delete is not implemented.
+Hard delete is not implemented.
 
 # CURRENT BLOCKERS
 
-None. Admin order fulfilment workflow is verified locally and `API_V1_ENABLED` remains intentionally disabled by default.
+None. Secondary catalogue consumers are verified locally and `API_V1_ENABLED` remains intentionally disabled by default.
 
 # OPEN RISKS
 
@@ -68,11 +59,11 @@ None. Admin order fulfilment workflow is verified locally and `API_V1_ENABLED` r
 
 # NEXT BEST TASK
 
-Secondary catalogue consumers migration (ConciergeWidget, FlowerAlreadyTakenPage).
+Perform production-readiness and deployment configuration audit.
 
 # LATEST VERIFIED COMMIT
 
-Use the commit resulting from this Admin Order Fulfilment workflow checkpoint (`Add Admin order fulfilment workflow`) as the authoritative commit reference.
+Use the commit resulting from this Secondary Catalogue Migration checkpoint (`Migrate remaining catalogue consumers`) as the authoritative commit reference.
 
 # DEPLOYMENT STATE
 

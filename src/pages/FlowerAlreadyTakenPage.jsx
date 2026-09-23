@@ -1,23 +1,64 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Container from '../components/Container'
-import { getProductBySlug } from '../data/products'
+import { fetchProductDetail } from '../services/catalogueClient'
 import { personalFlowerMedia } from '../data/personalFlowerMedia'
 import './FlowerAlreadyTakenPage.css'
 
 function FlowerAlreadyTakenPage() {
-  const product = getProductBySlug('no-watering-flower')
-  const image = product.images[0]
+  const [product, setProduct] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let isSubscribed = true
+
+    fetchProductDetail('no-watering-flower', { signal: controller.signal })
+      .then((result) => {
+        if (!isSubscribed) return
+        if (result.ok && result.data) {
+          setProduct(result.data)
+          setError(null)
+        } else {
+          setError(result.error ?? { code: 'API_ERROR', message: 'Không thể tải thông tin bông hoa.' })
+        }
+      })
+      .catch((err) => {
+        if (!isSubscribed || err?.name === 'AbortError') return
+        setError({ code: 'CLIENT_ERROR', message: 'Không thể tải thông tin bông hoa.' })
+      })
+      .finally(() => {
+        if (isSubscribed) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      isSubscribed = false
+      controller.abort()
+    }
+  }, [reloadKey])
+
+  const image = product?.images?.[0] || {
+    fit: 'cover',
+    position: 'center',
+    src: '',
+  }
 
   return (
     <main className="flower-taken-page">
       <Container>
         <div className="flower-taken-page__layout">
-          <figure className="flower-taken-page__media">
-            <img
-              alt="Bông Hoa Không Cần Tưới, phiên bản chỉ để ngắm"
-              src={image.src}
-              style={{ objectFit: image.fit ?? 'cover', objectPosition: image.position }}
-            />
+          <figure className={`flower-taken-page__media${isLoading ? ' is-loading' : ''}`}>
+            {image.src && (
+              <img
+                alt="Bông Hoa Không Cần Tưới, phiên bản chỉ để ngắm"
+                src={image.src}
+                style={{ objectFit: image.fit ?? 'cover', objectPosition: image.position }}
+              />
+            )}
           </figure>
           <div className="flower-taken-page__content">
             <p className="eyebrow">Plot twist nhẹ</p>
@@ -29,9 +70,30 @@ function FlowerAlreadyTakenPage() {
               Giỏ hàng xin phép từ chối. Chủ shop giữ bông hoa này kỹ lắm.
             </p>
             <span className="flower-taken-page__label">Vô giá · Chỉ để ngắm</span>
+            {error && (
+              <p className="flower-taken-page__error-notice" role="alert">
+                {error.message || 'Không thể kết nối đến máy chủ.'}
+              </p>
+            )}
             <div className="flower-taken-page__actions">
-              <Link className="button button--primary" to="/shop">Thôi, xem hoa bán thật</Link>
-              <Link className="button button--secondary" to="/product/no-watering-flower">Quay lại ngắm thêm</Link>
+              {error ? (
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  onClick={() => {
+                    setIsLoading(true)
+                    setError(null)
+                    setReloadKey((k) => k + 1)
+                  }}
+                >
+                  Thử lại
+                </button>
+              ) : (
+                <>
+                  <Link className="button button--primary" to="/shop">Thôi, xem hoa bán thật</Link>
+                  <Link className="button button--secondary" to="/product/no-watering-flower">Quay lại ngắm thêm</Link>
+                </>
+              )}
             </div>
             <small>Cảm ơn bạn đã ghé qua cú lừa có chủ đích.</small>
           </div>

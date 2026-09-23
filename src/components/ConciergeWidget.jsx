@@ -1,7 +1,7 @@
 import { ArrowRight, MessageCircle, Send, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { products, getProductBySlug } from '../data/products'
+import { fetchShopCatalogue } from '../services/catalogueClient'
 import { getConciergeReply } from '../services/conciergeService'
 import { getGroundedCandidates } from '../utils/conciergeGrounding'
 import { OPEN_CONCIERGE_EVENT } from '../utils/conciergeEvents'
@@ -28,11 +28,12 @@ function keepRecentMessages(messages) {
   return messages.slice(-MAX_MESSAGES)
 }
 
-function getPageContext(pathname) {
+function getPageContext(pathname, catalogue = []) {
   const match = pathname.match(/^\/product\/([^/]+)$/)
-  const product = match ? getProductBySlug(decodeURIComponent(match[1])) : null
+  const slug = match ? decodeURIComponent(match[1]) : null
+  const product = slug ? (catalogue.find((item) => item.slug === slug || item.id === slug) ?? null) : null
   return {
-    currentProduct: product ?? null,
+    currentProduct: product,
     pageContext: {
       productId: product?.id ?? null,
       route: pathname,
@@ -120,8 +121,25 @@ function ConciergeWidget() {
   const previousFocusRef = useRef(null)
   const triggerRef = useRef(null)
   const wasOpenRef = useRef(false)
-  const pageData = useMemo(() => getPageContext(location.pathname), [location.pathname])
+  const [catalogue, setCatalogue] = useState([])
+  const pageData = useMemo(() => getPageContext(location.pathname, catalogue), [location.pathname, catalogue])
   const hasConversation = messages.some(({ role }) => role === 'user')
+
+  useEffect(() => {
+    let isSubscribed = true
+    fetchShopCatalogue()
+      .then((result) => {
+        if (isSubscribed && result.ok && Array.isArray(result.data)) {
+          setCatalogue(result.data)
+        }
+      })
+      .catch(() => {
+        // Safe fallback handled in sendMessage
+      })
+    return () => {
+      isSubscribed = false
+    }
+  }, [])
 
   function nextMessageId(prefix) {
     messageIdRef.current += 1
@@ -149,6 +167,29 @@ function ConciergeWidget() {
       return
     }
 
+    let activeCatalogue = catalogue
+    if (!activeCatalogue.length) {
+      try {
+        const result = await fetchShopCatalogue()
+        if (result.ok && Array.isArray(result.data)) {
+          activeCatalogue = result.data
+          setCatalogue(result.data)
+        }
+      } catch {
+        // Continue with empty activeCatalogue
+      }
+    }
+
+    const currentProduct = pageData.currentProduct ?? (
+      location.pathname.match(/^\/product\/([^/]+)$/)
+        ? (activeCatalogue.find((item) => item.slug === decodeURIComponent(location.pathname.match(/^\/product\/([^/]+)$/)[1]) || item.id === decodeURIComponent(location.pathname.match(/^\/product\/([^/]+)$/)[1])) ?? null)
+        : null
+    )
+    const pageContext = {
+      productId: currentProduct?.id ?? null,
+      route: location.pathname,
+    }
+
     const userMessage = {
       id: nextMessageId('user'),
       role: 'user',
@@ -163,13 +204,13 @@ function ConciergeWidget() {
       .map((item) => item.text)
       .concat(trimmedMessage)
       .join(' ')
-    const grounding = getGroundedCandidates(recentUserContext, products)
+    const grounding = getGroundedCandidates(recentUserContext, activeCatalogue)
     const candidates = [...grounding.candidates]
     if (
-      isPurchasableProduct(pageData.currentProduct)
-      && !candidates.some(({ product }) => product.id === pageData.currentProduct.id)
+      isPurchasableProduct(currentProduct)
+      && !candidates.some(({ product }) => product.id === currentProduct.id)
     ) {
-      candidates.unshift({ product: pageData.currentProduct })
+      candidates.unshift({ product: currentProduct })
     }
 
     setMessages((current) => keepRecentMessages([...current, userMessage]))
@@ -179,12 +220,12 @@ function ConciergeWidget() {
 
     const response = await getConciergeReply({
       candidates,
-      catalogue: products,
-      currentProduct: pageData.currentProduct,
+      catalogue: activeCatalogue,
+      currentProduct,
       grounding,
       history: requestHistory,
       message: trimmedMessage,
-      pageContext: pageData.pageContext,
+      pageContext,
     })
 
     const assistantMessage = {
