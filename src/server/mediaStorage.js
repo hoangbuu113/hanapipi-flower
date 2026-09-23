@@ -19,6 +19,10 @@ export function isValidMediaKey(key) {
   return MEDIA_KEY_REGEX.test(key)
 }
 
+export function isManagedMediaKey(key) {
+  return /^prod_media_[A-Za-z0-9_-]+\.(?:jpg|png|webp)$/u.test(key)
+}
+
 export function generateMediaKey(mimeType) {
   const ext = MIME_EXTENSIONS[mimeType] || 'jpg'
   const random = globalThis.crypto.randomUUID().replaceAll('-', '')

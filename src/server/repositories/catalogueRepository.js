@@ -1,4 +1,7 @@
+import { isManagedMediaKey } from '../mediaStorage.js'
+
 const DEFAULT_PAGE_SIZE = 24
+
 const MAX_PAGE_SIZE = 50
 const MAX_OFFSET = 5000
 
@@ -20,6 +23,35 @@ const PRODUCT_SELECT = `
     updated_at_utc, internal_note
   FROM products
 `
+
+function normalizeAdminMedia(imageUrl, productName) {
+  if (imageUrl === null || imageUrl === '') return []
+  if (typeof imageUrl !== 'string') {
+    const err = new Error('ÄÆ°á»ng dáº«n áº£nh khÃ´ng há»£p lá»‡.')
+    err.code = 'INVALID_MEDIA_URL'
+    err.status = 400
+    throw err
+  }
+
+  const trimmed = imageUrl.trim()
+  const match = /^\/api\/v1\/media\/([^/?#]+)$/u.exec(trimmed)
+  if (!match || !isManagedMediaKey(match[1])) {
+    const err = new Error('ÄÆ°á»ng dáº«n áº£nh pháº£i lÃ  tá»‡p Ä‘Ã£ lÆ°u trong kho áº£nh.')
+    err.code = 'INVALID_MEDIA_URL'
+    err.status = 400
+    throw err
+  }
+
+  return [{
+    alt: productName,
+    caption: null,
+    fit: 'cover',
+    position: 'center',
+    poster: null,
+    src: trimmed,
+    type: 'image',
+  }]
+}
 
 function assertD1(db) {
   if (!db?.prepare || !db?.batch) {
@@ -289,6 +321,12 @@ export function createCatalogueRepository(db) {
 
       // Enforce priceless invariant
       if (isPriceless) {
+        if (fields.imageUrl !== undefined) {
+          const err = new Error('Sáº£n pháº©m Ä‘Æ°á»£c báº£o vá»‡ khÃ´ng thá»ƒ thay Ä‘á»•i áº£nh.')
+          err.code = 'PROTECTED_PRODUCT'
+          err.status = 400
+          throw err
+        }
         if (fields.priceVnd !== undefined && fields.priceVnd !== null) {
           const err = new Error('Sản phẩm vô giá không thể gán giá bán.')
           err.code = 'PROTECTED_PRODUCT'
@@ -305,6 +343,13 @@ export function createCatalogueRepository(db) {
 
       const updates = []
       const bindings = []
+
+      // Media metadata is updated only from a canonical R2-backed URL. The
+      // binary upload is completed by the authenticated media endpoint first.
+      if (fields.imageUrl !== undefined) {
+        updates.push('media_json = ?')
+        bindings.push(JSON.stringify(normalizeAdminMedia(fields.imageUrl, product.name)))
+      }
 
       // 1. priceVnd
       if (fields.priceVnd !== undefined) {

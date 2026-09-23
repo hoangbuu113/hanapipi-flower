@@ -8,6 +8,7 @@ import {
   confirmAdminOrderPayment,
   createAdminGiftAddOn,
   createAdminProduct,
+  deleteAdminMedia,
   fetchAdminCatalogue,
   fetchAdminGiftAddOns,
   fetchAdminOrderDetail,
@@ -65,6 +66,7 @@ function AdminPage() {
   const [editingProduct, setEditingProduct] = useState(null)
   const [editForm, setEditForm] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isEditMediaBusy, setIsEditMediaBusy] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(null)
   const [archiveProductId, setArchiveProductId] = useState(null)
@@ -83,6 +85,7 @@ function AdminPage() {
     status: 'available',
   })
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false)
+  const [isCreateMediaBusy, setIsCreateMediaBusy] = useState(false)
   const [createError, setCreateError] = useState(null)
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
   const [showCustomSlug, setShowCustomSlug] = useState(false)
@@ -131,6 +134,7 @@ function AdminPage() {
 
   const handleOpenCreate = () => {
     setIsCreating(true)
+    setIsCreateMediaBusy(false)
     setCreateForm({
       collection: '',
       imageKey: null,
@@ -149,7 +153,11 @@ function AdminPage() {
   }
 
   const handleCancelCreate = () => {
+    if (createForm.imageKey) {
+      void cleanupAdminMediaKeys([createForm.imageKey])
+    }
     setIsCreating(false)
+    setIsCreateMediaBusy(false)
     setCreateError(null)
     setIsSlugManuallyEdited(false)
     setShowCustomSlug(false)
@@ -217,17 +225,39 @@ function AdminPage() {
     const result = await createAdminProduct(payload, { getToken })
     setIsSubmittingCreate(false)
 
+    if (!result.ok || !result.product) {
+      if (createForm.imageKey) {
+        await cleanupAdminMediaKeys([createForm.imageKey])
+        setCreateForm((prev) => ({ ...prev, imageKey: null, imageUrl: '' }))
+      }
+    }
+
     if (result.ok && result.product) {
       setProducts((prev) => [result.product, ...prev])
       setIsCreating(false)
+      setIsCreateMediaBusy(false)
       setSaveSuccess(`Đã tạo thành công sản phẩm "${result.product.name}".`)
     } else {
       setCreateError(result.error?.message || 'Không thể tạo sản phẩm mới.')
     }
   }
 
+  const getManagedMediaKey = (src) => {
+    if (typeof src !== 'string') return null
+    const match = /^\/api\/v1\/media\/(prod_media_[A-Za-z0-9_-]+\.(?:jpg|png|webp))$/u.exec(src)
+    return match?.[1] ?? null
+  }
+
+  const cleanupAdminMediaKeys = async (keys) => {
+    const uniqueKeys = [...new Set(Array.isArray(keys) ? keys : [])].filter(Boolean)
+    await Promise.all(uniqueKeys.map((key) => deleteAdminMedia(key, { getToken }).catch(() => null)))
+  }
+
   const handleStartEdit = (product) => {
+    const originalImageUrl = product.media?.[0]?.src ?? ''
+    const originalImageKey = getManagedMediaKey(originalImageUrl)
     setEditingProduct(product)
+    setIsEditMediaBusy(false)
     setEditForm({
       careNote: product.careNote ?? '',
       collection: product.collection ?? '',
@@ -235,13 +265,20 @@ function AdminPage() {
       composition: Array.isArray(product.composition) ? product.composition.join(', ') : '',
       deliveryNote: product.deliveryNote ?? '',
       description: product.description ?? '',
+      imageChanged: false,
+      imageKey: originalImageKey,
+      imageUrl: resolveMediaSrc(originalImageUrl),
       internalNote: product.internalNote ?? '',
       isPurchasable: Boolean(product.isPurchasable),
       moods: Array.isArray(product.moods) ? product.moods.join(', ') : '',
       name: product.name ?? '',
       occasions: Array.isArray(product.occasions) ? product.occasions.join(', ') : '',
+      mediaCleanupKeys: [],
+      originalImageKey,
+      originalImageUrl: resolveMediaSrc(originalImageUrl),
       priceVnd: product.priceVnd ?? '',
       shortDescription: product.shortDescription ?? '',
+      stagedMediaKeys: [],
       status: product.status ?? 'available',
     })
     setSaveError(null)
@@ -249,7 +286,11 @@ function AdminPage() {
   }
 
   const handleCancelEdit = () => {
+    if (editForm?.stagedMediaKeys?.length) {
+      void cleanupAdminMediaKeys(editForm.stagedMediaKeys)
+    }
     setEditingProduct(null)
+    setIsEditMediaBusy(false)
     setEditForm(null)
     setSaveError(null)
   }
@@ -333,13 +374,31 @@ function AdminPage() {
       payload.isPurchasable = editingProduct.active ? editForm.isPurchasable : (editForm.isPurchasable && editingProduct.active)
     }
 
+    if (editForm.imageChanged) {
+      payload.imageUrl = editForm.imageUrl
+    }
+
     const productId = editingProduct.id
     const result = await updateAdminProduct(productId, payload, { getToken })
     setIsSaving(false)
 
+    if (!result.ok || !result.product) {
+      await cleanupAdminMediaKeys(editForm.stagedMediaKeys)
+      setEditForm((prev) => ({
+        ...prev,
+        imageChanged: false,
+        imageKey: prev.originalImageKey,
+        imageUrl: prev.originalImageUrl,
+        mediaCleanupKeys: [],
+        stagedMediaKeys: [],
+      }))
+    }
+
     if (result.ok && result.product) {
+      await cleanupAdminMediaKeys(editForm.mediaCleanupKeys)
       setProducts((prev) => prev.map((p) => (p.id === result.product.id ? result.product : p)))
       setEditingProduct(null)
+      setIsEditMediaBusy(false)
       setEditForm(null)
       setSaveSuccess(`Đã cập nhật thành công "${result.product.name}".`)
     } else {
@@ -1231,9 +1290,10 @@ function AdminPage() {
 
                   <div className="admin-form-group admin-form-group--uploader">
                     <ProductImageUploader
-                      disabled={isSubmittingCreate}
+                      disabled={isSubmittingCreate || isCreateMediaBusy}
                       getToken={getToken}
                       mediaKey={createForm.imageKey}
+                      onBusyChange={setIsCreateMediaBusy}
                       value={createForm.imageUrl}
                       onChange={({ key, url }) =>
                         setCreateForm((f) => ({ ...f, imageKey: key, imageUrl: url }))
@@ -1247,7 +1307,7 @@ function AdminPage() {
                   <input
                     id="create-short-desc"
                     className="admin-input-text"
-                    disabled={isSubmittingCreate}
+                    disabled={isSubmittingCreate || isCreateMediaBusy}
                     maxLength={320}
                     placeholder="Mô tả tóm tắt về loại hoa, màu sắc..."
                     type="text"
@@ -1277,14 +1337,14 @@ function AdminPage() {
                 <div className="admin-create-actions">
                   <button
                     className="button button--primary"
-                    disabled={isSubmittingCreate}
+                    disabled={isSubmittingCreate || isCreateMediaBusy}
                     type="submit"
                   >
                     {isSubmittingCreate ? 'Đang tạo sản phẩm...' : 'Tạo sản phẩm'}
                   </button>
                   <button
                     className="button button--text"
-                    disabled={isSubmittingCreate}
+                    disabled={isSubmittingCreate || isCreateMediaBusy}
                     type="button"
                     onClick={handleCancelCreate}
                   >
@@ -1564,6 +1624,36 @@ function AdminPage() {
                   </div>
                 </fieldset>
 
+                {editingProduct.slug !== 'no-watering-flower' && (
+                  <fieldset className="admin-edit-fieldset">
+                    <legend>Ảnh sản phẩm</legend>
+                    <ProductImageUploader
+                      deferDelete
+                      disabled={isSaving || isEditMediaBusy}
+                      getToken={getToken}
+                      mediaKey={editForm.imageKey}
+                      onBusyChange={setIsEditMediaBusy}
+                      value={editForm.imageUrl}
+                      onChange={({ key, previousKey, url }) => setEditForm((prev) => {
+                        const mediaCleanupKeys = previousKey && previousKey !== key
+                          ? [...new Set([...prev.mediaCleanupKeys, previousKey])]
+                          : prev.mediaCleanupKeys
+                        const stagedMediaKeys = key && key !== prev.originalImageKey
+                          ? [...new Set([...prev.stagedMediaKeys, key])]
+                          : prev.stagedMediaKeys
+                        return {
+                          ...prev,
+                          imageChanged: true,
+                          imageKey: key,
+                          imageUrl: url,
+                          mediaCleanupKeys,
+                          stagedMediaKeys,
+                        }
+                      })}
+                    />
+                  </fieldset>
+                )}
+
                 {/* Group 2: Nội dung hiển thị */}
                 <fieldset className="admin-edit-fieldset">
                   <legend>Nội dung hiển thị</legend>
@@ -1707,14 +1797,14 @@ function AdminPage() {
                 <div className="admin-modal__actions">
                   <button
                     className="button button--primary"
-                    disabled={isSaving}
+                    disabled={isSaving || isEditMediaBusy}
                     type="submit"
                   >
                     {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
                   </button>
                   <button
                     className="button button--text"
-                    disabled={isSaving}
+                    disabled={isSaving || isEditMediaBusy}
                     type="button"
                     onClick={handleCancelEdit}
                   >

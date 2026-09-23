@@ -2269,3 +2269,136 @@ test('113. invariant protection: no-watering-flower preserves priceless and prot
   assert.equal(badRes.status, 400)
   assert.equal(badRes.error.code, 'PROTECTED_PRODUCT')
 })
+
+test('114. admin media edit persists through D1 and all fresh catalogue reads', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+
+  const createResult = await createAdminProduct({
+    name: 'Media Persistence Test',
+    priceVnd: 123000,
+    slug: 'media-persistence-test',
+  }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(createResult.ok, true)
+
+  const uploadResult = await uploadAdminMedia(new Blob(['fresh-image'], { type: 'image/png' }), {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(uploadResult.ok, true)
+
+  const updateResult = await updateAdminProduct(createResult.product.id, {
+    imageUrl: uploadResult.data.url,
+  }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(updateResult.ok, true)
+  assert.equal(updateResult.product.media[0].src, uploadResult.data.url)
+
+  const row = sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get(createResult.product.id)
+  assert.equal(JSON.parse(row.media_json)[0].src, uploadResult.data.url)
+
+  const adminRead = await fetchAdminCatalogue({
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(adminRead.ok, true)
+  assert.equal(adminRead.data.find((product) => product.id === createResult.product.id).media[0].src, uploadResult.data.url)
+
+  const publicList = await testWorker.fetch('/api/v1/catalogue/products?limit=50')
+  const publicListBody = await publicList.json()
+  assert.equal(publicListBody.data.items.find((product) => product.slug === 'media-persistence-test').media[0].src, uploadResult.data.url)
+
+  const publicDetail = await testWorker.fetch('/api/v1/catalogue/products/media-persistence-test')
+  const publicDetailBody = await publicDetail.json()
+  assert.equal(publicDetailBody.data.product.media[0].src, uploadResult.data.url)
+
+  const mediaRead = await testWorker.fetch(uploadResult.data.url)
+  assert.equal(mediaRead.status, 200)
+  assert.equal(mediaRead.headers.get('content-type'), 'image/png')
+
+  const clearResult = await updateAdminProduct(createResult.product.id, { imageUrl: '' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(clearResult.ok, true)
+  assert.deepEqual(clearResult.product.media, [])
+  await deleteAdminMedia(uploadResult.data.key, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+})
+
+test('115. media edit rejects missing or malformed R2 references without changing D1', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const before = sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('nang-diu').media_json
+
+  const missing = await updateAdminProduct('nang-diu', { imageUrl: '/api/v1/media/prod_media_missing.jpg' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(missing.ok, false)
+  assert.equal(missing.status, 400)
+  assert.equal(missing.error.code, 'MEDIA_NOT_FOUND')
+
+  const malformed = await updateAdminProduct('nang-diu', { imageUrl: '/api/v1/media/../../escape.jpg' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(malformed.ok, false)
+  assert.equal(malformed.status, 400)
+  assert.equal(malformed.error.code, 'INVALID_MEDIA_URL')
+  assert.equal(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('nang-diu').media_json, before)
+})
+
+test('116. media edit endpoint remains Admin-only', async () => {
+  const { d1 } = createSeededDatabase()
+  const testWorker = createTestWorker(d1)
+
+  const guest = await updateAdminProduct('nang-diu', { imageUrl: '' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => null,
+  })
+  assert.equal(guest.status, 401)
+
+  const customer = await updateAdminProduct('nang-diu', { imageUrl: '' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'customer-token',
+  })
+  assert.equal(customer.status, 403)
+})
+
+test('117. Admin edit UI stages media and claims success only after product PATCH', () => {
+  const pageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+  const uploaderCode = fs.readFileSync(path.resolve('src/components/admin/ProductImageUploader.jsx'), 'utf8')
+
+  assert.match(pageCode, /deferDelete/u)
+  assert.match(pageCode, /payload\.imageUrl = editForm\.imageUrl/u)
+  assert.match(pageCode, /cleanupAdminMediaKeys\(editForm\.mediaCleanupKeys\)/u)
+  assert.match(pageCode, /cleanupAdminMediaKeys\(editForm\.stagedMediaKeys\)/u)
+  assert.match(uploaderCode, /previousKey/u)
+  assert.match(uploaderCode, /if \(!deferDelete && previousKey/u)
+})
+
+test('118. protected no-watering-flower media cannot be replaced through Admin API', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const before = sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('no-watering-flower').media_json
+
+  const result = await updateAdminProduct('no-watering-flower', { imageUrl: '' }, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 400)
+  assert.equal(result.error.code, 'PROTECTED_PRODUCT')
+  assert.equal(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('no-watering-flower').media_json, before)
+})

@@ -22,6 +22,7 @@ import {
   MAX_MEDIA_SIZE_BYTES,
   createMediaStorage,
   generateMediaKey,
+  isManagedMediaKey,
   isValidMediaKey,
 } from './mediaStorage.js'
 
@@ -548,6 +549,40 @@ async function handleUpdateAdminProduct(idOrSlug, request, env, requestId, depen
   if (body.moods !== undefined) payload.moods = body.moods
   if (body.colors !== undefined) payload.colors = body.colors
   if (body.colorPalette !== undefined) payload.colorPalette = body.colorPalette
+  if (body.imageUrl !== undefined) payload.imageUrl = body.imageUrl
+
+  if (typeof payload.imageUrl === 'string' && payload.imageUrl.trim()) {
+    const mediaMatch = /^\/api\/v1\/media\/([^/?#]+)$/u.exec(payload.imageUrl.trim())
+    const mediaKey = mediaMatch?.[1]
+    if (!mediaKey || !isManagedMediaKey(mediaKey)) {
+      return result(errorResponse(
+        400,
+        'INVALID_MEDIA_URL',
+        'Tệp ảnh phải là tệp đã tải lên kho ảnh quản trị.',
+        requestId,
+      ), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'INVALID_MEDIA_URL' })
+    }
+
+    const mediaStorage = dependencies.createMediaStorage
+      ? dependencies.createMediaStorage(env)
+      : createMediaStorage(env)
+    try {
+      const storedMedia = await mediaStorage.get(mediaKey)
+      if (!storedMedia) {
+        return result(errorResponse(
+          400,
+          'MEDIA_NOT_FOUND',
+          'Không tìm thấy tệp ảnh trong kho ảnh quản trị.',
+          requestId,
+        ), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'MEDIA_NOT_FOUND' })
+      }
+    } catch (err) {
+      const status = err.status || 500
+      const code = err.code || 'STORAGE_ERROR'
+      const message = err.message || 'Không thể kiểm tra tệp ảnh trong kho lưu trữ.'
+      return result(errorResponse(status, code, message, requestId), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: code })
+    }
+  }
 
   const repositories = dependencies.createRepositories(env)
 
@@ -1523,6 +1558,7 @@ export function createApiRouter(options = {}) {
       return handleUpdateAdminProduct(adminProductId, request, env, requestId, {
         authorizeAdmin,
         createRepositories,
+        createMediaStorage: options.mediaStorageFactory ?? createMediaStorage,
         verifyIdentity,
       })
     }

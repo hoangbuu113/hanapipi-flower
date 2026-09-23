@@ -3,9 +3,11 @@ import { deleteAdminMedia, uploadAdminMedia } from '../../services/adminClient'
 
 export default function ProductImageUploader({
   disabled = false,
+  deferDelete = false,
   getToken,
   mediaKey = null,
   onChange,
+  onBusyChange,
   value = '',
 }) {
   const fileInputRef = useRef(null)
@@ -39,6 +41,7 @@ export default function ProductImageUploader({
 
     setError(null)
     setIsUploading(true)
+    onBusyChange?.(true)
 
     // Create temporary local preview
     const tempBlobUrl = URL.createObjectURL(file)
@@ -49,16 +52,17 @@ export default function ProductImageUploader({
     const result = await uploadAdminMedia(file, { getToken })
 
     setIsUploading(false)
+    onBusyChange?.(false)
     setTempPreview(null)
 
     if (result.ok && result.data?.url) {
       const newUrl = result.data.url
       const newKey = result.data.key
 
-      onChange?.({ key: newKey, url: newUrl })
+      onChange?.({ key: newKey, previousKey, url: newUrl })
 
       // If we had a previously uploaded remote image, clean it up safely in background
-      if (previousKey && previousKey !== newKey) {
+      if (!deferDelete && previousKey && previousKey !== newKey) {
         deleteAdminMedia(previousKey, { getToken }).catch(() => {})
       }
     } else {
@@ -110,13 +114,15 @@ export default function ProductImageUploader({
     if (disabled || isUploading || isDeleting) return
     setError(null)
     setIsDeleting(true)
+    onBusyChange?.(true)
 
     const keyToDelete = mediaKey
 
-    if (keyToDelete) {
+    if (keyToDelete && !deferDelete) {
       const result = await deleteAdminMedia(keyToDelete, { getToken })
       if (!result.ok) {
         setIsDeleting(false)
+        onBusyChange?.(false)
         setError(result.error?.message || 'Không thể xóa ảnh. Vui lòng thử lại.')
         return
       }
@@ -128,7 +134,8 @@ export default function ProductImageUploader({
       setTempPreview(null)
       setIsFadingOut(false)
       setIsDeleting(false)
-      onChange?.({ key: null, url: '' })
+      onBusyChange?.(false)
+      onChange?.({ key: null, previousKey: keyToDelete, url: '' })
     }, 200)
   }
 
