@@ -104,6 +104,8 @@ function AdminPage() {
   const [editGiftAddOnForm, setEditGiftAddOnForm] = useState(null)
   const [isSavingGiftAddOn, setIsSavingGiftAddOn] = useState(false)
   const [giftAddOnSaveError, setGiftAddOnSaveError] = useState(null)
+  const [giftAddOnToggleError, setGiftAddOnToggleError] = useState(null)
+  const [togglingGiftAddOnId, setTogglingGiftAddOnId] = useState(null)
   const [isCreatingGiftAddOn, setIsCreatingGiftAddOn] = useState(false)
   const [createGiftAddOnForm, setCreateGiftAddOnForm] = useState({
     active: true,
@@ -809,7 +811,15 @@ function AdminPage() {
 
   const handleToggleGiftAddOnActive = async (item) => {
     const nextActive = !item.active
+    setTogglingGiftAddOnId(item.id)
+    setGiftAddOnToggleError(null)
+    setSaveSuccess(null)
     const result = await toggleAdminGiftAddOnActive(item.id, nextActive, { getToken })
+    setTogglingGiftAddOnId(null)
+    if (!result.ok || !result.item) {
+      setGiftAddOnToggleError(result.error?.message || 'Không thể thay đổi trạng thái món quà.')
+      return
+    }
     if (result.ok && result.item) {
       setGiftAddOns((prev) => prev.map((g) => (g.id === result.item.id ? result.item : g)))
       setSaveSuccess(`Đã ${nextActive ? 'hiện' : 'ẩn'} món quà "${item.name}".`)
@@ -2070,7 +2080,13 @@ function AdminPage() {
           )}
 
           {!isLoadingGiftAddOns && !giftAddOnsError && (
-            <div className="admin-table-container">
+            <>
+              {giftAddOnToggleError && (
+                <div className="admin-catalogue-error admin-catalogue-error--compact" role="alert">
+                  <p>{giftAddOnToggleError}</p>
+                </div>
+              )}
+              <div className="admin-table-container">
               <table className="admin-table">
                 <thead>
                   <tr>
@@ -2182,6 +2198,7 @@ function AdminPage() {
                               </button>
                               <button
                                 className={`button button--small ${item.active ? 'button--text' : 'button--primary'}`}
+                                disabled={togglingGiftAddOnId === item.id}
                                 type="button"
                                 onClick={() => handleToggleGiftAddOnActive(item)}
                               >
@@ -2195,7 +2212,8 @@ function AdminPage() {
                   })}
                 </tbody>
               </table>
-            </div>
+              </div>
+            </>
           )}
         </section>
 

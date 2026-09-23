@@ -1792,6 +1792,15 @@ test('86. authorized admin can list, create, edit, and toggle active for gift ad
   assert.equal(toggleBack.item.active, true)
 })
 
+test('86a. gift add-on toggle UI exposes persistence failures and request state', () => {
+  const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+
+  assert.match(adminPageCode, /setTogglingGiftAddOnId\(item\.id\)/u)
+  assert.match(adminPageCode, /if \(result\.ok && result\.item\)/u)
+  assert.match(adminPageCode, /setGiftAddOnToggleError\(result\.error\?\.message/u)
+  assert.match(adminPageCode, /disabled=\{togglingGiftAddOnId === item\.id\}/u)
+})
+
 test('87. gift add-on validation rejects negative prices and requires valid name', async () => {
   const { d1, sqlite } = createSeededDatabase()
   seedAdminUser(sqlite)
