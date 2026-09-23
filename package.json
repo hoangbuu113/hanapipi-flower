@@ -7,6 +7,8 @@
     "dev": "vite",
     "dev:worker": "vite --mode worker",
     "build": "vite build",
+    "build:staging": "node scripts/staging.js build",
+    "deploy:staging": "node scripts/staging.js deploy",
     "postbuild": "node scripts/remove-build-dev-vars.js",
     "db:generate:catalogue-migration": "node --import ./scripts/d1/register-catalogue-loader.js ./scripts/d1/generate-catalogue-migration.js",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
