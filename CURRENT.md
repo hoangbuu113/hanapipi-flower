@@ -1,60 +1,46 @@
 # CURRENT PHASE
 
-Phase 18 in progress: Real bank-transfer payment presentation with genuinely scannable VietQR (EMVCo standard) is implemented for newly created orders. Payment confirmation remains strictly manual/pending (`payment_status = 'pending'`, status badge `Chờ thanh toán`). Bank destination details (`BANK_TRANSFER_BANK_NAME`, `BANK_TRANSFER_BANK_CODE`, `BANK_TRANSFER_ACCOUNT_NAME`, `BANK_TRANSFER_ACCOUNT_NUMBER`, `BANK_TRANSFER_BIN`) are configured via Cloudflare Worker server environment variables (`env`), with graceful `PAYMENT_CONFIG_UNAVAILABLE` fallback. VietQR payload is generated deterministically in pure JavaScript (NAPAS GUID `A000000727`, bank BIN, account number, currency `704` VND, canonical order amount, and transfer content `HANAPIPI <orderCode>`) with CRC16-CCITT. The client renders an accessible, scalable SVG QR code via `qrcode-generator` with zero external network requests. Convenient copy buttons with visual feedback ("Đã sao chép") are provided for account number, transfer content, and amount. Customer Orders history and read model are D1-backed, with AES-GCM encrypted fulfilment PII decrypted only on detail endpoint for verified owner. Server-authoritative Checkout order creation is implemented via `POST /api/v1/orders`. Admin can edit full non-media, non-option product content, edit core commerce fields, create normal products, archive/restore normal products, and manage product configuration options from `/admin`. Frontend Shop, Product Detail, SearchPage, Homepage (`#best-sellers`), FlowerFinderPage, WishlistPage, Cart, Checkout, and Orders are migrated to the D1-backed catalogue/orders API with intentional gate fallback (`API_NOT_FOUND` → static data) and error/retry states. Static `src/data/products.js` is temporarily retained for unmigrated secondary consumers (ConciergeWidget, FlowerAlreadyTakenPage). API v1 remains default closed (`API_V1_ENABLED=false`).
+Phase 18 in progress: Secure Admin order management and fulfilment workflow is implemented: `pending payment` → Admin confirms payment received → `preparing` → `delivering` → `completed`. Payment confirmation moves orders atomically to `paid` and `preparing`, recording audit events in `audit_events`. State machine enforces strict fulfilment transitions: `preparing` → `delivering` → `completed`, rejecting backward transitions and transitions from completed. Actor identity is derived strictly from verified Clerk admin tokens, rejecting client-supplied IDs or roles. Fulfilment recipient/delivery PII is decrypted only on detail endpoint for verified admin and never exposed in list responses, while completed orders remain immutable historical records. Admin UI at `/admin` includes a dedicated Orders Fulfilment section with real-time status badges, detailed customer/recipient modal, item snapshots, audit trail, and idempotent action buttons with submission loading states. Customer UI at `/checkout/success` updates seamlessly when payment is confirmed, replacing transfer instructions with confirmed payment messaging. Frontend Shop, Product Detail, SearchPage, Homepage (`#best-sellers`), FlowerFinderPage, WishlistPage, Cart, Checkout, and Orders are migrated to the D1-backed catalogue/orders API with intentional gate fallback (`API_NOT_FOUND` → static data) and error/retry states. Static `src/data/products.js` is temporarily retained for unmigrated secondary consumers (ConciergeWidget, FlowerAlreadyTakenPage). API v1 remains default closed (`API_V1_ENABLED=false`).
 
 # LAST VERIFIED TASK
 
-Added Bank-Transfer QR Payment Presentation (Manual/Pending Confirmation):
-- Added migration `drizzle/0004_update_order_payment_constraints.sql` in D1/SQLite:
-  - Expands `orders.payment_method` CHECK constraint: `IN ('bank_transfer', 'bank_transfer_mock', 'cod_mock', 'cod')`.
-  - Expands `orders.payment_status` CHECK constraint: `IN ('pending', 'paid', 'cancelled', 'mock_pending', 'mock_recorded', 'mock_cancelled')`.
-  - Recreates `orders` table and preserves indexes `uq_orders_order_code`, `idx_orders_user_created_at`, `idx_orders_status_created_at`.
+Added Admin Order Fulfilment Workflow:
+- Added migration `drizzle/0005_add_order_delivering_status.sql` in D1/SQLite:
+  - Expands `orders.status` CHECK constraint: `IN ('received', 'confirmed', 'preparing', 'delivering', 'out_for_delivery', 'completed', 'cancelled')`.
+  - Recreates child tables `order_items` and `order_item_add_ons` within transaction to prevent foreign key errors.
   - Registered migration in `schema_versions`.
-  - Updated `scripts/d1/validate-foundation.js` assertion to accept updated constraints.
-- Implemented `src/server/vietqr.js`:
-  - Official NAPAS EMVCo QR code payload generator.
-  - Implements `formatTlv(tag, value)` and `crc16Ccitt(payload)` with polynomial 0x1021 and initial value 0xFFFF.
-  - Validates bank BIN, account number, non-negative integer amount, and transfer content length.
-- Updated `src/server/database.js` & `src/server/repositories/orderRepository.js`:
-  - Injected `bankConfig` from Worker `env` (`BANK_TRANSFER_BANK_NAME`, `BANK_TRANSFER_BANK_CODE`, `BANK_TRANSFER_ACCOUNT_NAME`, `BANK_TRANSFER_ACCOUNT_NUMBER`, `BANK_TRANSFER_BIN`).
-  - Supports `payment_method = 'bank_transfer'` with `payment_status = 'pending'`.
-  - Attaches canonical `payment` presentation object (with bank details, amount, deterministic transfer content `HANAPIPI <orderCode>`, and `qrPayload`) to order create and detail responses.
-  - Returns `available: false` with clear Vietnamese message (`PAYMENT_CONFIG_UNAVAILABLE`) when unconfigured.
-  - `listForUser` returns payment summary without exposing heavy QR payload or sensitive bank details.
+- Implemented `src/server/repositories/orderRepository.js`:
+  - `listForAdmin(adminUser)`: Verifies admin role, queries all orders newest first, attaches snapshot item counts and summaries, never exposes decrypted PII or ciphertext.
+  - `getForAdmin(adminUser, idOrCode, options)`: Decrypts fulfilment PII (`buyer`, `recipient`, `address`, `gifting`), reconstructs snapshot items/add-ons, attaches payment presentation DTO, and queries `audit_events` for order history (`auditHistory`).
+  - `confirmPayment(adminUser, idOrCode, options)`: Verifies `payment_status === 'pending'`, conditionally updates `payment_status = 'paid'` and (if `status === 'received'`) `status = 'preparing'`, records `audit_events` (`action: 'order_payment_confirmed'`, `status_before: 'received'`, `status_after: 'preparing'`), returns updated order. Idempotent if already `paid`.
+  - `updateStatus(adminUser, idOrCode, requestedStatus, options)`: Enforces strict state machine transitions (`received` → `preparing` (requires `paid`), `preparing` → `delivering`, `delivering` → `completed`). Rejects invalid backwards/skipped jumps. Conditionally updates `orders.status` and writes `audit_events` (`action: 'order_status_updated'`).
+- Implemented `src/server/api.js`:
+  - Routes: `GET /api/v1/admin/orders`, `GET /api/v1/admin/orders/:id`, `POST /api/v1/admin/orders/:id/confirm-payment`, `POST /api/v1/admin/orders/:id/status`.
+  - Route matchers, 405 Method Not Allowed, origin validation on mutations, and 401/403 guards.
+- Implemented `src/services/adminClient.js`:
+  - `fetchAdminOrders`, `fetchAdminOrderDetail`, `confirmAdminOrderPayment`, `updateAdminOrderStatus`.
 - Updated `src/utils/order.js`:
-  - Added `formatPaymentMethod(method)` mapping `'bank_transfer'` to `'Chuyển khoản ngân hàng'`.
-  - Ensured `formatPaymentStatus('pending')` returns `'Chờ thanh toán'`.
-- Updated `src/pages/CheckoutPage.jsx`:
-  - Maps `form.payment === 'bank'` to `paymentMethod: 'bank_transfer'`.
-  - Added clear payment method description.
+  - Formatter mappings: `received` → `'Đã tiếp nhận'`, `preparing`/`processing` → `'Đang chuẩn bị'`, `delivering`/`out_for_delivery` → `'Đang giao'`, `completed` → `'Hoàn tất'`.
+  - Payment status mappings: `pending`/`mock_pending` → `'Chờ thanh toán'`, `paid` → `'Đã thanh toán'`.
 - Updated `src/pages/CheckoutSuccessPage.jsx` & `CheckoutSuccessPage.css`:
-  - Renders bank-transfer presentation box with high-contrast, editorial romantic minimalist styling.
-  - Renders genuinely scannable VietQR code as responsive, scalable SVG via `qrcode-generator` with zero external dependencies.
-  - Displays Bank Name, Account Number, Account Name, Exact Amount (VND), and Transfer Content.
-  - Interactive `CopyButton` with 2-second visual feedback ("Đã sao chép") for account number, transfer content, and amount.
-  - Reassurance text: "Đơn hoa sẽ được xử lý sau khi Hanapipi Flower xác nhận nhận được chuyển khoản" and "Vui lòng giữ nguyên nội dung chuyển khoản để đơn được xác nhận nhanh nhất".
-  - Status badge `Chờ thanh toán`.
-- Live end-to-end verification confirmed:
-  - Order creation with `payment_method = 'bank_transfer'` returns HTTP 201 with `payment_status = 'pending'`.
-  - VietQR payload adheres strictly to NAPAS EMVCo standards (Tag 00, 01, 38 with GUID A000000727, BIN, account, currency 704 VND, amount, transfer content `HANAPIPI <orderCode>`, CRC16).
-  - Direct reload of `/checkout/success?orderCode=...` preserves identical payment instructions & QR without creating new orders.
-  - Historical isolation: changing catalogue product/variant prices does not affect payment amount or QR payload.
-  - Security boundaries: 401 unauthenticated, 404 cross-user, 200 owner, client tamper resistance, 0 QR blobs stored in D1, 0 secret leaks.
-  - Graceful degradation when bank config is omitted (`available: false`, `PAYMENT_CONFIG_UNAVAILABLE`, order remains `pending`).
-  - Safe cleanup: all test orders removed, 0 test records remain.
+  - Replaces pending QR block with `bank-transfer-box--paid` displaying `❀ Hanapipi đã xác nhận thanh toán` when `payment_status === 'paid'`.
+- Implemented `src/pages/AdminPage.jsx` & `AdminPage.css`:
+  - Orders Fulfilment section with order code, timestamp, recipient, delivery date/slot, total VND, payment badge, status badge, and detail action.
+  - Order Detail Modal: customer/recipient contact, decrypted address & gifting message, ordered items with snapshots, payment details, audit trail history, and context-sensitive action buttons (`Xác nhận đã nhận thanh toán`, `Bắt đầu giao hàng`, `Đánh dấu hoàn tất`) with loading states.
 - Automated test suites:
-  - `test/order-payment.test.js`: 35/35 pass.
-  - `test:order`: 96/96 pass.
-  - `test:frontend`: 330/330 pass.
-  - `test:d1`: passed.
+  - `test/admin-orders.test.js`: 38/38 pass.
+  - `test:admin`: 151/151 pass.
+  - `test:order`: 134/134 pass.
+  - `test:frontend`: 368/368 pass.
+  - `test:d1`: passed (5 migrations validated).
   - `lint`: 0 warnings, 0 errors.
-  - `build`: passed, packaged 4 D1 migration files.
+  - `build`: passed, packaged 5 D1 migration files.
   - `git diff --check`: passed.
   - `API_V1_ENABLED=false` remains default; no deployment occurred.
 
 # CURRENT ARCHITECTURE STATE
 
-React/Vite/Sites serves the SPA through a Cloudflare Worker. Server catalogue/pricing read and mutation authority exists in D1. Server order creation and customer order read authority exists in D1 with AES-GCM encrypted fulfilment PII. Bank-transfer payment presentation with VietQR generation exists on the Worker/D1 with manual/pending confirmation. Media storage authority exists in Cloudflare R2 (`MEDIA_BUCKET`), with D1 storing only media references. Frontend Shop, Product Detail, SearchPage, Homepage, FlowerFinderPage, WishlistPage, Cart, Checkout, and Orders load/submit to D1 APIs with transitional fallback. Admin UI at `/admin` loads both active and archived rows strictly from `GET /api/v1/admin/products`, edits content and commerce fields through `PATCH /api/v1/admin/products/:id`, creates through `POST /api/v1/admin/products`, soft-archives/restores through the explicit action endpoints, uploads/deletes media via `/api/v1/admin/media`, manages sizes/wrapping via `GET/PUT /api/v1/admin/products/:id/variants`, and manages gift add-ons via `/api/v1/admin/gift-add-ons`. Static `src/data/products.js` is temporarily retained for unmigrated secondary consumers (ConciergeWidget, FlowerAlreadyTakenPage). Clerk React provider wraps the frontend. API v1 remains globally gated closed with `API_V1_ENABLED=false`.
+React/Vite/Sites serves the SPA through a Cloudflare Worker. Server catalogue/pricing read and mutation authority exists in D1. Server order creation and customer order read authority exists in D1 with AES-GCM encrypted fulfilment PII. Bank-transfer payment presentation with VietQR generation exists on the Worker/D1 with manual/pending confirmation. Admin order fulfilment workflow (`received` / `pending` → Admin confirms payment → `preparing` → `delivering` → `completed`) is implemented with server-authoritative state machine and audit event logging. Media storage authority exists in Cloudflare R2 (`MEDIA_BUCKET`), with D1 storing only media references. Frontend Shop, Product Detail, SearchPage, Homepage, FlowerFinderPage, WishlistPage, Cart, Checkout, and Orders load/submit to D1 APIs with transitional fallback. Admin UI at `/admin` loads both active and archived rows strictly from `GET /api/v1/admin/products`, edits content and commerce fields through `PATCH /api/v1/admin/products/:id`, creates through `POST /api/v1/admin/products`, soft-archives/restores through the explicit action endpoints, uploads/deletes media via `/api/v1/admin/media`, manages sizes/wrapping via `GET/PUT /api/v1/admin/products/:id/variants`, manages gift add-ons via `/api/v1/admin/gift-add-ons`, and manages orders via `/api/v1/admin/orders`. Static `src/data/products.js` is temporarily retained for unmigrated secondary consumers (ConciergeWidget, FlowerAlreadyTakenPage). Clerk React provider wraps the frontend. API v1 remains globally gated closed with `API_V1_ENABLED=false`.
 
 **`products.active` semantics**: `active` conflates BOTH visibility AND purchasability. `active = 0` hides from public catalogue AND makes non-purchasable. Archive/Delete implementation must account for this dual meaning.
 
@@ -62,15 +48,15 @@ React/Vite/Sites serves the SPA through a Cloudflare Worker. Server catalogue/pr
 
 # WHAT IS WORKING
 
-Storefront routes and mock commerce flows exist. Catalogue invariant is 24 total / 23 purchasable / 1 priceless. Worker-based Groq concierge and local fallback exist. Clerk token verification, stable-sub D1 mapping, duplicate-safe user upsert, unauthenticated protection, frontend Clerk session, Email OTP verification, `/api/v1/me` hydration, sign-out, server-side `requireAdmin` authorization, `/api/v1/admin/me`, `/admin` route protection, D1-backed catalogue listing/detail, Admin product content and commerce editing, Admin product creation with auto-slug generation and R2-backed real image upload, Admin soft archive/restore, Admin product configuration options management (sizes, wrapping, gift add-ons), protected active+archived Admin listing, `no-watering-flower` invariant enforcement, frontend Shop, Product Detail, SearchPage, Homepage, FlowerFinderPage, WishlistPage, and Cart catalogue API integration, server-authoritative Checkout order creation with AES-GCM PII encryption and D1 snapshot persistence, customer Orders history / read model with server-side owner PII decryption and snapshot immutability, and real bank-transfer QR payment presentation (manual/pending confirmation) are verified.
+Storefront routes and mock commerce flows exist. Catalogue invariant is 24 total / 23 purchasable / 1 priceless. Worker-based Groq concierge and local fallback exist. Clerk token verification, stable-sub D1 mapping, duplicate-safe user upsert, unauthenticated protection, frontend Clerk session, Email OTP verification, `/api/v1/me` hydration, sign-out, server-side `requireAdmin` authorization, `/api/v1/admin/me`, `/admin` route protection, D1-backed catalogue listing/detail, Admin product content and commerce editing, Admin product creation with auto-slug generation and R2-backed real image upload, Admin soft archive/restore, Admin product configuration options management (sizes, wrapping, gift add-ons), protected active+archived Admin listing, `no-watering-flower` invariant enforcement, frontend Shop, Product Detail, SearchPage, Homepage, FlowerFinderPage, WishlistPage, and Cart catalogue API integration, server-authoritative Checkout order creation with AES-GCM PII encryption and D1 snapshot persistence, customer Orders history / read model with server-side owner PII decryption and snapshot immutability, real bank-transfer QR payment presentation (manual/pending confirmation), and Admin order fulfilment workflow (`received` / `pending` → Admin confirms payment → `preparing` → `delivering` → `completed`) are verified.
 
 # WHAT IS PARTIAL
 
-Secondary catalogue consumers (FlowerAlreadyTakenPage, ConciergeWidget) have not switched to D1 catalogue API yet. Hard delete is not implemented. Admin order confirmation workflow is not implemented.
+Secondary catalogue consumers (FlowerAlreadyTakenPage, ConciergeWidget) have not switched to D1 catalogue API yet. Hard delete is not implemented.
 
 # CURRENT BLOCKERS
 
-None. Bank-transfer QR payment presentation is verified locally and `API_V1_ENABLED` remains intentionally disabled by default.
+None. Admin order fulfilment workflow is verified locally and `API_V1_ENABLED` remains intentionally disabled by default.
 
 # OPEN RISKS
 
@@ -82,11 +68,11 @@ None. Bank-transfer QR payment presentation is verified locally and `API_V1_ENAB
 
 # NEXT BEST TASK
 
-Admin payment confirmation workflow or secondary catalogue consumers migration (ConciergeWidget, FlowerAlreadyTakenPage).
+Secondary catalogue consumers migration (ConciergeWidget, FlowerAlreadyTakenPage).
 
 # LATEST VERIFIED COMMIT
 
-Use the commit resulting from this Bank-Transfer QR payment checkpoint (`Add bank transfer QR payment flow`) as the authoritative commit reference.
+Use the commit resulting from this Admin Order Fulfilment workflow checkpoint (`Add Admin order fulfilment workflow`) as the authoritative commit reference.
 
 # DEPLOYMENT STATE
 

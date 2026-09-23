@@ -72,11 +72,13 @@ export function formatOrderStatus(status) {
     case 'confirmed':
       return 'Đã xác nhận'
     case 'processing':
+    case 'preparing':
       return 'Đang chuẩn bị'
     case 'delivering':
-      return 'Đang giao hoa'
+    case 'out_for_delivery':
+      return 'Đang giao'
     case 'completed':
-      return 'Đã giao hoa'
+      return 'Hoàn tất'
     case 'cancelled':
       return 'Đã hủy'
     default:
@@ -93,6 +95,9 @@ export function formatPaymentStatus(status) {
       return 'Đã thanh toán'
     case 'failed':
       return 'Thanh toán thất bại'
+    case 'cancelled':
+    case 'mock_cancelled':
+      return 'Đã hủy'
     default:
       return status || 'Chờ xử lý'
   }

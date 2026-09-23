@@ -672,8 +672,9 @@ test('26. formatOrderStatus maps received to Đã tiếp nhận', () => {
   assert.equal(formatOrderStatus('received'), 'Đã tiếp nhận')
   assert.equal(formatOrderStatus('confirmed'), 'Đã xác nhận')
   assert.equal(formatOrderStatus('processing'), 'Đang chuẩn bị')
-  assert.equal(formatOrderStatus('delivering'), 'Đang giao hoa')
-  assert.equal(formatOrderStatus('completed'), 'Đã giao hoa')
+  assert.equal(formatOrderStatus('preparing'), 'Đang chuẩn bị')
+  assert.equal(formatOrderStatus('delivering'), 'Đang giao')
+  assert.equal(formatOrderStatus('completed'), 'Hoàn tất')
   assert.equal(formatOrderStatus('cancelled'), 'Đã hủy')
 })
 

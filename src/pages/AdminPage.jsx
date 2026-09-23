@@ -5,17 +5,27 @@ import Container from '../components/Container'
 import { useAccount } from '../context/accountStore'
 import {
   checkAdminAccess,
+  confirmAdminOrderPayment,
   createAdminGiftAddOn,
   createAdminProduct,
   fetchAdminCatalogue,
   fetchAdminGiftAddOns,
+  fetchAdminOrderDetail,
+  fetchAdminOrders,
   fetchAdminProductVariants,
   saveAdminProductVariants,
   setAdminProductArchived,
   toggleAdminGiftAddOnActive,
   updateAdminGiftAddOn,
+  updateAdminOrderStatus,
   updateAdminProduct,
 } from '../services/adminClient'
+import {
+  formatDeliveryDate,
+  formatOrderStatus,
+  formatPaymentMethod,
+  formatPaymentStatus,
+} from '../utils/order'
 import { formatCurrency } from '../utils/formatCurrency'
 import ProductImageUploader from '../components/admin/ProductImageUploader'
 import './AdminPage.css'
@@ -102,6 +112,19 @@ function AdminPage() {
   })
   const [isSubmittingGiftAddOn, setIsSubmittingGiftAddOn] = useState(false)
   const [createGiftAddOnError, setCreateGiftAddOnError] = useState(null)
+
+  // Orders Fulfilment Management
+  const [orders, setOrders] = useState([])
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true)
+  const [ordersError, setOrdersError] = useState(null)
+  const [ordersReloadKey, setOrdersReloadKey] = useState(0)
+
+  const [selectedOrderDetail, setSelectedOrderDetail] = useState(null)
+  const [isLoadingOrderDetail, setIsLoadingOrderDetail] = useState(false)
+  const [orderDetailError, setOrderDetailError] = useState(null)
+  const [isUpdatingOrder, setIsUpdatingOrder] = useState(false)
+  const [orderActionError, setOrderActionError] = useState(null)
+  const [orderActionSuccess, setOrderActionSuccess] = useState(null)
 
   const handleOpenCreate = () => {
     setIsCreating(true)
@@ -477,6 +500,104 @@ function AdminPage() {
     setGiftAddOnsReloadKey((k) => k + 1)
   }, [])
 
+  // 4. Fetch Orders strictly after Admin Authorization
+  useEffect(() => {
+    let isCancelled = false
+    if (authStatus !== 'authorized') return undefined
+
+    const controller = new AbortController()
+
+    fetchAdminOrders({ getToken, signal: controller.signal })
+      .then((result) => {
+        if (isCancelled) return
+        if (result.ok && Array.isArray(result.orders)) {
+          setOrders(result.orders)
+          setOrdersError(null)
+        } else {
+          setOrders([])
+          setOrdersError(result.error)
+        }
+      })
+      .catch((err) => {
+        if (isCancelled || err?.name === 'AbortError') return
+        setOrders([])
+        setOrdersError({ code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ để tải danh sách đơn hàng.' })
+      })
+      .finally(() => {
+        if (!isCancelled) setIsLoadingOrders(false)
+      })
+
+    return () => {
+      isCancelled = true
+      controller.abort()
+    }
+  }, [authStatus, ordersReloadKey, getToken])
+
+  const handleRetryOrders = useCallback(() => {
+    setIsLoadingOrders(true)
+    setOrdersError(null)
+    setOrdersReloadKey((k) => k + 1)
+  }, [])
+
+  const handleOpenOrderDetail = async (order) => {
+    setSelectedOrderDetail(order)
+    setIsLoadingOrderDetail(true)
+    setOrderDetailError(null)
+    setOrderActionError(null)
+    setOrderActionSuccess(null)
+
+    const result = await fetchAdminOrderDetail(order.id, { getToken })
+    setIsLoadingOrderDetail(false)
+
+    if (result.ok && result.order) {
+      setSelectedOrderDetail(result.order)
+    } else {
+      setOrderDetailError(result.error?.message || 'Không thể tải chi tiết đơn hàng.')
+    }
+  }
+
+  const handleCloseOrderDetail = () => {
+    setSelectedOrderDetail(null)
+    setIsLoadingOrderDetail(false)
+    setOrderDetailError(null)
+    setOrderActionError(null)
+    setOrderActionSuccess(null)
+  }
+
+  const handleConfirmOrderPayment = async (orderId) => {
+    setIsUpdatingOrder(true)
+    setOrderActionError(null)
+    setOrderActionSuccess(null)
+
+    const result = await confirmAdminOrderPayment(orderId, { getToken })
+    setIsUpdatingOrder(false)
+
+    if (result.ok && result.order) {
+      setSelectedOrderDetail(result.order)
+      setOrders((prev) => prev.map((o) => (o.id === result.order.id ? { ...o, paymentStatus: result.order.paymentStatus, status: result.order.status } : o)))
+      setOrderActionSuccess('Đã xác nhận thanh toán thành công. Đơn hàng chuyển sang trạng thái Đang chuẩn bị.')
+    } else {
+      setOrderActionError(result.error?.message || 'Không thể xác nhận thanh toán.')
+    }
+  }
+
+  const handleUpdateOrderStatus = async (orderId, nextStatus) => {
+    setIsUpdatingOrder(true)
+    setOrderActionError(null)
+    setOrderActionSuccess(null)
+
+    const result = await updateAdminOrderStatus(orderId, nextStatus, { getToken })
+    setIsUpdatingOrder(false)
+
+    if (result.ok && result.order) {
+      setSelectedOrderDetail(result.order)
+      setOrders((prev) => prev.map((o) => (o.id === result.order.id ? { ...o, status: result.order.status } : o)))
+      setOrderActionSuccess(`Đã chuyển trạng thái đơn hàng sang: ${formatOrderStatus(nextStatus)}.`)
+    } else {
+      setOrderActionError(result.error?.message || 'Không thể cập nhật trạng thái đơn hoa.')
+    }
+  }
+
   // Product Variants Handlers
   const handleOpenVariants = async (product) => {
     setConfiguringProduct(product)
@@ -803,6 +924,130 @@ function AdminPage() {
             <div className="admin-identity__item">
               <span className="admin-identity__label">Email liên kết</span>
               <span className="admin-identity__value">{contextUser.email}</span>
+            </div>
+          )}
+        </section>
+
+        {/* Orders Fulfilment Section */}
+        <section aria-labelledby="orders-mgmt-title" className="admin-orders-section">
+          <div className="admin-catalogue-header">
+            <div>
+              <h2 id="orders-mgmt-title">Quản lý đơn hàng (Fulfilment)</h2>
+              <p className="admin-section-sub">
+                Theo dõi đơn hoa, xác nhận thanh toán chuyển khoản và điều phối quy trình giao hàng.
+              </p>
+            </div>
+            <div className="admin-catalogue-header-actions">
+              {!isLoadingOrders && !ordersError && (
+                <span className="admin-catalogue-count">
+                  {orders.length} đơn hàng
+                </span>
+              )}
+              <button
+                className="button button--secondary button--small"
+                disabled={isLoadingOrders}
+                type="button"
+                onClick={handleRetryOrders}
+              >
+                Làm mới
+              </button>
+            </div>
+          </div>
+
+          {isLoadingOrders && (
+            <div className="admin-catalogue-loading" role="status">
+              <p>Đang tải danh sách đơn hàng từ D1...</p>
+            </div>
+          )}
+
+          {!isLoadingOrders && ordersError && (
+            <div className="admin-catalogue-error" role="alert">
+              <h3>Không thể tải danh sách đơn hàng</h3>
+              <p>{ordersError?.message || 'Lỗi kết nối máy chủ.'}</p>
+              <button className="button button--secondary" type="button" onClick={handleRetryOrders}>
+                Thử lại
+              </button>
+            </div>
+          )}
+
+          {!isLoadingOrders && !ordersError && orders.length === 0 && (
+            <div className="admin-orders-empty" role="status">
+              <p>Chưa có đơn hàng nào trong hệ thống.</p>
+            </div>
+          )}
+
+          {!isLoadingOrders && !ordersError && orders.length > 0 && (
+            <div className="admin-table-container">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Mã đơn hàng</th>
+                    <th scope="col">Thời gian đặt</th>
+                    <th scope="col">Giao hoa</th>
+                    <th scope="col">Số lượng</th>
+                    <th scope="col">Tổng tiền</th>
+                    <th scope="col">Thanh toán</th>
+                    <th scope="col">Trạng thái</th>
+                    <th scope="col">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((order) => {
+                    const isPaid = order.paymentStatus === 'paid'
+                    return (
+                      <tr key={order.id}>
+                        <td>
+                          <code className="admin-order-code">{order.orderCode}</code>
+                        </td>
+                        <td>
+                          <span className="admin-order-date">
+                            {order.createdAtUtc ? new Date(order.createdAtUtc).toLocaleString('vi-VN', {
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                            }) : '—'}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="admin-order-delivery-cell">
+                            <span>{formatDeliveryDate(order.deliveryDate)}</span>
+                            {order.deliverySlot && (
+                              <span className="admin-order-delivery-slot">({order.deliverySlot})</span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span>{order.itemCount ?? order.items?.length ?? 1} bó</span>
+                        </td>
+                        <td>
+                          <span className="admin-price">{formatCurrency(order.totalVnd)}</span>
+                        </td>
+                        <td>
+                          <span className={`admin-badge admin-badge--payment-${isPaid ? 'paid' : 'pending'}`}>
+                            {formatPaymentStatus(order.paymentStatus)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`admin-badge admin-badge--order-${order.status || 'received'}`}>
+                            {formatOrderStatus(order.status)}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            className="button button--secondary button--small admin-view-order-btn"
+                            type="button"
+                            onClick={() => handleOpenOrderDetail(order)}
+                          >
+                            Xem chi tiết
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
@@ -1952,6 +2197,292 @@ function AdminPage() {
             </div>
           )}
         </section>
+
+        {/* Order Detail & Fulfilment Modal */}
+        {selectedOrderDetail && (
+          <div className="admin-modal-backdrop" onClick={handleCloseOrderDetail} role="presentation">
+            <div
+              aria-labelledby="order-detail-modal-title"
+              className="admin-modal admin-modal--order-detail"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+            >
+              <div className="admin-modal__header">
+                <div>
+                  <h3 id="order-detail-modal-title">
+                    Đơn hàng: <code className="admin-order-code-header">{selectedOrderDetail.orderCode}</code>
+                  </h3>
+                  <p>
+                    Đặt lúc:{' '}
+                    {selectedOrderDetail.createdAtUtc
+                      ? new Date(selectedOrderDetail.createdAtUtc).toLocaleString('vi-VN', {
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                        })
+                      : '—'}
+                  </p>
+                </div>
+                <button
+                  className="button button--text button--small"
+                  type="button"
+                  onClick={handleCloseOrderDetail}
+                >
+                  Đóng
+                </button>
+              </div>
+
+              {isLoadingOrderDetail ? (
+                <div className="admin-modal__loading">
+                  <div className="admin-spinner" />
+                  <p>Đang tải chi tiết đơn hàng và giải mã thông tin giao nhận...</p>
+                </div>
+              ) : orderDetailError ? (
+                <div className="admin-catalogue-error admin-catalogue-error--compact" role="alert">
+                  <p>{orderDetailError}</p>
+                </div>
+              ) : (
+                <div className="admin-modal__body admin-order-modal-body">
+                  {/* Status Banner & Fulfilment Action Controls */}
+                  <div className="admin-order-status-banner">
+                    <div className="admin-order-status-badges">
+                      <div className="admin-order-status-item">
+                        <span className="admin-order-status-label">Thanh toán:</span>
+                        <span className={`admin-badge admin-badge--payment-${selectedOrderDetail.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>
+                          {formatPaymentStatus(selectedOrderDetail.paymentStatus)}
+                        </span>
+                      </div>
+                      <div className="admin-order-status-item">
+                        <span className="admin-order-status-label">Tiến trình:</span>
+                        <span className={`admin-badge admin-badge--order-${selectedOrderDetail.status || 'received'}`}>
+                          {formatOrderStatus(selectedOrderDetail.status)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="admin-order-actions-bar">
+                      {(selectedOrderDetail.paymentStatus === 'pending' || selectedOrderDetail.paymentStatus === 'mock_pending') && (
+                        <button
+                          className="button button--primary button--small admin-action-confirm-payment"
+                          disabled={isUpdatingOrder}
+                          type="button"
+                          onClick={() => handleConfirmOrderPayment(selectedOrderDetail.id)}
+                        >
+                          {isUpdatingOrder ? 'Đang xử lý...' : '✓ Xác nhận đã nhận thanh toán'}
+                        </button>
+                      )}
+
+                      {selectedOrderDetail.paymentStatus === 'paid' && selectedOrderDetail.status === 'preparing' && (
+                        <button
+                          className="button button--primary button--small admin-action-start-delivery"
+                          disabled={isUpdatingOrder}
+                          type="button"
+                          onClick={() => handleUpdateOrderStatus(selectedOrderDetail.id, 'delivering')}
+                        >
+                          {isUpdatingOrder ? 'Đang cập nhật...' : '🚚 Bắt đầu giao hàng'}
+                        </button>
+                      )}
+
+                      {selectedOrderDetail.status === 'delivering' && (
+                        <button
+                          className="button button--primary button--small admin-action-complete-order"
+                          disabled={isUpdatingOrder}
+                          type="button"
+                          onClick={() => handleUpdateOrderStatus(selectedOrderDetail.id, 'completed')}
+                        >
+                          {isUpdatingOrder ? 'Đang cập nhật...' : '★ Đánh dấu hoàn tất'}
+                        </button>
+                      )}
+
+                      {selectedOrderDetail.status === 'completed' && (
+                        <span className="admin-order-completed-indicator">
+                          ❀ Đơn hàng đã hoàn tất giao hoa
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {orderActionSuccess && (
+                    <div className="admin-save-success" role="status">
+                      <p>{orderActionSuccess}</p>
+                    </div>
+                  )}
+
+                  {orderActionError && (
+                    <div className="admin-catalogue-error admin-catalogue-error--compact" role="alert">
+                      <p>{orderActionError}</p>
+                    </div>
+                  )}
+
+                  {/* Customer, Recipient & Delivery Info Grid */}
+                  <div className="admin-order-grid">
+                    <div className="admin-order-card">
+                      <h4>Người đặt hàng</h4>
+                      <p><strong>{selectedOrderDetail.buyer?.name || '—'}</strong></p>
+                      <p>Số điện thoại: {selectedOrderDetail.buyer?.phone || '—'}</p>
+                      {selectedOrderDetail.buyer?.email && <p>Email: {selectedOrderDetail.buyer.email}</p>}
+                    </div>
+
+                    <div className="admin-order-card">
+                      <h4>Người nhận hoa</h4>
+                      <p><strong>{selectedOrderDetail.recipient?.name || selectedOrderDetail.receiver?.name || '—'}</strong></p>
+                      <p>Số điện thoại: {selectedOrderDetail.recipient?.phone || selectedOrderDetail.receiver?.phone || '—'}</p>
+                    </div>
+
+                    <div className="admin-order-card admin-order-card--full">
+                      <h4>Địa chỉ giao nhận & Thời gian</h4>
+                      <p>
+                        <strong>Địa chỉ: </strong>
+                        {[
+                          selectedOrderDetail.address?.detail,
+                          selectedOrderDetail.address?.ward,
+                          selectedOrderDetail.address?.district,
+                          selectedOrderDetail.address?.city,
+                        ].filter(Boolean).join(', ') || '—'}
+                      </p>
+                      <p>
+                        <strong>Thời gian giao: </strong>
+                        {formatDeliveryDate(selectedOrderDetail.delivery?.date || selectedOrderDetail.deliveryDate)}
+                        {selectedOrderDetail.delivery?.slot || selectedOrderDetail.deliverySlot ? ` (${selectedOrderDetail.delivery?.slot || selectedOrderDetail.deliverySlot})` : ''}
+                      </p>
+                    </div>
+
+                    {(selectedOrderDetail.gifting?.message || selectedOrderDetail.gifting?.senderName || selectedOrderDetail.gifting?.anonymous) && (
+                      <div className="admin-order-card admin-order-card--full admin-order-card--gifting">
+                        <h4>Thông điệp & Thiệp đính kèm</h4>
+                        {selectedOrderDetail.gifting?.anonymous ? (
+                          <p className="admin-order-anonymous-badge">Gửi ẩn danh</p>
+                        ) : (
+                          selectedOrderDetail.gifting?.senderName && (
+                            <p><strong>Người gửi:</strong> {selectedOrderDetail.gifting.senderName}</p>
+                          )
+                        )}
+                        {selectedOrderDetail.gifting?.message && (
+                          <blockquote className="admin-order-gift-message">
+                            "{selectedOrderDetail.gifting.message}"
+                          </blockquote>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Ordered Items Table */}
+                  <div className="admin-order-items-section">
+                    <h4>Sản phẩm trong đơn</h4>
+                    <div className="admin-table-container">
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">Tên hoa / Tùy chọn</th>
+                            <th scope="col">Đơn giá</th>
+                            <th scope="col">Số lượng</th>
+                            <th scope="col">Thành tiền</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(selectedOrderDetail.items || []).map((item, idx) => (
+                            <tr key={item.id || item.key || idx}>
+                              <td>
+                                <div className="admin-order-item-desc">
+                                  <strong>{item.name}</strong>
+                                  <div className="admin-order-item-sub">
+                                    {[
+                                      item.size?.label || item.size,
+                                      item.wrapping?.label || item.wrapping,
+                                    ].filter(Boolean).join(' · ')}
+                                  </div>
+                                  {Array.isArray(item.giftAddOns) && item.giftAddOns.length > 0 && (
+                                    <div className="admin-order-item-addons">
+                                      + Quà kèm: {item.giftAddOns.map((g) => `${g.name} (${g.priceVnd === 0 ? 'Miễn phí' : formatCurrency(g.priceVnd || g.price)})`).join(', ')}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td>{formatCurrency(item.unitTotalVnd || item.unitPrice)}</td>
+                              <td>x {item.quantity}</td>
+                              <td>
+                                <strong>{formatCurrency(item.lineTotalVnd || item.lineTotal)}</strong>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colSpan={3} style={{ fontWeight: 600, textAlign: 'right' }}>Tổng tiền đơn hoa:</td>
+                            <td>
+                              <strong className="admin-price">{formatCurrency(selectedOrderDetail.totalVnd)}</strong>
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Payment Details */}
+                  <div className="admin-order-card admin-order-card--payment">
+                    <h4>Thông tin thanh toán</h4>
+                    <p>Phương thức: <strong>{formatPaymentMethod(selectedOrderDetail.paymentMethod)}</strong></p>
+                    {selectedOrderDetail.payment?.transferContent && (
+                      <p>Nội dung chuyển khoản: <code>{selectedOrderDetail.payment.transferContent}</code></p>
+                    )}
+                    {selectedOrderDetail.payment?.bank && selectedOrderDetail.payment.bank.available && (
+                      <p>
+                        Ngân hàng nhận: {selectedOrderDetail.payment.bank.bankName} - STK: {selectedOrderDetail.payment.bank.accountNumber} ({selectedOrderDetail.payment.bank.accountName})
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Audit History Timeline */}
+                  {Array.isArray(selectedOrderDetail.auditHistory) && selectedOrderDetail.auditHistory.length > 0 && (
+                    <div className="admin-order-audit-section">
+                      <h4>Lịch sử xử lý đơn hàng (Audit Trail)</h4>
+                      <ul className="admin-order-audit-list">
+                        {selectedOrderDetail.auditHistory.map((event) => (
+                          <li key={event.id} className="admin-order-audit-item">
+                            <span className="admin-order-audit-time">
+                              {event.createdAtUtc
+                                ? new Date(event.createdAtUtc).toLocaleString('vi-VN', {
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                  })
+                                : '—'}
+                            </span>
+                            <span className="admin-order-audit-desc">
+                              {event.action === 'order_payment_confirmed' && (
+                                <>Xác nhận thanh toán: <strong>{formatPaymentStatus('pending')} → {formatPaymentStatus('paid')}</strong> (Đơn chuyển sang <strong>{formatOrderStatus('preparing')}</strong>)</>
+                              )}
+                              {event.action === 'order_status_updated' && (
+                                <>Cập nhật trạng thái: <strong>{formatOrderStatus(event.statusBefore)} → {formatOrderStatus(event.statusAfter)}</strong></>
+                              )}
+                              {event.action !== 'order_payment_confirmed' && event.action !== 'order_status_updated' && (
+                                <>{event.action}: {event.statusBefore} → {event.statusAfter}</>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="admin-modal__footer">
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  onClick={handleCloseOrderDetail}
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </Container>
     </main>
   )

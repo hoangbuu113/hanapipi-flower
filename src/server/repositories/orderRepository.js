@@ -692,5 +692,456 @@ export function createOrderRepository(db, options = {}) {
         updatedAtUtc: order.updated_at_utc,
       }
     },
+
+    async listForAdmin(adminUser) {
+      if (adminUser?.role !== 'admin') {
+        throw orderError(403, 'FORBIDDEN', 'Bạn không có quyền truy cập tài nguyên này.')
+      }
+
+      const ordersResult = await db.prepare(`
+        SELECT
+          id,
+          user_id,
+          order_code,
+          status,
+          revision,
+          subtotal_vnd,
+          total_vnd,
+          currency,
+          delivery_date,
+          delivery_slot_id,
+          payment_method,
+          payment_status,
+          created_at_utc,
+          updated_at_utc
+        FROM orders
+        ORDER BY datetime(created_at_utc) DESC, id DESC
+      `).all()
+      const orderRows = ordersResult?.results || []
+      if (orderRows.length === 0) return []
+
+      const orderIds = orderRows.map((o) => o.id)
+      const placeholders = orderIds.map(() => '?').join(', ')
+      const itemsResult = await db.prepare(`
+        SELECT
+          order_id,
+          product_name_snapshot,
+          quantity,
+          line_total_vnd,
+          options_snapshot_json
+        FROM order_items
+        WHERE order_id IN (${placeholders})
+        ORDER BY id ASC
+      `).bind(...orderIds).all()
+      const itemsByOrderId = new Map()
+      for (const item of itemsResult?.results || []) {
+        if (!itemsByOrderId.has(item.order_id)) {
+          itemsByOrderId.set(item.order_id, [])
+        }
+        let sizeName = null
+        let wrappingName = null
+        try {
+          const opts = JSON.parse(item.options_snapshot_json)
+          sizeName = opts?.size?.name || null
+          wrappingName = opts?.wrapping?.name || null
+        } catch {
+          // Ignore parse errors
+        }
+        itemsByOrderId.get(item.order_id).push({
+          lineTotalVnd: item.line_total_vnd,
+          name: item.product_name_snapshot,
+          quantity: item.quantity,
+          size: sizeName,
+          wrapping: wrappingName,
+        })
+      }
+
+      return orderRows.map((order) => {
+        const items = itemsByOrderId.get(order.id) || []
+        const itemCount = items.reduce((acc, it) => acc + (it.quantity || 1), 0)
+        return {
+          code: order.order_code,
+          createdAtUtc: order.created_at_utc,
+          currency: order.currency,
+          deliveryDate: order.delivery_date,
+          deliverySlot: order.delivery_slot_id,
+          id: order.id,
+          itemCount,
+          items,
+          orderCode: order.order_code,
+          payment: paymentLabel(order.payment_method),
+          paymentMethod: order.payment_method,
+          paymentStatus: order.payment_status,
+          status: order.status,
+          subtotalVnd: order.subtotal_vnd,
+          timestamp: order.created_at_utc,
+          total: order.total_vnd,
+          totalVnd: order.total_vnd,
+          updatedAtUtc: order.updated_at_utc,
+          userId: order.user_id,
+        }
+      })
+    },
+
+    async getForAdmin(adminUser, idOrCode, callOptions = {}) {
+      if (adminUser?.role !== 'admin') {
+        throw orderError(403, 'FORBIDDEN', 'Bạn không có quyền truy cập tài nguyên này.')
+      }
+      if (!idOrCode || typeof idOrCode !== 'string') {
+        throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+
+      const order = await db.prepare(`
+        SELECT
+          id,
+          user_id,
+          order_code,
+          status,
+          revision,
+          subtotal_vnd,
+          total_vnd,
+          currency,
+          delivery_date,
+          delivery_slot_id,
+          buyer_contact_ciphertext,
+          recipient_ciphertext,
+          delivery_address_ciphertext,
+          gift_message_ciphertext,
+          fulfilment_key_version,
+          fulfilment_metadata_json,
+          payment_method,
+          payment_status,
+          created_at_utc,
+          updated_at_utc
+        FROM orders
+        WHERE id = ? OR order_code = ?
+        LIMIT 1
+      `).bind(idOrCode, idOrCode).first()
+
+      if (!order) {
+        throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+
+      const itemRowsResult = await db.prepare(`
+        SELECT
+          id,
+          order_id,
+          product_id,
+          item_type,
+          product_slug_snapshot,
+          product_name_snapshot,
+          options_snapshot_json,
+          composition_snapshot_json,
+          unit_price_vnd,
+          quantity,
+          line_total_vnd
+        FROM order_items
+        WHERE order_id = ?
+        ORDER BY id ASC
+      `).bind(order.id).all()
+      const itemRows = itemRowsResult?.results || []
+
+      const itemIds = itemRows.map((r) => r.id)
+      let addOnRows = []
+      if (itemIds.length > 0) {
+        const placeholders = itemIds.map(() => '?').join(', ')
+        const addOnsResult = await db.prepare(`
+          SELECT
+            id,
+            order_item_id,
+            gift_add_on_id,
+            add_on_id_snapshot,
+            add_on_name_snapshot,
+            price_vnd
+          FROM order_item_add_ons
+          WHERE order_item_id IN (${placeholders})
+          ORDER BY id ASC
+        `).bind(...itemIds).all()
+        addOnRows = addOnsResult?.results || []
+      }
+
+      const addOnsByItemId = new Map()
+      for (const addOn of addOnRows) {
+        if (!addOnsByItemId.has(addOn.order_item_id)) {
+          addOnsByItemId.set(addOn.order_item_id, [])
+        }
+        addOnsByItemId.get(addOn.order_item_id).push({
+          id: addOn.gift_add_on_id || addOn.add_on_id_snapshot,
+          name: addOn.add_on_name_snapshot,
+          price: addOn.price_vnd,
+          priceVnd: addOn.price_vnd,
+        })
+      }
+
+      const items = itemRows.map((item) => {
+        let itemOptions = null
+        let composition = null
+        try {
+          itemOptions = JSON.parse(item.options_snapshot_json)
+        } catch {
+          itemOptions = {}
+        }
+        try {
+          composition = JSON.parse(item.composition_snapshot_json)
+        } catch {
+          composition = null
+        }
+
+        const giftAddOns = addOnsByItemId.get(item.id) || []
+        return {
+          composition,
+          giftAddOns,
+          id: item.id,
+          key: item.id,
+          lineTotal: item.line_total_vnd,
+          lineTotalVnd: item.line_total_vnd,
+          name: item.product_name_snapshot,
+          productId: item.product_id,
+          quantity: item.quantity,
+          size: itemOptions?.size ? {
+            ...itemOptions.size,
+            price: itemOptions.size.priceVnd,
+          } : null,
+          slug: item.product_slug_snapshot,
+          unitPrice: item.unit_price_vnd,
+          unitTotalVnd: item.unit_price_vnd,
+          wrapping: itemOptions?.wrapping ?? null,
+        }
+      })
+
+      const fulfilmentKey = callOptions.fulfilmentKey ?? options.fulfilmentKey
+      let buyer = null
+      let recipient = null
+      let address = null
+      let gifting = null
+
+      try {
+        [buyer, recipient, address, gifting] = await Promise.all([
+          decryptFulfilmentValue(order.buyer_contact_ciphertext, fulfilmentKey),
+          decryptFulfilmentValue(order.recipient_ciphertext, fulfilmentKey),
+          decryptFulfilmentValue(order.delivery_address_ciphertext, fulfilmentKey),
+          decryptFulfilmentValue(order.gift_message_ciphertext, fulfilmentKey),
+        ])
+      } catch (err) {
+        if (err.code === 'FULFILMENT_ENCRYPTION_UNAVAILABLE' || err.status === 503) {
+          throw err
+        }
+        const decryptionError = new Error('Không thể giải mã thông tin giao hoa.')
+        decryptionError.code = 'FULFILMENT_DECRYPTION_FAILED'
+        decryptionError.status = 500
+        throw decryptionError
+      }
+
+      const bankConfig = callOptions.bankConfig ?? options.bankConfig
+      const payment = buildPaymentPresentation(order, bankConfig)
+
+      // Query audit events history for this order
+      const auditResult = await db.prepare(`
+        SELECT
+          id,
+          action,
+          actor_user_id,
+          status_before,
+          status_after,
+          created_at_utc
+        FROM audit_events
+        WHERE entity_type = 'order' AND entity_id = ?
+        ORDER BY datetime(created_at_utc) ASC, id ASC
+      `).bind(order.id).all()
+      const auditHistory = (auditResult?.results || []).map((ev) => ({
+        action: ev.action,
+        actorUserId: ev.actor_user_id,
+        createdAtUtc: ev.created_at_utc,
+        id: ev.id,
+        statusAfter: ev.status_after,
+        statusBefore: ev.status_before,
+      }))
+
+      return {
+        address,
+        auditHistory,
+        buyer,
+        code: order.order_code,
+        createdAtUtc: order.created_at_utc,
+        currency: order.currency,
+        delivery: {
+          date: order.delivery_date,
+          slot: order.delivery_slot_id,
+        },
+        gifting,
+        id: order.id,
+        items,
+        orderCode: order.order_code,
+        payment,
+        paymentMethod: order.payment_method,
+        paymentStatus: order.payment_status,
+        receiver: recipient,
+        recipient,
+        status: order.status,
+        subtotalVnd: order.subtotal_vnd,
+        timestamp: order.created_at_utc,
+        total: order.total_vnd,
+        totalVnd: order.total_vnd,
+        updatedAtUtc: order.updated_at_utc,
+        userId: order.user_id,
+      }
+    },
+
+    async confirmPayment(adminUser, idOrCode, callOptions = {}) {
+      if (adminUser?.role !== 'admin') {
+        throw orderError(403, 'FORBIDDEN', 'Bạn không có quyền truy cập tài nguyên này.')
+      }
+      if (!idOrCode || typeof idOrCode !== 'string') {
+        throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+
+      const order = await db.prepare(`
+        SELECT id, order_code, status, payment_status
+        FROM orders
+        WHERE id = ? OR order_code = ?
+        LIMIT 1
+      `).bind(idOrCode, idOrCode).first()
+
+      if (!order) {
+        throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+
+      // Idempotent: if already paid, return current order safely
+      if (order.payment_status === 'paid') {
+        return this.getForAdmin(adminUser, order.id, callOptions)
+      }
+
+      if (order.payment_status !== 'pending' && order.payment_status !== 'mock_pending') {
+        throw orderError(409, 'INVALID_PAYMENT_STATE', `Không thể xác nhận thanh toán cho đơn hàng có trạng thái: ${order.payment_status}.`)
+      }
+
+      const nowUtc = (options.now ? options.now() : new Date()).toISOString()
+      const newStatus = order.status === 'received' ? 'preparing' : order.status
+
+      const updateResult = await db.prepare(`
+        UPDATE orders
+        SET payment_status = 'paid',
+            status = CASE WHEN status = 'received' THEN 'preparing' ELSE status END,
+            updated_at_utc = ?
+        WHERE id = ? AND payment_status IN ('pending', 'mock_pending')
+      `).bind(nowUtc, order.id).run()
+
+      if (!updateResult?.meta?.changes && updateResult?.changes === 0) {
+        // Concurrency check: check if already updated
+        const refreshed = await db.prepare('SELECT payment_status FROM orders WHERE id = ?').bind(order.id).first()
+        if (refreshed?.payment_status === 'paid') {
+          return this.getForAdmin(adminUser, order.id, callOptions)
+        }
+        throw orderError(409, 'CONCURRENT_MODIFICATION', 'Trạng thái thanh toán đã được cập nhật bởi thao tác khác.')
+      }
+
+      // Record audit event
+      const auditId = createId('aud')
+      await db.prepare(`
+        INSERT INTO audit_events (
+          id, actor_user_id, action, entity_type, entity_id,
+          result, request_id, status_before, status_after,
+          metadata_version, created_at_utc
+        ) VALUES (
+          ?, ?, 'order_payment_confirmed', 'order', ?,
+          'success', ?, ?, ?,
+          '1', ?
+        )
+      `).bind(
+        auditId,
+        adminUser.id,
+        order.id,
+        callOptions.requestId ?? null,
+        order.status,
+        newStatus,
+        nowUtc,
+      ).run()
+
+      return this.getForAdmin(adminUser, order.id, callOptions)
+    },
+
+    async updateStatus(adminUser, idOrCode, requestedStatus, callOptions = {}) {
+      if (adminUser?.role !== 'admin') {
+        throw orderError(403, 'FORBIDDEN', 'Bạn không có quyền truy cập tài nguyên này.')
+      }
+      if (!idOrCode || typeof idOrCode !== 'string') {
+        throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+      if (!requestedStatus || typeof requestedStatus !== 'string') {
+        throw orderError(400, 'INVALID_STATUS', 'Trạng thái chuyển đổi không hợp lệ.')
+      }
+
+      const order = await db.prepare(`
+        SELECT id, order_code, status, payment_status
+        FROM orders
+        WHERE id = ? OR order_code = ?
+        LIMIT 1
+      `).bind(idOrCode, idOrCode).first()
+
+      if (!order) {
+        throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+
+      // Strict state machine transitions
+      const VALID_FULFILMENT_TRANSITIONS = {
+        cancelled: [],
+        completed: [],
+        delivering: ['completed'],
+        out_for_delivery: ['completed'],
+        preparing: ['delivering', 'out_for_delivery'],
+        received: ['preparing'],
+      }
+
+      const allowedNext = VALID_FULFILMENT_TRANSITIONS[order.status] || []
+      if (!allowedNext.includes(requestedStatus)) {
+        throw orderError(
+          400,
+          'INVALID_STATUS_TRANSITION',
+          `Không thể chuyển trạng thái đơn hoa từ "${order.status}" sang "${requestedStatus}".`,
+        )
+      }
+
+      // Do not allow preparing before payment is confirmed
+      if (requestedStatus === 'preparing' && order.payment_status !== 'paid') {
+        throw orderError(409, 'PAYMENT_REQUIRED', 'Đơn hoa cần được xác nhận thanh toán trước khi chuyển sang chuẩn bị.')
+      }
+
+      const nowUtc = (options.now ? options.now() : new Date()).toISOString()
+
+      const updateResult = await db.prepare(`
+        UPDATE orders
+        SET status = ?,
+            updated_at_utc = ?
+        WHERE id = ? AND status = ?
+      `).bind(requestedStatus, nowUtc, order.id, order.status).run()
+
+      if (!updateResult?.meta?.changes && updateResult?.changes === 0) {
+        throw orderError(409, 'CONCURRENT_MODIFICATION', 'Trạng thái đơn hoa đã thay đổi bởi thao tác khác. Vui lòng tải lại trang.')
+      }
+
+      // Record audit event
+      const auditId = createId('aud')
+      await db.prepare(`
+        INSERT INTO audit_events (
+          id, actor_user_id, action, entity_type, entity_id,
+          result, request_id, status_before, status_after,
+          metadata_version, created_at_utc
+        ) VALUES (
+          ?, ?, 'order_status_updated', 'order', ?,
+          'success', ?, ?, ?,
+          '1', ?
+        )
+      `).bind(
+        auditId,
+        adminUser.id,
+        order.id,
+        callOptions.requestId ?? null,
+        order.status,
+        requestedStatus,
+        nowUtc,
+      ).run()
+
+      return this.getForAdmin(adminUser, order.id, callOptions)
+    },
   }
 }

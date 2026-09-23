@@ -274,6 +274,19 @@ function CheckoutSuccessPage() {
             </section>
           )}
 
+          {isBankTransfer && !isPaymentPending && (order.paymentStatus === 'paid' || order.payment?.status === 'paid') && (
+            <section className="bank-transfer-box bank-transfer-box--paid" aria-labelledby="bank-transfer-paid-title">
+              <div className="bank-transfer-box__header">
+                <h2 id="bank-transfer-paid-title">Thông tin thanh toán</h2>
+                <span className="bank-transfer-badge bank-transfer-badge--paid">Đã thanh toán</span>
+              </div>
+              <div className="bank-transfer-box__confirmed">
+                <p className="bank-transfer-box__confirmed-msg">❀ Hanapipi đã xác nhận thanh toán</p>
+                <p className="bank-transfer-box__confirmed-sub">Đơn hoa của bạn đang được chuẩn bị và xử lý theo lịch giao.</p>
+              </div>
+            </section>
+          )}
+
           {hasGiftingDetails && (
             <section className="success-page__gifting" aria-labelledby="success-gifting-title">
               <h2 id="success-gifting-title">Điều gửi kèm bó hoa</h2>

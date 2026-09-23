@@ -35,6 +35,7 @@ const V1_ADMIN_ME_PATH = `${API_V1_PREFIX}/admin/me`
 const V1_ADMIN_PRODUCTS_PATH = `${API_V1_PREFIX}/admin/products`
 const V1_ADMIN_GIFT_ADD_ONS_PATH = `${API_V1_PREFIX}/admin/gift-add-ons`
 const V1_ADMIN_MEDIA_PATH = `${API_V1_PREFIX}/admin/media`
+const V1_ADMIN_ORDERS_PATH = `${API_V1_PREFIX}/admin/orders`
 const V1_MEDIA_PATH = `${API_V1_PREFIX}/media`
 const V1_CATALOGUE_PATH = `${API_V1_PREFIX}/catalogue`
 const V1_CATALOGUE_PRODUCTS_PATH = `${API_V1_PREFIX}/catalogue/products`
@@ -254,6 +255,192 @@ async function handleGetUserOrder(idOrCode, request, env, requestId, dependencie
     const message = err.message || 'Không thể tải thông tin đơn hàng.'
     return result(errorResponse(
       status,
+      code,
+      message,
+      requestId,
+    ), route, { errorCode: code })
+  }
+}
+
+async function handleListAdminOrders(request, env, requestId, dependencies) {
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), V1_ADMIN_ORDERS_PATH, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const orders = await repositories.orders.listForAdmin(auth.user)
+    return result(
+      successResponse({
+        items: orders,
+        orders,
+        total: orders.length,
+      }, requestId),
+      V1_ADMIN_ORDERS_PATH,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tải danh sách đơn hàng.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), V1_ADMIN_ORDERS_PATH, { errorCode: code })
+  }
+}
+
+async function handleGetAdminOrder(idOrCode, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_ORDERS_PATH}/:id`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), route, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const order = await repositories.orders.getForAdmin(auth.user, idOrCode)
+    return result(
+      successResponse({ order }, requestId),
+      route,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tải thông tin đơn hàng.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), route, { errorCode: code })
+  }
+}
+
+async function handleConfirmAdminOrderPayment(idOrCode, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_ORDERS_PATH}/:id/confirm-payment`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), route, { errorCode: auth.code })
+  }
+
+  if (request.headers.has('Origin')) {
+    const originValidation = validateMutationOrigin(request, env)
+    if (!originValidation.ok) {
+      return originNotAllowed(requestId, route)
+    }
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const order = await repositories.orders.confirmPayment(auth.user, idOrCode, { requestId })
+    return result(
+      successResponse({
+        message: 'Đã xác nhận thanh toán thành công.',
+        order,
+      }, requestId),
+      route,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể xác nhận thanh toán.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), route, { errorCode: code })
+  }
+}
+
+async function handleUpdateAdminOrderStatus(idOrCode, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_ORDERS_PATH}/:id/status`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), route, { errorCode: auth.code })
+  }
+
+  if (request.headers.has('Origin')) {
+    const originValidation = validateMutationOrigin(request, env)
+    if (!originValidation.ok) {
+      return originNotAllowed(requestId, route)
+    }
+  }
+
+  let body = null
+  try {
+    body = await request.json()
+  } catch {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), route, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), route, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  const status = body.status
+  if (!status || typeof status !== 'string') {
+    return result(errorResponse(
+      400,
+      'INVALID_STATUS',
+      'Trạng thái đơn hoa không hợp lệ.',
+      requestId,
+    ), route, { errorCode: 'INVALID_STATUS' })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const order = await repositories.orders.updateStatus(auth.user, idOrCode, status, { requestId })
+    return result(
+      successResponse({
+        message: 'Đã cập nhật trạng thái đơn hoa thành công.',
+        order,
+      }, requestId),
+      route,
+    )
+  } catch (err) {
+    const errStatus = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể cập nhật trạng thái đơn hoa.'
+    return result(errorResponse(
+      errStatus,
       code,
       message,
       requestId,
@@ -998,6 +1185,21 @@ function matchOrderIdOrCode(pathname) {
   return null
 }
 
+function matchAdminOrderId(pathname) {
+  if (!pathname.startsWith(`${V1_ADMIN_ORDERS_PATH}/`)) return null
+  const remainder = pathname.slice(V1_ADMIN_ORDERS_PATH.length + 1).trim()
+  if (remainder.endsWith('/confirm-payment')) {
+    const id = remainder.slice(0, -'/confirm-payment'.length).trim()
+    if (id.length > 0 && !id.includes('/')) return { action: 'confirm-payment', idOrCode: decodeURIComponent(id) }
+  } else if (remainder.endsWith('/status')) {
+    const id = remainder.slice(0, -'/status'.length).trim()
+    if (id.length > 0 && !id.includes('/')) return { action: 'status', idOrCode: decodeURIComponent(id) }
+  } else if (remainder.length > 0 && !remainder.includes('/')) {
+    return { action: null, idOrCode: decodeURIComponent(remainder) }
+  }
+  return null
+}
+
 function parseCatalogueListOptions(url) {
   const params = url.searchParams
   const options = {}
@@ -1179,6 +1381,41 @@ export function createApiRouter(options = {}) {
         createRepositories,
         verifyIdentity,
       })
+    }
+
+    if (pathname === V1_ADMIN_ORDERS_PATH) {
+      if (request.method !== 'GET') return methodNotAllowed(requestId, V1_ADMIN_ORDERS_PATH, 'GET')
+      const adminOrderDependencies = {
+        authorizeAdmin,
+        createRepositories,
+        verifyIdentity,
+      }
+      return handleListAdminOrders(request, env, requestId, adminOrderDependencies)
+    }
+
+    const adminOrderMatch = matchAdminOrderId(pathname)
+    if (adminOrderMatch) {
+      const adminOrderDependencies = {
+        authorizeAdmin,
+        createRepositories,
+        verifyIdentity,
+      }
+      if (adminOrderMatch.action === 'confirm-payment') {
+        if (request.method !== 'POST') {
+          return methodNotAllowed(requestId, `${V1_ADMIN_ORDERS_PATH}/:id/confirm-payment`, 'POST')
+        }
+        return handleConfirmAdminOrderPayment(adminOrderMatch.idOrCode, request, env, requestId, adminOrderDependencies)
+      }
+      if (adminOrderMatch.action === 'status') {
+        if (request.method !== 'POST') {
+          return methodNotAllowed(requestId, `${V1_ADMIN_ORDERS_PATH}/:id/status`, 'POST')
+        }
+        return handleUpdateAdminOrderStatus(adminOrderMatch.idOrCode, request, env, requestId, adminOrderDependencies)
+      }
+      if (request.method !== 'GET') {
+        return methodNotAllowed(requestId, `${V1_ADMIN_ORDERS_PATH}/:id`, 'GET')
+      }
+      return handleGetAdminOrder(adminOrderMatch.idOrCode, request, env, requestId, adminOrderDependencies)
     }
 
     if (pathname === V1_ADMIN_PRODUCTS_PATH) {

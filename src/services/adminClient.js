@@ -1023,3 +1023,205 @@ export async function toggleAdminGiftAddOnActive(id, active, {
     return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, item: null, ok: false, status: 0 }
   }
 }
+
+export async function fetchAdminOrders({
+  getToken,
+  fetchImpl = globalThis.fetch,
+  signal,
+} = {}) {
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, ok: false, orders: [], status: 401 }
+  }
+
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, ok: false, orders: [], status: 401 }
+  }
+
+  try {
+    const response = await fetchImpl('/api/v1/admin/orders', {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể tải danh sách đơn hàng.' },
+        ok: false,
+        orders: [],
+        status: response.status,
+      }
+    }
+    return {
+      error: null,
+      ok: true,
+      orders: body?.data?.orders || [],
+      status: response.status,
+      total: body?.data?.total ?? 0,
+    }
+  } catch (err) {
+    if (signal?.aborted) throw err
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, ok: false, orders: [], status: 0 }
+  }
+}
+
+export async function fetchAdminOrderDetail(idOrCode, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+  signal,
+} = {}) {
+  if (!idOrCode || typeof idOrCode !== 'string') {
+    throw new TypeError('An order ID or order code is required.')
+  }
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, ok: false, order: null, status: 401 }
+  }
+
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, ok: false, order: null, status: 401 }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/admin/orders/${encodeURIComponent(idOrCode)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể tải chi tiết đơn hàng.' },
+        ok: false,
+        order: null,
+        status: response.status,
+      }
+    }
+    return {
+      error: null,
+      ok: true,
+      order: body?.data?.order ?? null,
+      status: response.status,
+    }
+  } catch (err) {
+    if (signal?.aborted) throw err
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, ok: false, order: null, status: 0 }
+  }
+}
+
+export async function confirmAdminOrderPayment(idOrCode, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (!idOrCode || typeof idOrCode !== 'string') {
+    throw new TypeError('An order ID or order code is required.')
+  }
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, ok: false, order: null, status: 401 }
+  }
+
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, ok: false, order: null, status: 401 }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/admin/orders/${encodeURIComponent(idOrCode)}/confirm-payment`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể xác nhận thanh toán.' },
+        ok: false,
+        order: null,
+        status: response.status,
+      }
+    }
+    return {
+      error: null,
+      message: body?.data?.message ?? 'Đã xác nhận thanh toán thành công.',
+      ok: true,
+      order: body?.data?.order ?? null,
+      status: response.status,
+    }
+  } catch {
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, ok: false, order: null, status: 0 }
+  }
+}
+
+export async function updateAdminOrderStatus(idOrCode, status, {
+  getToken,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (!idOrCode || typeof idOrCode !== 'string') {
+    throw new TypeError('An order ID or order code is required.')
+  }
+  if (!status || typeof status !== 'string') {
+    throw new TypeError('A target status is required.')
+  }
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, ok: false, order: null, status: 401 }
+  }
+
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, ok: false, order: null, status: 401 }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/admin/orders/${encodeURIComponent(idOrCode)}/status`, {
+      body: JSON.stringify({ status }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể cập nhật trạng thái đơn hoa.' },
+        ok: false,
+        order: null,
+        status: response.status,
+      }
+    }
+    return {
+      error: null,
+      message: body?.data?.message ?? 'Đã cập nhật trạng thái đơn hoa thành công.',
+      ok: true,
+      order: body?.data?.order ?? null,
+      status: response.status,
+    }
+  } catch {
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, ok: false, order: null, status: 0 }
+  }
+}
