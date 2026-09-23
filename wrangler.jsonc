@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "hanapipi-flower",
+  "name": "hanapipi-flower-prod",
   "main": "./src/worker.js",
   "compatibility_date": "2026-05-22",
   "secrets": {
@@ -29,5 +29,32 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
+  },
+  "env": {
+    "staging": {
+      "name": "hanapipi-flower",
+      "secrets": {
+        "required": ["CLERK_JWT_KEY", "ORDER_FULFILMENT_KEY"]
+      },
+      "vars": {
+        "API_V1_ENABLED": "true",
+        "API_ALLOWED_ORIGINS": "https://hanapipi-flower.hutstudio.workers.dev",
+        "CLERK_AUTHORIZED_PARTIES": "https://hanapipi-flower.hutstudio.workers.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "hanapipi-flower-staging",
+          "database_id": "dd0c2d87-889f-4fdf-b15e-b553ee53ccd4",
+          "migrations_dir": "drizzle"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "MEDIA_BUCKET",
+          "bucket_name": "hanapipi-media-staging"
+        }
+      ]
+    }
   }
 }
