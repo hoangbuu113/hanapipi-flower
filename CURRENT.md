@@ -1,33 +1,34 @@
 # CURRENT PHASE
 
-Phase 18 in progress: Secure Admin order management and fulfilment workflow is implemented: `pending payment` → Admin confirms payment received → `preparing` → `delivering` → `completed`. Payment confirmation moves orders atomically to `paid` and `preparing`, recording audit events in `audit_events`. State machine enforces strict fulfilment transitions: `preparing` → `delivering` → `completed`, rejecting backward transitions and transitions from completed. Actor identity is derived strictly from verified Clerk admin tokens, rejecting client-supplied IDs or roles. Fulfilment recipient/delivery PII is decrypted only on detail endpoint for verified admin and never exposed in list responses, while completed orders remain immutable historical records. Admin UI at `/admin` includes a dedicated Orders Fulfilment section with real-time status badges, detailed customer/recipient modal, item snapshots, audit trail, and idempotent action buttons with submission loading states. Customer UI at `/checkout/success` updates seamlessly when payment is confirmed, replacing transfer instructions with confirmed payment messaging. Frontend Shop, Product Detail, SearchPage, Homepage (`#best-sellers`), FlowerFinderPage, WishlistPage, Cart, Checkout, and Orders are migrated to the D1-backed catalogue/orders API with intentional gate fallback (`API_NOT_FOUND` → static data) and error/retry states. Static `src/data/products.js` is temporarily retained for unmigrated secondary consumers (ConciergeWidget, FlowerAlreadyTakenPage). API v1 remains default closed (`API_V1_ENABLED=false`).
+Production-Readiness Audit completed: Full-stack application audited and hardened for staging deployment. Core commerce flows (D1 Catalogue -> Cart -> Server-Authoritative Checkout -> VietQR Bank Transfer Presentation -> Admin Order Fulfilment) are verified end-to-end. Server secrets (`ORDER_FULFILMENT_KEY`, `CLERK_JWT_KEY`, `GROQ_API_KEY`) and Cloudflare bindings (`DB`, `MEDIA_BUCKET`, `ASSETS`) are audited. Added `ORDER_FULFILMENT_KEY` to `secrets.required` in `wrangler.jsonc`. Production build passes, client bundle secret scan confirms zero server secrets or PII exposed, and postbuild cleanly removes `.dev.vars` while packaging all 5 D1 migrations. All 573 automated tests pass with 0 lint errors. `API_V1_ENABLED=false` remains default closed in committed configuration.
 
 # LAST VERIFIED TASK
 
-Migrated remaining secondary runtime consumers away from static catalogue data:
-- `ConciergeWidget.jsx`:
-  - Product recommendation grounding and candidate resolution uses `fetchShopCatalogue` from `catalogueClient.js`.
-  - Canonical D1 product data (name, price, media) wins over static data.
-  - Inactive/archived products are excluded from purchasable recommendations.
-  - API errors/offline states gracefully fall back to local responses without crashing.
-  - Removed direct import of `src/data/products.js`.
-- `FlowerAlreadyTakenPage.jsx`:
-  - Product lookup uses `fetchProductDetail('no-watering-flower')` from `catalogueClient.js`.
-  - Preserves `no-watering-flower` special invariants: priceless (`priceVnd: null`), non-purchasable (`isPurchasable: false`), protected, and private gallery behavior (`personalFlowerMedia`).
-  - Added loading skeleton and safe error/retry UI.
-  - Removed direct import of `src/data/products.js`.
-- `src/utils/order.js`:
-  - Removed unused static `products` import from `getCartItemPresentation`; uses snapshot/resolved item names, sizes, and wrapping directly.
-- `catalogueClient.js`:
-  - Retained intentional `404 + API_NOT_FOUND` compatibility fallback to static catalogue while `API_V1_ENABLED=false` remains default.
+Production-readiness audit and configuration hardening:
+- Audited secret/env inventory across client and server.
+- Audited D1 migrations (`0001_phase16_foundation.sql` through `0005_add_order_delivering_status.sql`).
+- Audited Cloudflare R2 media storage (`MEDIA_BUCKET`) security and error handling.
+- Audited Clerk JWT verification, subject mapping, and authorization (`requireAuthenticatedUser`, `requireAdmin`).
+- Audited bank-transfer payment presentation with VietQR (NAPAS 247 EMVCo standard).
+- Audited AES-GCM PII encryption for buyer contact, recipient, address, and gift message in D1.
+- Audited Groq concierge proxy, prompt injection protections, and PII redaction.
+- Audited CORS, origin mutation validation, and baseline HTTP security headers.
+- Audited structured JSON logging (6 allowlisted safe fields, zero server `console.log`).
+- Audited static catalogue fallback in `catalogueClient.js` (isolated to 404 / `API_NOT_FOUND`).
+- Hardening fix: Added `ORDER_FULFILMENT_KEY` to `secrets.required` in `wrangler.jsonc`.
+- Production build verified: `vite build` + `remove-build-dev-vars.js`.
+- Secret scan on `dist/client/`: 0 secrets, 0 server symbols, 0 PII.
 - Automated tests:
-  - Added `test/secondary-catalogue.test.js`: 13/13 passed.
+  - `test:secondary`: 13/13 passed.
+  - `test:order` + `test:admin`: 151/151 passed.
   - `test:frontend`: 382/382 passed.
-  - `test:shop`: 12/12 passed.
+  - `test:auth`: 15/15 passed.
+  - `test:catalogue`: 14/14 passed.
+  - `test:worker`: 11/11 passed.
+  - `test:d1`: foundation validation passed.
   - `lint`: 0 warnings, 0 errors.
-  - `build`: passed, packaged 5 D1 migration files.
   - `git diff --check`: passed.
-  - `API_V1_ENABLED=false` remains default; no deployment occurred.
+- `API_V1_ENABLED=false` remains default closed; no deployment occurred.
 
 # CURRENT ARCHITECTURE STATE
 
@@ -47,11 +48,11 @@ Hard delete is not implemented.
 
 # CURRENT BLOCKERS
 
-None. Secondary catalogue consumers are verified locally and `API_V1_ENABLED` remains intentionally disabled by default.
+None for local codebase. Before staging deployment, Cloudflare resources must be provisioned (D1 remote DB, R2 bucket, and secrets `CLERK_JWT_KEY`, `GROQ_API_KEY`, `ORDER_FULFILMENT_KEY`).
 
 # OPEN RISKS
 
-- Rotation/revocation status of a Groq key previously exposed in chat is UNKNOWN.
+- Rotation/revocation status of a Groq key previously exposed in chat is UNKNOWN (must be rotated before public exposure).
 - Public deployment may lag behind the repository; parity was not verified in this task.
 - `qa/` is untracked.
 - README is the generic Vite template.
@@ -59,7 +60,7 @@ None. Secondary catalogue consumers are verified locally and `API_V1_ENABLED` re
 
 # NEXT BEST TASK
 
-Perform production-readiness and deployment configuration audit.
+Provision staging Cloudflare resources and deploy to staging.
 
 # LATEST VERIFIED COMMIT
 
