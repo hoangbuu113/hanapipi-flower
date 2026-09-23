@@ -12,6 +12,8 @@ import {
   createConciergeRequest,
   getConciergeReply,
 } from '../src/services/conciergeService.js'
+import { handleConciergeRequest } from '../src/server/concierge.js'
+import { redactConciergeText } from '../src/utils/conciergePrivacy.js'
 import { isPurchasableProduct } from '../src/utils/productCommerce.js'
 import { createWorker } from '../src/worker.js'
 
@@ -70,6 +72,37 @@ function createEnv(d1, { apiV1Enabled = 'true' } = {}) {
   }
 }
 
+function createConciergePayload(overrides = {}) {
+  return {
+    history: [],
+    locale: 'vi-VN',
+    message: 'Tư vấn hoa sinh nhật dịu dàng khoảng 700 nghìn.',
+    pageContext: { productId: null, route: '/shop' },
+    ...overrides,
+  }
+}
+
+function createConciergeRequestObject(payload) {
+  return new Request('http://127.0.0.1:5173/api/concierge', {
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  })
+}
+
+function createGroqSuccess(modelPayload = {
+  linkIds: [],
+  message: 'Mình đã chọn vài bó hoa phù hợp.',
+  note: null,
+  productIds: [],
+  quickReplies: [],
+  type: 'answer',
+}) {
+  return new Response(JSON.stringify({
+    choices: [{ message: { content: JSON.stringify(modelPayload) } }],
+  }), { headers: { 'Content-Type': 'application/json' } })
+}
+
 // =============================================================================
 // CONCIERGE TESTS (1 - 5)
 // =============================================================================
@@ -97,7 +130,7 @@ test('1. Concierge: canonical API products used for grounding and candidate sele
   }
 })
 
-test('2. Concierge: current D1 price/name/media win over static data', async () => {
+test('2. Concierge: browser request omits catalogue data and current D1 wins server-side', async () => {
   const { d1, sqlite } = createSeededDatabase()
   // Admin updates product name and base price in D1
   sqlite.prepare("UPDATE products SET name = 'Nắng Dịu Custom Title', price_vnd = 999000 WHERE id = 'nang-diu'").run()
@@ -116,17 +149,30 @@ test('2. Concierge: current D1 price/name/media win over static data', async () 
   assert.equal(updatedProduct.name, 'Nắng Dịu Custom Title')
   assert.equal(updatedProduct.priceVnd, 999000)
 
-  // Grounding and concierge candidates reflect canonical D1 product
-  const candidates = [{ product: updatedProduct }]
   const request = createConciergeRequest({
-    candidates,
     history: [],
     message: 'Tư vấn giúp tôi',
     pageContext: { productId: updatedProduct.id, route: `/product/${updatedProduct.slug}` },
   })
-  assert.equal(request.candidates[0].id, 'nang-diu')
-  assert.equal(request.candidates[0].name, 'Nắng Dịu Custom Title')
-  assert.equal(request.candidates[0].price, 999000)
+  assert.equal('candidates' in request, false)
+
+  let upstreamRequest = null
+  const response = await handleConciergeRequest(
+    createConciergeRequestObject(request),
+    { DB: d1, GROQ_API_KEY: 'test-only-key' },
+    {
+      fetchImpl: async (_url, init) => {
+        upstreamRequest = JSON.parse(init.body)
+        return createGroqSuccess()
+      },
+    },
+  )
+  assert.equal(response.status, 200)
+
+  const upstreamData = JSON.parse(upstreamRequest.messages[1].content)
+  const authoritative = upstreamData.candidateProducts.find(({ id }) => id === 'nang-diu')
+  assert.equal(authoritative.name, 'Nắng Dịu Custom Title')
+  assert.equal(authoritative.price, 999000)
 })
 
 test('3. Concierge: archived product not surfaced as purchasable', async () => {
@@ -164,7 +210,6 @@ test('4. Concierge: API error handled safely without crashing or throwing', asyn
   // When catalogue is empty due to API failure, getConciergeReply uses local fallback safely
   const response = await getConciergeReply({
     apiUrl: null, // local fallback
-    candidates: [],
     catalogue: [],
     currentProduct: null,
     grounding: getGroundedCandidates('Tư vấn giúp tôi', []),
@@ -181,6 +226,150 @@ test('5. Concierge: no direct static catalogue import remains in ConciergeWidget
   const source = fs.readFileSync(path.resolve('src/components/ConciergeWidget.jsx'), 'utf8')
   assert.ok(!source.includes('../data/products'), 'ConciergeWidget must not import ../data/products')
   assert.ok(source.includes('fetchShopCatalogue'), 'ConciergeWidget must import fetchShopCatalogue')
+})
+
+test('5a. Concierge: Worker rejects client catalogue candidates instead of trusting them', async () => {
+  const { d1 } = createSeededDatabase()
+  let upstreamCalled = false
+  const response = await handleConciergeRequest(
+    createConciergeRequestObject({
+      ...createConciergePayload(),
+      candidates: [{ id: 'made-up-product', name: 'Fake', price: 1 }],
+    }),
+    { DB: d1, GROQ_API_KEY: 'test-only-key' },
+    {
+      fetchImpl: async () => {
+        upstreamCalled = true
+        return createGroqSuccess()
+      },
+    },
+  )
+  assert.equal(response.status, 400)
+  assert.equal((await response.json()).code, 'INVALID_REQUEST')
+  assert.equal(upstreamCalled, false)
+})
+
+test('5b. Concierge: server candidates exclude inactive, nonexistent and priceless products', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  sqlite.prepare("UPDATE products SET active = 0 WHERE id = 'nang-diu'").run()
+  let upstreamRequest = null
+  const response = await handleConciergeRequest(
+    createConciergeRequestObject(createConciergePayload({
+      message: 'Tìm hoa yêu thương dịu dàng.',
+      pageContext: { productId: 'no-watering-flower', route: '/product/no-watering-flower' },
+    })),
+    { DB: d1, GROQ_API_KEY: 'test-only-key' },
+    {
+      fetchImpl: async (_url, init) => {
+        upstreamRequest = JSON.parse(init.body)
+        return createGroqSuccess()
+      },
+    },
+  )
+  assert.equal(response.status, 200)
+  const upstreamData = JSON.parse(upstreamRequest.messages[1].content)
+  assert.equal(upstreamData.candidateProducts.some(({ id }) => id === 'nang-diu'), false)
+  assert.equal(upstreamData.candidateProducts.some(({ id }) => id === 'no-watering-flower'), false)
+  assert.equal(upstreamData.candidateProducts.some(({ id }) => id === 'missing-product'), false)
+  assert.ok(upstreamData.candidateProducts.every(({ price }) => Number.isInteger(price)))
+})
+
+test('5c. Concierge: PII and obvious pasted secrets are redacted before Groq', async () => {
+  const { d1 } = createSeededDatabase()
+  const fakeJwt = `eyJ${'a'.repeat(16)}.${'b'.repeat(16)}.${'c'.repeat(16)}`
+  const fakeApiKey = `gsk_${'d'.repeat(28)}`
+  const fakeAddress = '12 Nguyễn Huệ, Phường Bến Nghé'
+  let upstreamRequest = null
+  const response = await handleConciergeRequest(
+    createConciergeRequestObject(createConciergePayload({
+      history: [{ content: `Bearer ${'z'.repeat(48)}`, role: 'user' }],
+      message: `Email demo@example.invalid, số 0901234567, mã HF-20260923-ABCDEF12. Địa chỉ: ${fakeAddress}. Token ${fakeJwt}, key ${fakeApiKey}. Tư vấn hoa sinh nhật.`,
+    })),
+    { DB: d1, GROQ_API_KEY: 'test-only-key' },
+    {
+      fetchImpl: async (_url, init) => {
+        upstreamRequest = JSON.parse(init.body)
+        return createGroqSuccess()
+      },
+    },
+  )
+  assert.equal(response.status, 200)
+  const upstreamText = upstreamRequest.messages[1].content
+  assert.doesNotMatch(upstreamText, /demo@example\.invalid|0901234567|HF-20260923-ABCDEF12/iu)
+  assert.equal(upstreamText.includes(fakeAddress), false)
+  assert.equal(upstreamText.includes(fakeJwt), false)
+  assert.equal(upstreamText.includes(fakeApiKey), false)
+  assert.match(upstreamText, /đã ẩn/iu)
+  assert.equal(redactConciergeText('Tặng hoa cho Nguyễn dịp sinh nhật.'), 'Tặng hoa cho Nguyễn dịp sinh nhật.')
+})
+
+test('5d. Concierge: invalid model product IDs and malformed provider payload fail safely', async () => {
+  const { d1 } = createSeededDatabase()
+  const env = { DB: d1, GROQ_API_KEY: 'test-only-key' }
+
+  const protectedProduct = await handleConciergeRequest(
+    createConciergeRequestObject(createConciergePayload()),
+    env,
+    {
+      fetchImpl: async () => createGroqSuccess({
+        linkIds: [],
+        message: 'Không hợp lệ.',
+        note: null,
+        productIds: ['no-watering-flower'],
+        quickReplies: [],
+        type: 'recommendations',
+      }),
+    },
+  )
+  assert.equal(protectedProduct.status, 502)
+  assert.equal((await protectedProduct.json()).code, 'AI_INVALID_RESPONSE')
+
+  const malformed = await handleConciergeRequest(
+    createConciergeRequestObject(createConciergePayload()),
+    env,
+    { fetchImpl: async () => new Response('{not-json', { status: 200 }) },
+  )
+  assert.equal(malformed.status, 502)
+  assert.equal((await malformed.json()).code, 'AI_INVALID_RESPONSE')
+})
+
+test('5e. Concierge: provider auth, rate-limit, timeout and unavailable catalogue stay safe', async () => {
+  const { d1 } = createSeededDatabase()
+  const requestPayload = createConciergePayload()
+  const env = { DB: d1, GROQ_API_KEY: 'test-only-key' }
+
+  for (const [status, expectedCode] of [[401, 'AI_AUTH_FAILED'], [403, 'AI_AUTH_FAILED'], [429, 'AI_RATE_LIMITED'], [500, 'AI_UPSTREAM_ERROR']]) {
+    const response = await handleConciergeRequest(
+      createConciergeRequestObject(requestPayload),
+      env,
+      { fetchImpl: async () => new Response('', { status }) },
+    )
+    assert.equal((await response.json()).code, expectedCode)
+  }
+
+  const timeout = await handleConciergeRequest(
+    createConciergeRequestObject(requestPayload),
+    env,
+    {
+      fetchImpl: async (_url, init) => new Promise((resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+      }),
+      timeoutMs: 5,
+    },
+  )
+  assert.equal(timeout.status, 504)
+  assert.equal((await timeout.json()).code, 'AI_TIMEOUT')
+
+  const unavailable = await handleConciergeRequest(
+    createConciergeRequestObject(requestPayload),
+    env,
+    { candidateLoader: async () => { throw new Error('private database detail') } },
+  )
+  assert.equal(unavailable.status, 503)
+  assert.deepEqual(await unavailable.json(), {
+    code: 'AI_UNAVAILABLE',
+    message: 'Dữ liệu tư vấn hiện chưa sẵn sàng.',
+  })
 })
 
 // =============================================================================

@@ -21,16 +21,18 @@ function containsUrl(value) {
   return /(?:https?:\/\/|www\.)/iu.test(value)
 }
 
-export function validateConciergeResponse(value, catalogue, candidateIds) {
+export function validateConciergeResponse(value, catalogue) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   if (!RESPONSE_TYPES.includes(value.type)) return null
 
   const message = cleanText(value.message, 700)
   const note = value.note === null ? null : cleanText(value.note, 240)
   const quickReplies = cleanUniqueStrings(value.quickReplies, { maxItems: 4, maxLength: 80 })
-  const allowedCandidateIds = new Set(candidateIds)
+  const productMap = new Map(
+    catalogue.filter(isPurchasableProduct).map((product) => [product.id, product]),
+  )
   const productIds = cleanUniqueStrings(value.productIds, {
-    allowedValues: allowedCandidateIds,
+    allowedValues: new Set(productMap.keys()),
     maxItems: 3,
     maxLength: 80,
   })
@@ -45,9 +47,6 @@ export function validateConciergeResponse(value, catalogue, candidateIds) {
   if (value.type === 'recommendations' && productIds.length === 0) return null
   if (value.type === 'navigation' && linkIds.length === 0) return null
 
-  const productMap = new Map(
-    catalogue.filter(isPurchasableProduct).map((product) => [product.id, product]),
-  )
   const products = productIds.map((id) => productMap.get(id)).filter(Boolean)
   if (products.length !== productIds.length) return null
 

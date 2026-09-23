@@ -1,4 +1,11 @@
-import { supportKnowledgeForModel, supportLinkIds } from '../data/supportKnowledge.js'
+import {
+  compactProductKnowledge,
+  supportKnowledgeForModel,
+  supportLinkIds,
+} from '../data/supportKnowledge.js'
+import { getGroundedCandidates } from '../utils/conciergeGrounding.js'
+import { redactConciergeText } from '../utils/conciergePrivacy.js'
+import { createDatabaseRepositories } from './database.js'
 import { readJsonBody } from './request.js'
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
@@ -6,17 +13,7 @@ const GROQ_MODEL = 'openai/gpt-oss-120b'
 const GROQ_TIMEOUT_MS = 12000
 const MAX_PAYLOAD_BYTES = 32 * 1024
 
-const REQUEST_KEYS = ['candidates', 'history', 'locale', 'message', 'pageContext']
-const CANDIDATE_KEYS = [
-  'colors',
-  'composition',
-  'description',
-  'id',
-  'moods',
-  'name',
-  'occasions',
-  'price',
-]
+const REQUEST_KEYS = ['history', 'locale', 'message', 'pageContext']
 const HISTORY_KEYS = ['content', 'role']
 const PAGE_CONTEXT_KEYS = ['productId', 'route']
 const RESPONSE_KEYS = ['linkIds', 'message', 'note', 'productIds', 'quickReplies', 'type']
@@ -113,36 +110,11 @@ function containsUrl(value) {
   return /(?:https?:\/\/|www\.)/iu.test(value)
 }
 
-function redactPersonalData(message) {
-  return message
-    .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[email đã ẩn]')
-    .replace(/\bHF-\d{8}-\d{4}\b/giu, '[mã đơn đã ẩn]')
-    .replace(/(?:\+?84|0)(?:[\s.-]?\d){8,10}\b/gu, '[số điện thoại đã ẩn]')
-    .replace(/(?:địa chỉ|dia chi|address)\s*[:-]?\s*[^.!?\n]{3,120}/giu, '[địa chỉ đã ẩn]')
-}
-
-function validateCandidate(candidate) {
-  if (!hasExactKeys(candidate, CANDIDATE_KEYS)) return null
-  const id = readBoundedString(candidate.id, 80)
-  const name = readBoundedString(candidate.name, 120)
-  const description = readBoundedString(candidate.description, 320)
-  const colors = readStringArray(candidate.colors, { maxItemLength: 60, maxItems: 8, minItems: 1 })
-  const moods = readStringArray(candidate.moods, { maxItemLength: 60, maxItems: 8, minItems: 1 })
-  const occasions = readStringArray(candidate.occasions, { maxItemLength: 80, maxItems: 8, minItems: 1 })
-  const composition = readStringArray(candidate.composition, { maxItemLength: 120, maxItems: 8, minItems: 1 })
-
-  if (!id || !/^[a-z0-9-]+$/.test(id) || id === 'no-watering-flower' || !name || !description) return null
-  if (!Number.isInteger(candidate.price) || candidate.price < 0 || candidate.price > 100000000) return null
-  if (!colors || !moods || !occasions || !composition) return null
-
-  return { colors, composition, description, id, moods, name, occasions, price: candidate.price }
-}
-
 function validateHistoryItem(item) {
   if (!hasExactKeys(item, HISTORY_KEYS)) return null
   if (!['assistant', 'user'].includes(item.role)) return null
   const content = readBoundedString(item.content, 700)
-  return content ? { content: redactPersonalData(content), role: item.role } : null
+  return content ? { content: redactConciergeText(content), role: item.role } : null
 }
 
 function validatePageContext(value) {
@@ -159,23 +131,64 @@ export function validateConciergeRequest(payload) {
   if (!hasExactKeys(payload, REQUEST_KEYS)) return null
   const message = readBoundedString(payload.message, 500)
   if (!message || payload.locale !== 'vi-VN') return null
-  if (!Array.isArray(payload.candidates) || payload.candidates.length > 8) return null
   if (!Array.isArray(payload.history) || payload.history.length > 8) return null
 
-  const candidates = payload.candidates.map(validateCandidate)
   const history = payload.history.map(validateHistoryItem)
   const pageContext = validatePageContext(payload.pageContext)
-  if (candidates.some((candidate) => candidate == null)) return null
   if (history.some((item) => item == null) || !pageContext) return null
-  if (new Set(candidates.map((candidate) => candidate.id)).size !== candidates.length) return null
 
   return {
-    candidates,
     history,
     locale: 'vi-VN',
-    message: redactPersonalData(message),
+    message: redactConciergeText(message),
     pageContext,
   }
+}
+
+function toGroundingProduct(product) {
+  return {
+    colorPalette: product.colors,
+    flowerComposition: product.composition,
+    id: product.id,
+    moods: product.moods,
+    name: product.name,
+    occasions: product.occasions,
+    price: product.priceVnd,
+    purchaseType: product.purchaseType,
+    shortDescription: product.shortDescription,
+    slug: product.slug,
+  }
+}
+
+export async function loadAuthoritativeCandidates(payload, env) {
+  const { catalogue } = createDatabaseRepositories(env)
+  const result = await catalogue.listProducts({
+    activeOnly: true,
+    limit: 50,
+    purchaseType: 'standard',
+    sort: 'catalogue',
+  })
+  const products = result.items
+    .filter((product) => product.active
+      && product.isPurchasable
+      && product.id !== 'no-watering-flower'
+      && Number.isInteger(product.priceVnd))
+    .map(toGroundingProduct)
+
+  const intent = [
+    ...payload.history.filter(({ role }) => role === 'user').slice(-3).map(({ content }) => content),
+    payload.message,
+  ].join(' ')
+  const ranked = getGroundedCandidates(intent, products, 8).candidates
+  const currentProduct = payload.pageContext.productId
+    ? products.find(({ id }) => id === payload.pageContext.productId)
+    : null
+
+  if (currentProduct && !ranked.some(({ product }) => product.id === currentProduct.id)) {
+    ranked.unshift({ product: currentProduct })
+  }
+
+  return ranked.slice(0, 8).map(({ product }) => compactProductKnowledge(product))
 }
 
 export function validateModelResponse(payload, candidateIds) {
@@ -254,9 +267,9 @@ function mapUpstreamError(status) {
   return errorResponse(502, 'AI_UPSTREAM_ERROR', 'Dịch vụ tư vấn hiện chưa phản hồi.')
 }
 
-async function requestGroq(payload, apiKey, fetchImpl) {
+async function requestGroq(payload, apiKey, fetchImpl, timeoutMs = GROQ_TIMEOUT_MS) {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), GROQ_TIMEOUT_MS)
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const response = await fetchImpl(GROQ_ENDPOINT, {
@@ -321,5 +334,17 @@ export async function handleConciergeRequest(request, env, options = {}) {
     return errorResponse(503, 'AI_UNAVAILABLE', 'Dịch vụ tư vấn hiện chưa được kích hoạt.')
   }
 
-  return requestGroq(payload, env.GROQ_API_KEY, options.fetchImpl ?? fetch)
+  let candidates
+  try {
+    candidates = await (options.candidateLoader ?? loadAuthoritativeCandidates)(payload, env)
+  } catch {
+    return errorResponse(503, 'AI_UNAVAILABLE', 'Dữ liệu tư vấn hiện chưa sẵn sàng.')
+  }
+
+  return requestGroq(
+    { ...payload, candidates },
+    env.GROQ_API_KEY,
+    options.fetchImpl ?? fetch,
+    options.timeoutMs ?? GROQ_TIMEOUT_MS,
+  )
 }

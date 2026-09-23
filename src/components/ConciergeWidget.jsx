@@ -6,7 +6,7 @@ import { getConciergeReply } from '../services/conciergeService'
 import { getGroundedCandidates } from '../utils/conciergeGrounding'
 import { OPEN_CONCIERGE_EVENT } from '../utils/conciergeEvents'
 import { trapDialogFocus } from '../utils/focus'
-import { getProductPriceLabel, isPurchasableProduct } from '../utils/productCommerce'
+import { getProductPriceLabel } from '../utils/productCommerce'
 import './ConciergeWidget.css'
 
 const MAX_MESSAGES = 8
@@ -168,16 +168,14 @@ function ConciergeWidget() {
     }
 
     let activeCatalogue = catalogue
-    if (!activeCatalogue.length) {
-      try {
-        const result = await fetchShopCatalogue()
-        if (result.ok && Array.isArray(result.data)) {
-          activeCatalogue = result.data
-          setCatalogue(result.data)
-        }
-      } catch {
-        // Continue with empty activeCatalogue
+    try {
+      const result = await fetchShopCatalogue()
+      if (result.ok && Array.isArray(result.data)) {
+        activeCatalogue = result.data
+        setCatalogue(result.data)
       }
+    } catch {
+      // Preserve the most recent useful catalogue if refresh fails.
     }
 
     const currentProduct = pageData.currentProduct ?? (
@@ -205,13 +203,6 @@ function ConciergeWidget() {
       .concat(trimmedMessage)
       .join(' ')
     const grounding = getGroundedCandidates(recentUserContext, activeCatalogue)
-    const candidates = [...grounding.candidates]
-    if (
-      isPurchasableProduct(currentProduct)
-      && !candidates.some(({ product }) => product.id === currentProduct.id)
-    ) {
-      candidates.unshift({ product: currentProduct })
-    }
 
     setMessages((current) => keepRecentMessages([...current, userMessage]))
     setInput('')
@@ -219,7 +210,6 @@ function ConciergeWidget() {
     setIsLoading(true)
 
     const response = await getConciergeReply({
-      candidates,
       catalogue: activeCatalogue,
       currentProduct,
       grounding,

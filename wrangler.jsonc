@@ -34,7 +34,7 @@
     "staging": {
       "name": "hanapipi-flower",
       "secrets": {
-        "required": ["CLERK_JWT_KEY", "ORDER_FULFILMENT_KEY"]
+        "required": ["CLERK_JWT_KEY", "GROQ_API_KEY", "ORDER_FULFILMENT_KEY"]
       },
       "vars": {
         "API_V1_ENABLED": "true",

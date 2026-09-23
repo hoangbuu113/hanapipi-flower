@@ -184,7 +184,6 @@ test('valid concierge input without a key fails safely without a live upstream c
   const worker = createWorker({ logger: silentLogger })
   const response = await worker.fetch(createApiRequest('/api/v1/concierge', {
     body: JSON.stringify({
-      candidates: [],
       history: [],
       locale: 'vi-VN',
       message: 'Tư vấn giúp mình.',
