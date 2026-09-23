@@ -10,6 +10,8 @@
 .bank-transfer-badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#fef3c7;color:#92400e;border:1px solid:#fde68a}
 .bank-transfer-box__grid{display:grid;grid-template-columns:200px 1fr;gap:32px;align-items:start}
 .bank-transfer-box__qr{display:flex;flex-direction:column;align-items:center;text-align:center}
+.momo-payment-box .bank-transfer-box__grid{grid-template-columns:230px 1fr}
+.momo-payment-qr-img{display:block;width:210px;max-width:100%;height:auto;object-fit:contain;border-radius:8px}
 .bank-transfer__qr-code{display:flex;align-items:center;justify-content:center;padding:12px;background:#ffffff;border:1px solid var(--border);border-radius:4px}
 .bank-transfer__qr-code svg{width:100%;height:100%;display:block}
 .bank-transfer-box__qr-hint{margin:10px 0 0;font-size:11px;color:var(--text-muted)}
@@ -31,3 +33,4 @@
 .bank-transfer-box__confirmed-msg{margin:0;font-size:16px;font-weight:600;color:#065f46}
 .bank-transfer-box__confirmed-sub{margin:0;font-size:13px;color:var(--text-muted)}
 @media(max-width:719px){.bank-transfer-box__grid{grid-template-columns:1fr;gap:24px}}
+@media(max-width:719px){.momo-payment-qr-img{width:min(190px,100%)}}

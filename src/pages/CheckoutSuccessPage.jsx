@@ -224,7 +224,6 @@ function CheckoutSuccessPage() {
                       alt="Mã QR Ví MoMo"
                       className="momo-payment-qr-img"
                       src={momoQrAsset}
-                      style={{ width: 180, height: 180, objectFit: 'contain', borderRadius: 8 }}
                     />
                     <p className="bank-transfer-box__qr-hint">Quét mã bằng ứng dụng MoMo để thanh toán</p>
                   </div>
