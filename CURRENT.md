@@ -1,34 +1,18 @@
 # CURRENT PHASE
 
-Production-Readiness Audit completed: Full-stack application audited and hardened for staging deployment. Core commerce flows (D1 Catalogue -> Cart -> Server-Authoritative Checkout -> VietQR Bank Transfer Presentation -> Admin Order Fulfilment) are verified end-to-end. Server secrets (`ORDER_FULFILMENT_KEY`, `CLERK_JWT_KEY`, `GROQ_API_KEY`) and Cloudflare bindings (`DB`, `MEDIA_BUCKET`, `ASSETS`) are audited. Added `ORDER_FULFILMENT_KEY` to `secrets.required` in `wrangler.jsonc`. Production build passes, client bundle secret scan confirms zero server secrets or PII exposed, and postbuild cleanly removes `.dev.vars` while packaging all 5 D1 migrations. All 573 automated tests pass with 0 lint errors. `API_V1_ENABLED=false` remains default closed in committed configuration.
+Staging Deployment & Admin Catalogue Media Rendering Fix completed: Seeded product thumbnails in Admin on Staging are normalized via shared `resolveMediaSrc` utility. All 29 authoritative local media files are uploaded into R2 bucket `hanapipi-media-staging`. Automated tests (12 new media unit tests, 151 admin tests, 387 frontend tests) pass cleanly. Staging worker `hanapipi-flower` is built with `CLOUDFLARE_ENV=staging` and deployed to `https://hanapipi-flower.hutstudio.workers.dev`. Live catalogue invariant (24 total / 23 purchasable / 1 priceless) and public media routes (HTTP 200 image/jpeg) verified.
 
 # LAST VERIFIED TASK
 
-Production-readiness audit and configuration hardening:
-- Audited secret/env inventory across client and server.
-- Audited D1 migrations (`0001_phase16_foundation.sql` through `0005_add_order_delivering_status.sql`).
-- Audited Cloudflare R2 media storage (`MEDIA_BUCKET`) security and error handling.
-- Audited Clerk JWT verification, subject mapping, and authorization (`requireAuthenticatedUser`, `requireAdmin`).
-- Audited bank-transfer payment presentation with VietQR (NAPAS 247 EMVCo standard).
-- Audited AES-GCM PII encryption for buyer contact, recipient, address, and gift message in D1.
-- Audited Groq concierge proxy, prompt injection protections, and PII redaction.
-- Audited CORS, origin mutation validation, and baseline HTTP security headers.
-- Audited structured JSON logging (6 allowlisted safe fields, zero server `console.log`).
-- Audited static catalogue fallback in `catalogueClient.js` (isolated to 404 / `API_NOT_FOUND`).
-- Hardening fix: Added `ORDER_FULFILMENT_KEY` to `secrets.required` in `wrangler.jsonc`.
-- Production build verified: `vite build` + `remove-build-dev-vars.js`.
-- Secret scan on `dist/client/`: 0 secrets, 0 server symbols, 0 PII.
-- Automated tests:
-  - `test:secondary`: 13/13 passed.
-  - `test:order` + `test:admin`: 151/151 passed.
-  - `test:frontend`: 382/382 passed.
-  - `test:auth`: 15/15 passed.
-  - `test:catalogue`: 14/14 passed.
-  - `test:worker`: 11/11 passed.
-  - `test:d1`: foundation validation passed.
-  - `lint`: 0 warnings, 0 errors.
-  - `git diff --check`: passed.
-- `API_V1_ENABLED=false` remains default closed; no deployment occurred.
+Admin catalogue media rendering fix & Staging deployment:
+- Uploaded 29 authoritative seeded media files from `src/assets/hanapipi-photos/` to `hanapipi-media-staging` R2 bucket.
+- Created `src/utils/media.js` with `resolveMediaSrc` normalizer converting seeded paths to `/api/v1/media/<file>`.
+- Updated `src/pages/AdminPage.jsx` to normalize thumbnails using `resolveMediaSrc`.
+- Updated `src/services/catalogueClient.js` to reuse `resolveMediaSrc`.
+- Added 12 unit tests in `test/media-utils.test.js`.
+- Verified build and staging deployment to `https://hanapipi-flower.hutstudio.workers.dev`.
+- Verified live catalogue invariant: 24 total / 23 purchasable / 1 priceless (`no-watering-flower`).
+- Verified live R2 media endpoints returning HTTP 200 with `image/jpeg` and immutable cache headers.
 
 # CURRENT ARCHITECTURE STATE
 
@@ -48,27 +32,26 @@ Hard delete is not implemented.
 
 # CURRENT BLOCKERS
 
-None for local codebase. Before staging deployment, Cloudflare resources must be provisioned (D1 remote DB, R2 bucket, and secrets `CLERK_JWT_KEY`, `GROQ_API_KEY`, `ORDER_FULFILMENT_KEY`).
+None.
 
 # OPEN RISKS
 
 - Rotation/revocation status of a Groq key previously exposed in chat is UNKNOWN (must be rotated before public exposure).
-- Public deployment may lag behind the repository; parity was not verified in this task.
 - `qa/` is untracked.
 - README is the generic Vite template.
 - `/font-diagnostic` remains exposed.
 
 # NEXT BEST TASK
 
-Provision staging Cloudflare resources and deploy to staging.
+Verify Admin UI live on staging with authenticated Clerk Admin session.
 
 # LATEST VERIFIED COMMIT
 
-Use the commit resulting from this Secondary Catalogue Migration checkpoint (`Migrate remaining catalogue consumers`) as the authoritative commit reference.
+4c01cbb — Fix Admin catalogue media rendering
 
 # DEPLOYMENT STATE
 
-Sites/Worker deployment configuration exists. No deployment is performed by this task; current public parity is UNKNOWN.
+Deployed to Cloudflare Workers Staging: `https://hanapipi-flower.hutstudio.workers.dev` (Worker: `hanapipi-flower`, D1: `dd0c2d87-889f-4fdf-b15e-b553ee53ccd4`, R2: `hanapipi-media-staging`). Verified live. Production (`hanapipi-flower-prod`) remains untouched.
 
 # IMPORTANT NOTES
 
