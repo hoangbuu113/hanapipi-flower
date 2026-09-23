@@ -1,5 +1,5 @@
 import { products as staticProducts } from '../data/products.js'
-import { resolveMediaSrc } from '../utils/media.js'
+import { resolveCatalogueMedia } from '../utils/media.js'
 
 export const STATUS_MAP_FROM_API = {
   available: 'Có sẵn',
@@ -8,16 +8,6 @@ export const STATUS_MAP_FROM_API = {
 }
 
 const staticProductById = new Map(staticProducts.map((product) => [product.id, product]))
-
-function resolveImageSrc(apiSrc, fallbackSrc) {
-  if (!apiSrc) return fallbackSrc ?? ''
-  const resolved = resolveMediaSrc(apiSrc)
-  // resolveMediaSrc returns the original src (or an R2 URL) when it can
-  // resolve; prefer the static fallback when the original was an opaque
-  // seeded path that resolveMediaSrc turned into an R2 URL but a Vite-
-  // bundled static import is available for the storefront.
-  return resolved === apiSrc ? apiSrc : (fallbackSrc ?? resolved)
-}
 
 function mapVariantsToSizeOptions(variants) {
   if (!Array.isArray(variants)) return []
@@ -104,25 +94,11 @@ export function normalizeCatalogueProduct(product, variantsArg = null, relatedPr
   // 5. Media / Images
   let images = []
   if (Array.isArray(product.media) && product.media.length > 0) {
-    images = product.media.map((item, index) => {
-      const staticImage = staticFallback?.media?.[index] ?? staticFallback?.images?.[index] ?? staticFallback?.images?.[0]
-      return {
-        alt: item.alt ?? staticImage?.alt ?? '',
-        caption: item.caption ?? staticImage?.caption ?? null,
-        fit: item.fit ?? staticImage?.fit ?? 'cover',
-        position: item.position ?? staticImage?.position ?? 'center',
-        poster: resolveImageSrc(item.poster, staticImage?.poster),
-        src: resolveImageSrc(item.src, staticImage?.src),
-        type: item.type ?? staticImage?.type ?? 'image',
-      }
-    })
+    images = resolveCatalogueMedia(product.media, { productName: product.name })
   } else if (Array.isArray(product.images) && product.images.length > 0) {
-    images = product.images.map((item) => ({
-      ...item,
-      src: resolveImageSrc(item.src, staticFallback?.images?.[0]?.src),
-    }))
-  } else if (staticFallback?.images) {
-    images = staticFallback.images
+    images = resolveCatalogueMedia(product.images, { productName: product.name })
+  } else if (product === staticFallback && staticFallback?.images) {
+    images = resolveCatalogueMedia(staticFallback.images, { productName: product.name })
   }
 
   if (images.length === 0) {

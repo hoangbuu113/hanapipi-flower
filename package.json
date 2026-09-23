@@ -19,6 +19,7 @@
     "test:flower-finder": "node --import ./test/register-assets.js --test test/flower-finder-catalogue.test.js",
     "test:frontend": "node --import ./test/register-assets.js --test test/frontend-auth.test.js test/admin-dashboard.test.js test/admin-orders.test.js test/shop-catalogue.test.js test/product-detail-catalogue.test.js test/search-catalogue.test.js test/home-catalogue.test.js test/flower-finder-catalogue.test.js test/wishlist-catalogue.test.js test/cart-catalogue.test.js test/order-checkout.test.js test/orders-read.test.js test/order-payment.test.js test/secondary-catalogue.test.js",
     "test:home": "node --import ./test/register-assets.js --test test/home-catalogue.test.js",
+    "test:media": "node --import ./test/register-assets.js --test test/media-utils.test.js",
     "test:product-detail": "node --import ./test/register-assets.js --test test/product-detail-catalogue.test.js",
     "test:search": "node --import ./test/register-assets.js --test test/search-catalogue.test.js",
     "test:secondary": "node --import ./test/register-assets.js --test test/secondary-catalogue.test.js",

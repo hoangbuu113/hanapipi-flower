@@ -2,6 +2,7 @@ import { Heart } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useCommerce } from '../context/commerceStore'
 import { getProductPriceLabel, PRICELESS_PURCHASE_TYPE } from '../utils/productCommerce'
+import { getPrimaryMediaSrc } from '../utils/media'
 import './ProductCard.css'
 
 function ProductCard({ product, priority = false }) {
@@ -10,20 +11,26 @@ function ProductCard({ product, priority = false }) {
     : product.badges?.[0]
   const { toggleWishlist, wishlistIds } = useCommerce()
   const isWishlisted = wishlistIds.includes(product.id)
+  const image = product.images?.[0] ?? product.media?.[0]
+  const imageSrc = getPrimaryMediaSrc(product)
 
   return (
     <article className="product-card">
       <Link aria-label={`Xem bó hoa ${product.name}`} className="product-card__link" to={`/product/${product.slug}`}>
         <div className="product-card__media">
-          <img
-            alt={product.images[0].alt}
-            loading={priority ? 'eager' : 'lazy'}
-            src={product.images[0].src}
-            style={{
-              objectFit: product.images[0].fit ?? 'cover',
-              objectPosition: product.images[0].position,
-            }}
-          />
+          {imageSrc ? (
+            <img
+              alt={image?.alt ?? product.name}
+              loading={priority ? 'eager' : 'lazy'}
+              src={imageSrc}
+              style={{
+                objectFit: image?.fit ?? 'cover',
+                objectPosition: image?.position,
+              }}
+            />
+          ) : (
+            <span aria-label={`Ảnh ${product.name} đang được cập nhật`} className="product-card__media-fallback" role="img" />
+          )}
           {badge && <span className="product-card__badge">{badge}</span>}
         </div>
         <div className="product-card__content">

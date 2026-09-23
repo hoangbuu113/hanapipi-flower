@@ -1,3 +1,39 @@
+import { resolveCatalogueMedia } from '../utils/media.js'
+
+export function normalizeAdminProduct(rawProduct) {
+  if (!rawProduct || typeof rawProduct !== 'object') return null
+
+  const price = rawProduct.priceVnd !== undefined ? rawProduct.priceVnd : rawProduct.price ?? null
+  const purchaseType = rawProduct.purchaseType ?? (price == null ? 'priceless' : 'standard')
+  const isPurchasable = rawProduct.isPurchasable
+    ?? (rawProduct.active !== false && purchaseType !== 'priceless' && Number.isFinite(price))
+
+  return {
+    active: rawProduct.active !== false,
+    badges: Array.isArray(rawProduct.badges) ? rawProduct.badges : [],
+    careNote: rawProduct.careNote ?? '',
+    collection: rawProduct.collection ?? null,
+    colors: Array.isArray(rawProduct.colors) ? rawProduct.colors : [],
+    composition: Array.isArray(rawProduct.composition) ? rawProduct.composition : [],
+    deliveryNote: rawProduct.deliveryNote ?? '',
+    description: rawProduct.description ?? '',
+    id: rawProduct.id,
+    internalNote: rawProduct.internalNote ?? '',
+    isBestSeller: Boolean(rawProduct.isBestSeller),
+    isPurchasable,
+    media: resolveCatalogueMedia(rawProduct.media, { productName: rawProduct.name }),
+    moods: Array.isArray(rawProduct.moods) ? rawProduct.moods : [],
+    name: rawProduct.name,
+    occasions: Array.isArray(rawProduct.occasions) ? rawProduct.occasions : [],
+    priceVnd: price,
+    purchaseType,
+    shortDescription: rawProduct.shortDescription ?? '',
+    slug: rawProduct.slug ?? rawProduct.id,
+    sortOrder: rawProduct.sortOrder ?? 0,
+    status: rawProduct.status ?? 'available',
+  }
+}
+
 export async function checkAdminAccess({
   getToken,
   fetchImpl = globalThis.fetch,
@@ -156,36 +192,7 @@ export async function fetchAdminCatalogue({
       }
     }
 
-    const products = rawProducts.map((p) => {
-      const price = p.priceVnd !== undefined ? p.priceVnd : p.price ?? null
-      const purchaseType = p.purchaseType ?? (price == null ? 'priceless' : 'standard')
-      const isPurchasable = p.isPurchasable ?? (purchaseType !== 'priceless' && Number.isFinite(price))
-
-      return {
-        active: p.active !== false,
-        badges: Array.isArray(p.badges) ? p.badges : [],
-        careNote: p.careNote ?? '',
-        collection: p.collection ?? null,
-        colors: Array.isArray(p.colors) ? p.colors : [],
-        composition: Array.isArray(p.composition) ? p.composition : [],
-        deliveryNote: p.deliveryNote ?? '',
-        description: p.description ?? '',
-        id: p.id,
-        internalNote: p.internalNote ?? '',
-        isBestSeller: Boolean(p.isBestSeller),
-        isPurchasable,
-        media: Array.isArray(p.media) ? p.media : [],
-        moods: Array.isArray(p.moods) ? p.moods : [],
-        name: p.name,
-        occasions: Array.isArray(p.occasions) ? p.occasions : [],
-        priceVnd: price,
-        purchaseType,
-        shortDescription: p.shortDescription ?? '',
-        slug: p.slug ?? p.id,
-        sortOrder: p.sortOrder ?? 0,
-        status: p.status ?? 'available',
-      }
-    })
+    const products = rawProducts.map(normalizeAdminProduct)
 
     return {
       data: products,
@@ -291,31 +298,10 @@ export async function setAdminProductArchived(idOrSlug, archived, {
       }
     }
 
-    const price = rawProduct.priceVnd !== undefined ? rawProduct.priceVnd : rawProduct.price ?? null
-    const purchaseType = rawProduct.purchaseType ?? (price == null ? 'priceless' : 'standard')
-    const isPurchasable = rawProduct.isPurchasable
-      ?? (rawProduct.active !== false && purchaseType !== 'priceless' && Number.isFinite(price))
-
     return {
       error: null,
       ok: true,
-      product: {
-        active: rawProduct.active !== false,
-        badges: Array.isArray(rawProduct.badges) ? rawProduct.badges : [],
-        collection: rawProduct.collection ?? null,
-        description: rawProduct.description ?? '',
-        id: rawProduct.id,
-        isBestSeller: Boolean(rawProduct.isBestSeller),
-        isPurchasable,
-        media: Array.isArray(rawProduct.media) ? rawProduct.media : [],
-        name: rawProduct.name,
-        priceVnd: price,
-        purchaseType,
-        shortDescription: rawProduct.shortDescription ?? '',
-        slug: rawProduct.slug ?? rawProduct.id,
-        sortOrder: rawProduct.sortOrder ?? 0,
-        status: rawProduct.status ?? 'available',
-      },
+      product: normalizeAdminProduct(rawProduct),
       status: response.status,
     }
   } catch {
@@ -413,34 +399,7 @@ export async function updateAdminProduct(idOrSlug, fields, {
       }
     }
 
-    const price = rawProduct.priceVnd !== undefined ? rawProduct.priceVnd : rawProduct.price ?? null
-    const purchaseType = rawProduct.purchaseType ?? (price == null ? 'priceless' : 'standard')
-    const isPurchasable = rawProduct.isPurchasable ?? (purchaseType !== 'priceless' && Number.isFinite(price))
-
-    const product = {
-      active: rawProduct.active !== false,
-      badges: Array.isArray(rawProduct.badges) ? rawProduct.badges : [],
-      careNote: rawProduct.careNote ?? '',
-      collection: rawProduct.collection ?? null,
-      colors: Array.isArray(rawProduct.colors) ? rawProduct.colors : [],
-      composition: Array.isArray(rawProduct.composition) ? rawProduct.composition : [],
-      deliveryNote: rawProduct.deliveryNote ?? '',
-      description: rawProduct.description ?? '',
-      id: rawProduct.id,
-      internalNote: rawProduct.internalNote ?? '',
-      isBestSeller: Boolean(rawProduct.isBestSeller),
-      isPurchasable,
-      media: Array.isArray(rawProduct.media) ? rawProduct.media : [],
-      moods: Array.isArray(rawProduct.moods) ? rawProduct.moods : [],
-      name: rawProduct.name,
-      occasions: Array.isArray(rawProduct.occasions) ? rawProduct.occasions : [],
-      priceVnd: price,
-      purchaseType,
-      shortDescription: rawProduct.shortDescription ?? '',
-      slug: rawProduct.slug ?? rawProduct.id,
-      sortOrder: rawProduct.sortOrder ?? 0,
-      status: rawProduct.status ?? 'available',
-    }
+    const product = normalizeAdminProduct(rawProduct)
 
     return {
       error: null,
@@ -529,34 +488,7 @@ export async function createAdminProduct(payload, {
       }
     }
 
-    const price = rawProduct.priceVnd !== undefined ? rawProduct.priceVnd : rawProduct.price ?? null
-    const purchaseType = rawProduct.purchaseType ?? (price == null ? 'priceless' : 'standard')
-    const isPurchasable = rawProduct.isPurchasable ?? (purchaseType !== 'priceless' && Number.isFinite(price))
-
-    const product = {
-      active: rawProduct.active !== false,
-      badges: Array.isArray(rawProduct.badges) ? rawProduct.badges : [],
-      careNote: rawProduct.careNote ?? '',
-      collection: rawProduct.collection ?? null,
-      colors: Array.isArray(rawProduct.colors) ? rawProduct.colors : [],
-      composition: Array.isArray(rawProduct.composition) ? rawProduct.composition : [],
-      deliveryNote: rawProduct.deliveryNote ?? '',
-      description: rawProduct.description ?? '',
-      id: rawProduct.id,
-      internalNote: rawProduct.internalNote ?? '',
-      isBestSeller: Boolean(rawProduct.isBestSeller),
-      isPurchasable,
-      media: Array.isArray(rawProduct.media) ? rawProduct.media : [],
-      moods: Array.isArray(rawProduct.moods) ? rawProduct.moods : [],
-      name: rawProduct.name,
-      occasions: Array.isArray(rawProduct.occasions) ? rawProduct.occasions : [],
-      priceVnd: price,
-      purchaseType,
-      shortDescription: rawProduct.shortDescription ?? '',
-      slug: rawProduct.slug ?? rawProduct.id,
-      sortOrder: rawProduct.sortOrder ?? 0,
-      status: rawProduct.status ?? 'available',
-    }
+    const product = normalizeAdminProduct(rawProduct)
 
     return {
       error: null,

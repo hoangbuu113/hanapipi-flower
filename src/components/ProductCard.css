@@ -21,6 +21,13 @@
   transition: transform var(--motion-standard) var(--motion-ease-out);
 }
 
+.product-card__media-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--surface-subtle, #f3efe8);
+}
+
 .product-card__badge {
   position: absolute;
   top: 12px;

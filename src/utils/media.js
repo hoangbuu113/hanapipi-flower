@@ -28,3 +28,29 @@ export function resolveMediaSrc(src) {
   const filename = lastSlash >= 0 ? src.slice(lastSlash + 1) : src
   return filename ? `/api/v1/media/${filename}` : ''
 }
+
+/**
+ * Normalise catalogue media without replacing the authoritative D1 source
+ * with a client-only product fallback. Both Admin and storefront consumers
+ * use this shape so legacy seeded paths and managed R2 paths resolve equally.
+ */
+export function resolveCatalogueMedia(media, { productName = 'Hanapipi Flower' } = {}) {
+  if (!Array.isArray(media)) return []
+
+  return media
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => ({
+      alt: item.alt ?? productName,
+      caption: item.caption ?? null,
+      fit: item.fit ?? 'cover',
+      position: item.position ?? 'center',
+      poster: resolveMediaSrc(item.poster),
+      src: resolveMediaSrc(item.src),
+      type: item.type ?? 'image',
+    }))
+    .filter((item) => item.src)
+}
+
+export function getPrimaryMediaSrc(product) {
+  return resolveMediaSrc(product?.media?.[0]?.src ?? product?.images?.[0]?.src)
+}
