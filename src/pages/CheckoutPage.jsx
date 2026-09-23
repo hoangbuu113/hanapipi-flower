@@ -103,7 +103,7 @@ function CheckoutPage() {
         sizeId: item.sizeId || item.size?.id || item.size?.code,
         wrappingId: item.wrappingId || item.wrapping?.id || item.wrapping?.code || null,
       })),
-      paymentMethod: form.payment === 'cod' ? 'cod_mock' : 'bank_transfer_mock',
+      paymentMethod: form.payment === 'cod' ? 'cod_mock' : 'bank_transfer',
     }
 
     setIsSubmitting(true)
@@ -142,6 +142,17 @@ function CheckoutPage() {
       <p className="checkout-gifting-reassurance">Đơn giao đến người nhận không kèm hóa đơn hoặc thông tin giá.</p>
     </FormSection>
     <FormSection title="Phương thức thanh toán"><div className="checkout-payment"><label><input checked={form.payment === 'cod'} name="payment" type="radio" onChange={() => update('payment', 'cod')} /> Thanh toán khi nhận hoa</label><label><input checked={form.payment === 'bank'} name="payment" type="radio" onChange={() => update('payment', 'bank')} /> Chuyển khoản ngân hàng</label></div><p className="checkout-demo-note">Đây là bản demo, chưa phát sinh thanh toán.</p></FormSection>
+    <FormSection title="Phương thức thanh toán">
+      <div className="checkout-payment">
+        <label><input checked={form.payment === 'bank'} name="payment" type="radio" onChange={() => update('payment', 'bank')} /> Chuyển khoản ngân hàng (VietQR)</label>
+        <label><input checked={form.payment === 'cod'} name="payment" type="radio" onChange={() => update('payment', 'cod')} /> Thanh toán khi nhận hoa</label>
+      </div>
+      {form.payment === 'bank' ? (
+        <p className="checkout-demo-note">Mã QR và thông tin chuyển khoản sẽ hiển thị ngay sau khi bạn đặt hoa.</p>
+      ) : (
+        <p className="checkout-demo-note">Thanh toán trực tiếp cho nhân viên giao hoa khi nhận hoa.</p>
+      )}
+    </FormSection>
     {submitError && (
       <p className="checkout-error checkout-submit-error" role="alert">
         {submitError}

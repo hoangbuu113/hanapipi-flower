@@ -16,8 +16,15 @@ export function createDatabaseRepositories(env) {
   return {
     catalogue,
     orders: createOrderRepository(db, {
+      bankConfig: {
+        accountName: env?.BANK_TRANSFER_ACCOUNT_NAME,
+        accountNumber: env?.BANK_TRANSFER_ACCOUNT_NUMBER,
+        bankBin: env?.BANK_TRANSFER_BIN,
+        bankCode: env?.BANK_TRANSFER_BANK_CODE,
+        bankName: env?.BANK_TRANSFER_BANK_NAME,
+      },
       catalogue,
-      fulfilmentKey: env.ORDER_FULFILMENT_KEY,
+      fulfilmentKey: env?.ORDER_FULFILMENT_KEY,
     }),
     users: createUserRepository(db),
   }

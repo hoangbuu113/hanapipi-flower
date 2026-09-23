@@ -1,4 +1,4 @@
-import { products } from '../data/products'
+import { products } from '../data/products.js'
 import { normalizeGiftAddOns } from './cart'
 
 export function getCartItemPresentation(item) {
@@ -95,5 +95,18 @@ export function formatPaymentStatus(status) {
       return 'Thanh toán thất bại'
     default:
       return status || 'Chờ xử lý'
+  }
+}
+
+export function formatPaymentMethod(method) {
+  switch (method) {
+    case 'bank_transfer':
+    case 'bank_transfer_mock':
+      return 'Chuyển khoản ngân hàng'
+    case 'cod':
+    case 'cod_mock':
+      return 'Thanh toán khi nhận hoa'
+    default:
+      return method || 'Chuyển khoản ngân hàng'
   }
 }

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
+import qrcode from 'qrcode-generator'
 import Container from '../components/Container'
 import { useAccount } from '../context/accountStore'
 import { fetchUserOrderDetail } from '../services/apiClient'
@@ -13,6 +14,66 @@ import {
   getOrderGifting,
 } from '../utils/order'
 import './CheckoutSuccessPage.css'
+
+function QrCodeSvg({ payload, size = 180 }) {
+  const svg = useMemo(() => {
+    if (!payload) return null
+    try {
+      const qr = qrcode(0, 'M')
+      qr.addData(payload)
+      qr.make()
+      return qr.createSvgTag({ scalable: true })
+    } catch {
+      return null
+    }
+  }, [payload])
+
+  if (!svg) return null
+  return (
+    <div
+      className="bank-transfer__qr-code"
+      dangerouslySetInnerHTML={{ __html: svg }}
+      role="img"
+      aria-label="Mã VietQR thanh toán chuyển khoản"
+      style={{ height: size, width: size }}
+    />
+  )
+}
+
+function CopyButton({ label = 'Sao chép', text }) {
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy() {
+    if (!text) return
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const textArea = document.createElement('textarea')
+        textArea.value = text
+        document.body.appendChild(textArea)
+        textArea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textArea)
+      }
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Ignore clipboard write errors
+    }
+  }
+
+  return (
+    <button
+      className={`button button--text bank-transfer__copy ${copied ? 'is-copied' : ''}`}
+      title={copied ? 'Đã sao chép' : `Sao chép ${text}`}
+      type="button"
+      onClick={handleCopy}
+    >
+      {copied ? 'Đã sao chép' : label}
+    </button>
+  )
+}
 
 function CheckoutSuccessPage() {
   const { orderCode } = useParams()
@@ -98,6 +159,15 @@ function CheckoutSuccessPage() {
   const hasGiftingDetails = giftAddOns.length > 0 || gifting.message || gifting.senderName || gifting.anonymous
   const orderId = order.code || order.orderCode
 
+  const isBankTransfer = order.paymentMethod === 'bank_transfer'
+    || order.paymentMethod === 'bank_transfer_mock'
+    || order.payment?.method === 'bank_transfer'
+    || order.payment?.method === 'bank_transfer_mock'
+  const isPaymentPending = order.paymentStatus === 'pending'
+    || order.paymentStatus === 'mock_pending'
+    || order.payment?.status === 'pending'
+    || order.payment?.status === 'mock_pending'
+
   return (
     <main className="success-page">
       <Container>
@@ -140,6 +210,70 @@ function CheckoutSuccessPage() {
               </div>
             )}
           </dl>
+
+          {isBankTransfer && isPaymentPending && (
+            <section className="bank-transfer-box" aria-labelledby="bank-transfer-title">
+              <div className="bank-transfer-box__header">
+                <h2 id="bank-transfer-title">Thông tin thanh toán chuyển khoản</h2>
+                <span className="bank-transfer-badge">Chờ thanh toán</span>
+              </div>
+
+              {order.payment?.bank?.available ? (
+                <div className="bank-transfer-box__grid">
+                  <div className="bank-transfer-box__qr">
+                    <QrCodeSvg payload={order.payment.bank.qrPayload} size={180} />
+                    <p className="bank-transfer-box__qr-hint">Quét mã bằng ứng dụng ngân hàng bất kỳ</p>
+                  </div>
+                  <div className="bank-transfer-box__details">
+                    <dl className="bank-transfer-details">
+                      <div>
+                        <dt>Ngân hàng</dt>
+                        <dd>
+                          <strong>{order.payment.bank.bankName}</strong>
+                          {order.payment.bank.bankCode ? ` (${order.payment.bank.bankCode})` : ''}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Chủ tài khoản</dt>
+                        <dd><strong>{order.payment.bank.accountName}</strong></dd>
+                      </div>
+                      <div>
+                        <dt>Số tài khoản</dt>
+                        <dd className="bank-transfer-copyable">
+                          <code>{order.payment.bank.accountNumber}</code>
+                          <CopyButton text={order.payment.bank.accountNumber} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Số tiền</dt>
+                        <dd className="bank-transfer-copyable">
+                          <strong>{formatCurrency(order.payment.bank.amountVnd)}</strong>
+                          <CopyButton label="Sao chép số tiền" text={String(order.payment.bank.amountVnd)} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Nội dung chuyển khoản</dt>
+                        <dd className="bank-transfer-copyable">
+                          <code>{order.payment.bank.transferContent}</code>
+                          <CopyButton text={order.payment.bank.transferContent} />
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+              ) : (
+                <div className="bank-transfer-box__unavailable">
+                  <p>{order.payment?.bank?.message || 'Thông tin chuyển khoản hiện chưa được cấu hình. Vui lòng liên hệ Hanapipi Flower để được hỗ trợ.'}</p>
+                </div>
+              )}
+
+              <div className="bank-transfer-box__reassurance">
+                <p>❀ Đơn hoa sẽ được xử lý sau khi Hanapipi Flower xác nhận nhận được chuyển khoản.</p>
+                <p>❀ Vui lòng giữ nguyên nội dung chuyển khoản để đơn được xác nhận nhanh nhất.</p>
+              </div>
+            </section>
+          )}
+
           {hasGiftingDetails && (
             <section className="success-page__gifting" aria-labelledby="success-gifting-title">
               <h2 id="success-gifting-title">Điều gửi kèm bó hoa</h2>
@@ -161,7 +295,7 @@ function CheckoutSuccessPage() {
             </section>
           )}
           <p className="success-page__note">
-            Đây là đơn hàng demo. Thời gian giao và phương thức thanh toán sẽ cần được xác nhận trước khi xử lý thực tế.
+            Thời gian giao và phương thức thanh toán sẽ được xác nhận trước khi xử lý thực tế.
           </p>
           <div className="success-page__actions">
             <Link className="button button--primary" to="/account">

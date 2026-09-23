@@ -3,10 +3,11 @@ import {
   decryptFulfilmentValue,
   encryptFulfilmentValue,
 } from '../fulfilmentCrypto.js'
+import { generateVietQrPayload } from '../vietqr.js'
 
 const MAX_ITEMS = 20
 const MAX_QUANTITY = 20
-const PAYMENT_METHODS = new Set(['bank_transfer_mock', 'cod_mock'])
+const PAYMENT_METHODS = new Set(['bank_transfer', 'bank_transfer_mock', 'cod', 'cod_mock'])
 const PHONE_PATTERN = /^(0\d{9}|\+84\d{9})$/u
 
 function orderError(status, code, message, fieldErrors) {
@@ -138,7 +139,72 @@ function createOrderCode(now) {
 }
 
 function paymentLabel(paymentMethod) {
-  return paymentMethod === 'cod_mock' ? 'Thanh toán khi nhận hoa' : 'Chuyển khoản ngân hàng'
+  switch (paymentMethod) {
+    case 'bank_transfer':
+    case 'bank_transfer_mock':
+      return 'Chuyển khoản ngân hàng'
+    case 'cod':
+    case 'cod_mock':
+      return 'Thanh toán khi nhận hoa'
+    default:
+      return paymentMethod || 'Chuyển khoản ngân hàng'
+  }
+}
+
+function buildPaymentPresentation(order, bankConfig) {
+  const isBankTransfer = order.payment_method === 'bank_transfer' || order.payment_method === 'bank_transfer_mock'
+  const transferContent = `HANAPIPI ${order.order_code}`
+  const isBankConfigured = Boolean(
+    bankConfig?.bankBin
+    && bankConfig?.accountNumber
+    && bankConfig?.accountName,
+  )
+
+  let bank = null
+  if (isBankTransfer) {
+    if (isBankConfigured) {
+      let qrPayload = null
+      try {
+        qrPayload = generateVietQrPayload({
+          accountNumber: bankConfig.accountNumber,
+          amountVnd: order.total_vnd,
+          bankBin: bankConfig.bankBin,
+          transferContent,
+        })
+      } catch {
+        qrPayload = null
+      }
+      bank = {
+        accountName: bankConfig.accountName,
+        accountNumber: bankConfig.accountNumber,
+        amountVnd: order.total_vnd,
+        available: true,
+        bankBin: bankConfig.bankBin,
+        bankCode: bankConfig.bankCode || null,
+        bankName: bankConfig.bankName || 'Ngân hàng',
+        qrPayload,
+        transferContent,
+      }
+    } else {
+      bank = {
+        available: false,
+        error: 'PAYMENT_CONFIG_UNAVAILABLE',
+        message: 'Thông tin chuyển khoản hiện chưa được cấu hình. Vui lòng liên hệ Hanapipi Flower.',
+      }
+    }
+  }
+
+  return {
+    amountVnd: order.total_vnd,
+    bank,
+    method: order.payment_method,
+    methodLabel: paymentLabel(order.payment_method),
+    status: order.payment_status,
+    statusLabel: order.payment_status === 'paid'
+      ? 'Đã thanh toán'
+      : ((order.payment_status === 'pending' || order.payment_status === 'mock_pending') ? 'Chờ thanh toán' : 'Chờ xử lý'),
+    transferContent: isBankTransfer ? transferContent : null,
+  }
 }
 
 export function createOrderRepository(db, options = {}) {
@@ -218,6 +284,10 @@ export function createOrderRepository(db, options = {}) {
         encryptFulfilmentValue(orderInput.gifting, fulfilmentKey),
       ])
 
+      const initialPaymentStatus = (orderInput.paymentMethod === 'bank_transfer' || orderInput.paymentMethod === 'cod')
+        ? 'pending'
+        : 'mock_pending'
+
       const statements = [db.prepare(`
         INSERT INTO orders (
           id, user_id, order_code, status, revision, subtotal_vnd, total_vnd, currency,
@@ -228,7 +298,7 @@ export function createOrderRepository(db, options = {}) {
           ?, ?, ?, 'received', 0, ?, ?, 'VND',
           ?, ?, ?, ?,
           ?, ?, ?,
-          ?, ?, 'mock_pending', ?, ?
+          ?, ?, ?, ?, ?
         )
       `).bind(
         orderId,
@@ -245,6 +315,7 @@ export function createOrderRepository(db, options = {}) {
         FULFILMENT_KEY_VERSION,
         JSON.stringify({ anonymousSender: orderInput.gifting.anonymous, version: 1 }),
         orderInput.paymentMethod,
+        initialPaymentStatus,
         timestamp,
         timestamp,
       )]
@@ -310,6 +381,13 @@ export function createOrderRepository(db, options = {}) {
 
       await db.batch(statements)
 
+      const payment = buildPaymentPresentation({
+        order_code: orderCode,
+        payment_method: orderInput.paymentMethod,
+        payment_status: initialPaymentStatus,
+        total_vnd: subtotalVnd,
+      }, options.bankConfig)
+
       return {
         address: orderInput.address,
         buyer: orderInput.buyer,
@@ -321,9 +399,9 @@ export function createOrderRepository(db, options = {}) {
         id: orderId,
         items: responseItems,
         orderCode,
-        payment: paymentLabel(orderInput.paymentMethod),
+        payment,
         paymentMethod: orderInput.paymentMethod,
-        paymentStatus: 'mock_pending',
+        paymentStatus: initialPaymentStatus,
         receiver: orderInput.recipient,
         status: 'received',
         subtotalVnd,
@@ -584,6 +662,9 @@ export function createOrderRepository(db, options = {}) {
         throw decryptionError
       }
 
+      const bankConfig = callOptions.bankConfig ?? options.bankConfig
+      const payment = buildPaymentPresentation(order, bankConfig)
+
       return {
         address,
         buyer,
@@ -598,7 +679,7 @@ export function createOrderRepository(db, options = {}) {
         id: order.id,
         items,
         orderCode: order.order_code,
-        payment: paymentLabel(order.payment_method),
+        payment,
         paymentMethod: order.payment_method,
         paymentStatus: order.payment_status,
         receiver: recipient,
