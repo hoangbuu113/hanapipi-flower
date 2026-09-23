@@ -3,13 +3,21 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useSignIn, useSignUp } from '@clerk/clerk-react'
 import Container from '../components/Container'
 import { useAccount } from '../context/accountStore'
+import {
+  attemptAuthVerification,
+  AUTH_VERIFICATION_FLOWS,
+  getActiveVerificationFlow,
+  getSignInVerificationFlow,
+  getSignUpVerificationFlow,
+  getVerificationContent,
+} from '../utils/authVerification.js'
 import './AccountPages.css'
 
 function AuthPage({ mode }) {
   const isRegister = mode === 'register'
   const [form, setForm] = useState({ email: '', name: '', password: '', phone: '' })
   const [code, setCode] = useState('')
-  const [pendingVerification, setPendingVerification] = useState(false)
+  const [verificationFlow, setVerificationFlow] = useState(null)
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -19,6 +27,8 @@ function AuthPage({ mode }) {
   const navigate = useNavigate()
 
   const isReady = isRegister ? isSignUpLoaded : isSignInLoaded
+  const activeVerificationFlow = getActiveVerificationFlow(verificationFlow, mode)
+  const verificationContent = getVerificationContent(activeVerificationFlow, form.email)
 
   useEffect(() => {
     if (user) {
@@ -69,13 +79,11 @@ function AuthPage({ mode }) {
         }
       }
 
-      if (result.status === 'needs_second_factor') {
-        const hasEmailCode = result.supportedSecondFactors?.some((f) => f.strategy === 'email_code')
-        if (hasEmailCode) {
-          await signIn.prepareSecondFactor({ strategy: 'email_code' })
-          setPendingVerification(true)
-          return
-        }
+      const nextVerificationFlow = getSignInVerificationFlow(result)
+      if (nextVerificationFlow) {
+        await signIn.prepareSecondFactor({ strategy: 'email_code' })
+        setVerificationFlow(nextVerificationFlow)
+        return
       }
 
       if (result.status === 'complete') {
@@ -128,9 +136,10 @@ function AuthPage({ mode }) {
         await setSignUpActive({ session: result.createdSessionId })
         navigate('/account')
       } else if (result.status === 'missing_requirements') {
-        if (result.unverifiedFields?.includes('email_address')) {
+        const nextVerificationFlow = getSignUpVerificationFlow(result)
+        if (nextVerificationFlow) {
           await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
-          setPendingVerification(true)
+          setVerificationFlow(nextVerificationFlow)
         } else {
           setErrors({ form: 'Đăng ký chưa hoàn tất. Vui lòng kiểm tra lại.' })
         }
@@ -152,15 +161,18 @@ function AuthPage({ mode }) {
 
     setIsSubmitting(true)
     try {
-      let result = null
-      if (isRegister) {
-        result = await signUp.attemptEmailAddressVerification({ code: code.trim() })
-      } else {
-        result = await signIn.attemptSecondFactor({ strategy: 'email_code', code: code.trim() })
-      }
+      const submittedFlow = activeVerificationFlow
+      const result = await attemptAuthVerification({
+        code: code.trim(),
+        signIn,
+        signUp,
+        verificationFlow: submittedFlow,
+      })
 
       if (result.status === 'complete') {
-        const setActive = isRegister ? setSignUpActive : setSignInActive
+        const setActive = submittedFlow === AUTH_VERIFICATION_FLOWS.SIGN_UP_EMAIL
+          ? setSignUpActive
+          : setSignInActive
         await setActive({ session: result.createdSessionId })
         navigate('/account')
       } else {
@@ -174,15 +186,15 @@ function AuthPage({ mode }) {
     }
   }
 
-  if (pendingVerification) {
+  if (verificationContent) {
     return (
       <main className="auth-page">
         <Container>
           <div className="auth-panel">
             <p className="eyebrow">Hanapipi Flower của bạn</p>
-            <h1>Xác thực email</h1>
+            <h1>{verificationContent.heading}</h1>
             <p className="auth-panel__intro">
-              Mã xác thực đã được gửi đến địa chỉ email {form.email}. Vui lòng nhập mã để hoàn tất tạo tài khoản.
+              {verificationContent.intro}
             </p>
             <form noValidate onSubmit={handleVerifyCode}>
               <AuthField error={errors.code} label="Mã xác thực">
@@ -199,7 +211,7 @@ function AuthPage({ mode }) {
               </AuthField>
               {errors.form && <p className="auth-error" role="alert">{errors.form}</p>}
               <button className="button button--primary" disabled={isSubmitting} type="submit">
-                {isSubmitting ? 'Đang xử lý...' : 'Xác thực tài khoản'}
+                {isSubmitting ? 'Đang xử lý...' : verificationContent.buttonLabel}
               </button>
             </form>
           </div>

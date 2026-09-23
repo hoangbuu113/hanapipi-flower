@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import test from 'node:test'
 import { fetchCurrentUser } from '../src/services/apiClient.js'
+import {
+  attemptAuthVerification,
+  AUTH_VERIFICATION_FLOWS,
+  getActiveVerificationFlow,
+  getSignInVerificationFlow,
+  getSignUpVerificationFlow,
+  getVerificationContent,
+} from '../src/utils/authVerification.js'
 
 test('1. fetchCurrentUser requires a getToken function', async () => {
   await assert.rejects(
@@ -197,4 +206,108 @@ test('8. sign-out clears user identity, reports unauthenticated state, and retai
   assert.equal(postLogoutResult.ok, false)
   assert.equal(postLogoutResult.status, 401)
   assert.equal(postLogoutResult.user, null)
+})
+
+test('9. completed password login does not enter a verification flow', () => {
+  const verificationFlow = getSignInVerificationFlow({
+    createdSessionId: 'sess_completed',
+    status: 'complete',
+  })
+
+  assert.equal(verificationFlow, null)
+  assert.equal(getVerificationContent(verificationFlow, 'customer@example.com'), null)
+})
+
+test('10. signup email verification uses signup flow, copy, and Clerk operation', async () => {
+  const verificationFlow = getSignUpVerificationFlow({
+    status: 'missing_requirements',
+    unverifiedFields: ['email_address'],
+  })
+  const content = getVerificationContent(verificationFlow, 'customer@example.com')
+  let signInCalled = false
+  let signUpCalled = false
+
+  const result = await attemptAuthVerification({
+    code: '123456',
+    signIn: {
+      attemptSecondFactor: async () => {
+        signInCalled = true
+      },
+    },
+    signUp: {
+      attemptEmailAddressVerification: async ({ code }) => {
+        signUpCalled = true
+        assert.equal(code, '123456')
+        return { status: 'complete' }
+      },
+    },
+    verificationFlow,
+  })
+
+  assert.equal(verificationFlow, AUTH_VERIFICATION_FLOWS.SIGN_UP_EMAIL)
+  assert.equal(content.heading, 'Xác thực email')
+  assert.match(content.intro, /hoàn tất tạo tài khoản/u)
+  assert.equal(signUpCalled, true)
+  assert.equal(signInCalled, false)
+  assert.equal(result.status, 'complete')
+})
+
+test('11. sign-in email second factor uses login flow, copy, and Clerk operation', async () => {
+  const verificationFlow = getSignInVerificationFlow({
+    status: 'needs_second_factor',
+    supportedSecondFactors: [{ strategy: 'email_code' }],
+  })
+  const content = getVerificationContent(verificationFlow, 'customer@example.com')
+  let signInCalled = false
+  let signUpCalled = false
+
+  const result = await attemptAuthVerification({
+    code: '654321',
+    signIn: {
+      attemptSecondFactor: async ({ code, strategy }) => {
+        signInCalled = true
+        assert.equal(code, '654321')
+        assert.equal(strategy, 'email_code')
+        return { status: 'complete' }
+      },
+    },
+    signUp: {
+      attemptEmailAddressVerification: async () => {
+        signUpCalled = true
+      },
+    },
+    verificationFlow,
+  })
+
+  assert.equal(verificationFlow, AUTH_VERIFICATION_FLOWS.SIGN_IN_SECOND_FACTOR)
+  assert.equal(content.heading, 'Xác thực đăng nhập')
+  assert.match(content.intro, /xác thực lần đăng nhập này/u)
+  assert.doesNotMatch(content.intro, /tạo tài khoản/u)
+  assert.equal(signInCalled, true)
+  assert.equal(signUpCalled, false)
+  assert.equal(result.status, 'complete')
+})
+
+test('12. switching register verification to login hides stale signup verification', () => {
+  const appSource = fs.readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
+  const activeFlow = getActiveVerificationFlow(
+    AUTH_VERIFICATION_FLOWS.SIGN_UP_EMAIL,
+    'login',
+  )
+
+  assert.match(appSource, /<AuthPage key="login" mode="login" \/>/u)
+  assert.equal(activeFlow, null)
+  assert.equal(getVerificationContent(activeFlow, 'customer@example.com'), null)
+})
+
+test('13. switching login verification to register hides stale sign-in verification', () => {
+  const appSource = fs.readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
+  const activeFlow = getActiveVerificationFlow(
+    AUTH_VERIFICATION_FLOWS.SIGN_IN_SECOND_FACTOR,
+    'register',
+  )
+
+  assert.match(appSource, /<AuthPage key="register" mode="register" \/>/u)
+  assert.equal(activeFlow, null)
+  assert.equal(getVerificationContent(activeFlow, 'customer@example.com'), null)
 })

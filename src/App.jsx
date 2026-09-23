@@ -116,8 +116,8 @@ function App() {
         <Route path="flower-finder" element={<FlowerFinderPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="checkout/success/:orderCode" element={<CheckoutSuccessPage />} />
-        <Route path="login" element={<AuthPage mode="login" />} />
-        <Route path="register" element={<AuthPage mode="register" />} />
+        <Route path="login" element={<AuthPage key="login" mode="login" />} />
+        <Route path="register" element={<AuthPage key="register" mode="register" />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="delivery-information" element={<DeliveryInformationPage />} />
