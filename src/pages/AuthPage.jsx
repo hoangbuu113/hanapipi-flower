@@ -36,6 +36,14 @@ function AuthPage({ mode }) {
     }
   }, [user, navigate])
 
+  useEffect(() => {
+    // A mode switch starts a fresh auth challenge without discarding form input.
+    setVerificationFlow(null)
+    setCode('')
+    setErrors({})
+    setIsSubmitting(false)
+  }, [mode])
+
   function update(key, value) {
     setForm((current) => ({ ...current, [key]: value }))
     setErrors((current) => ({ ...current, [key]: '', form: '' }))

@@ -253,6 +253,11 @@ test('10. signup email verification uses signup flow, copy, and Clerk operation'
 })
 
 test('11. sign-in email second factor uses login flow, copy, and Clerk operation', async () => {
+  assert.equal(getSignInVerificationFlow({
+    status: 'needs_second_factor',
+    supportedSecondFactors: [{ strategy: 'phone_code' }],
+  }), null)
+
   const verificationFlow = getSignInVerificationFlow({
     status: 'needs_second_factor',
     supportedSecondFactors: [{ strategy: 'email_code' }],
@@ -310,4 +315,11 @@ test('13. switching login verification to register hides stale sign-in verificat
   assert.match(appSource, /<AuthPage key="register" mode="register" \/>/u)
   assert.equal(activeFlow, null)
   assert.equal(getVerificationContent(activeFlow, 'customer@example.com'), null)
+})
+
+test('14. AuthPage resets challenge state on mode changes without clearing credentials', () => {
+  const authPageSource = fs.readFileSync(new URL('../src/pages/AuthPage.jsx', import.meta.url), 'utf8')
+
+  assert.match(authPageSource, /setVerificationFlow\(null\)[\s\S]*setCode\(''\)[\s\S]*setErrors\(\{\}\)[\s\S]*setIsSubmitting\(false\)[\s\S]*\}, \[mode\]\)/u)
+  assert.doesNotMatch(authPageSource, /setForm\(\{\s*email:\s*''/u)
 })
