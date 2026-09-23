@@ -117,11 +117,7 @@ export function formatPaymentMethod(method) {
     case 'momo':
       return 'MoMo'
     case 'bank_transfer':
-    case 'bank_transfer_mock':
       return 'Chuyển khoản ngân hàng'
-    case 'cod':
-    case 'cod_mock':
-      return 'Thanh toán khi nhận hoa'
     default:
       return method || 'Chuyển khoản ngân hàng'
   }

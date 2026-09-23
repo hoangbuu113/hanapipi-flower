@@ -47,9 +47,17 @@ function createSeededDatabase() {
   const m1 = fs.readFileSync(path.resolve('drizzle/0001_phase16_foundation.sql'), 'utf8')
   const m2 = fs.readFileSync(path.resolve('drizzle/0002_phase16_catalogue_seed.sql'), 'utf8')
   const m3 = fs.readFileSync(path.resolve('drizzle/0003_add_product_internal_note.sql'), 'utf8')
+  const m4 = fs.readFileSync(path.resolve('drizzle/0004_update_order_payment_constraints.sql'), 'utf8')
+  const m5 = fs.readFileSync(path.resolve('drizzle/0005_add_order_delivering_status.sql'), 'utf8')
+  const m6 = fs.readFileSync(path.resolve('drizzle/0006_add_momo_payment_method.sql'), 'utf8')
+  const m7 = fs.readFileSync(path.resolve('drizzle/0007_tighten_order_payment_methods.sql'), 'utf8')
   db.exec(m1)
   db.exec(m2)
   db.exec(m3)
+  db.exec(m4)
+  db.exec(m5)
+  db.exec(m6)
+  db.exec(m7)
   return { d1: new D1Wrapper(db), sqlite: db }
 }
 
@@ -142,7 +150,7 @@ function createOrderPayload(overrides = {}) {
         wrappingId: 'ivory-paper',
       },
     ],
-    paymentMethod: 'cod_mock',
+    paymentMethod: 'bank_transfer',
     ...overrides,
   }
 }
@@ -426,10 +434,10 @@ test('13. order list is sorted newest first', async () => {
       fulfilment_metadata_json, payment_method, payment_status, created_at_utc, updated_at_utc
     ) VALUES
       ('ord_older', 'usr_cust_a', 'HF-20260901-1111', 'received', 0, 500000, 500000, 'VND',
-       '2026-09-05', 'morning', 'enc', 'enc', 'enc', 'enc', 'aes-gcm-v1', '{}', 'cod_mock', 'mock_pending',
+       '2026-09-05', 'morning', 'enc', 'enc', 'enc', 'enc', 'aes-gcm-v1', '{}', 'bank_transfer', 'pending',
        '2026-09-01T10:00:00.000Z', '2026-09-01T10:00:00.000Z'),
       ('ord_newer', 'usr_cust_a', 'HF-20260920-2222', 'received', 0, 600000, 600000, 'VND',
-       '2026-09-25', 'morning', 'enc', 'enc', 'enc', 'enc', 'aes-gcm-v1', '{}', 'cod_mock', 'mock_pending',
+       '2026-09-25', 'morning', 'enc', 'enc', 'enc', 'enc', 'aes-gcm-v1', '{}', 'bank_transfer', 'pending',
        '2026-09-20T10:00:00.000Z', '2026-09-20T10:00:00.000Z')
   `)
 

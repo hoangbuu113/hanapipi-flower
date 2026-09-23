@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import qrcode from 'qrcode-generator'
 import Container from '../components/Container'
+import momoQrAsset from '../assets/payment_momo_qr_staging.png'
 import { useAccount } from '../context/accountStore'
 import { fetchUserOrderDetail } from '../services/apiClient'
 import { formatCurrency } from '../utils/formatCurrency'
@@ -162,13 +163,9 @@ function CheckoutSuccessPage() {
   const isMomo = order.paymentMethod === 'momo'
     || order.payment?.method === 'momo'
   const isBankTransfer = order.paymentMethod === 'bank_transfer'
-    || order.paymentMethod === 'bank_transfer_mock'
     || order.payment?.method === 'bank_transfer'
-    || order.payment?.method === 'bank_transfer_mock'
   const isPaymentPending = order.paymentStatus === 'pending'
-    || order.paymentStatus === 'mock_pending'
     || order.payment?.status === 'pending'
-    || order.payment?.status === 'mock_pending'
 
   return (
     <main className="success-page">
@@ -226,7 +223,7 @@ function CheckoutSuccessPage() {
                     <img
                       alt="Mã QR Ví MoMo"
                       className="momo-payment-qr-img"
-                      src={order.payment.momo.qrUrl}
+                      src={momoQrAsset}
                       style={{ width: 180, height: 180, objectFit: 'contain', borderRadius: 8 }}
                     />
                     <p className="bank-transfer-box__qr-hint">Quét mã bằng ứng dụng MoMo để thanh toán</p>

@@ -59,6 +59,5 @@ export const QUERY_INDEXES = [
   'idx_audit_events_created',
 ] as const
 
-export const PAYMENT_METHODS = ['cod_mock', 'bank_transfer_mock'] as const
+export const PAYMENT_METHODS = ['momo', 'bank_transfer'] as const
 export const PURCHASE_TYPES = ['standard', 'priceless'] as const
-

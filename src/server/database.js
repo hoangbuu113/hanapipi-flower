@@ -28,7 +28,6 @@ export function createDatabaseRepositories(env) {
       momoConfig: {
         accountName: env?.MOMO_ACCOUNT_NAME,
         phoneNumber: env?.MOMO_PHONE_NUMBER,
-        qrMediaKey: env?.MOMO_QR_MEDIA_KEY,
       },
     }),
     users: createUserRepository(db),

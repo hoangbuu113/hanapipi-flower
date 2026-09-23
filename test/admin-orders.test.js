@@ -57,11 +57,15 @@ function createSeededDatabase() {
   const m3 = fs.readFileSync(path.resolve('drizzle/0003_add_product_internal_note.sql'), 'utf8')
   const m4 = fs.readFileSync(path.resolve('drizzle/0004_update_order_payment_constraints.sql'), 'utf8')
   const m5 = fs.readFileSync(path.resolve('drizzle/0005_add_order_delivering_status.sql'), 'utf8')
+  const m6 = fs.readFileSync(path.resolve('drizzle/0006_add_momo_payment_method.sql'), 'utf8')
+  const m7 = fs.readFileSync(path.resolve('drizzle/0007_tighten_order_payment_methods.sql'), 'utf8')
   db.exec(m1)
   db.exec(m2)
   db.exec(m3)
   db.exec(m4)
   db.exec(m5)
+  db.exec(m6)
+  db.exec(m7)
   return { d1: new D1Wrapper(db), sqlite: db }
 }
 
@@ -765,9 +769,9 @@ test('Admin Orders Fulfilment Workflow - Comprehensive Suite', async (t) => {
   // 35. Utility formatPaymentMethod formats payment methods accurately
   await t.test('35. Utility formatPaymentMethod formats payment methods accurately', () => {
     assert.equal(formatPaymentMethod('bank_transfer'), 'Chuyển khoản ngân hàng')
-    assert.equal(formatPaymentMethod('bank_transfer_mock'), 'Chuyển khoản ngân hàng')
-    assert.equal(formatPaymentMethod('cod'), 'Thanh toán khi nhận hoa')
-    assert.equal(formatPaymentMethod('cod_mock'), 'Thanh toán khi nhận hoa')
+    assert.equal(formatPaymentMethod('bank_transfer_mock'), 'bank_transfer_mock')
+    assert.equal(formatPaymentMethod('cod'), 'cod')
+    assert.equal(formatPaymentMethod('cod_mock'), 'cod_mock')
   })
 
   // 36. Utility formatDeliveryDate formats date accurately

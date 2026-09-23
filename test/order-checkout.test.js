@@ -43,9 +43,17 @@ function createSeededDatabase() {
   const m1 = fs.readFileSync(path.resolve('drizzle/0001_phase16_foundation.sql'), 'utf8')
   const m2 = fs.readFileSync(path.resolve('drizzle/0002_phase16_catalogue_seed.sql'), 'utf8')
   const m3 = fs.readFileSync(path.resolve('drizzle/0003_add_product_internal_note.sql'), 'utf8')
+  const m4 = fs.readFileSync(path.resolve('drizzle/0004_update_order_payment_constraints.sql'), 'utf8')
+  const m5 = fs.readFileSync(path.resolve('drizzle/0005_add_order_delivering_status.sql'), 'utf8')
+  const m6 = fs.readFileSync(path.resolve('drizzle/0006_add_momo_payment_method.sql'), 'utf8')
+  const m7 = fs.readFileSync(path.resolve('drizzle/0007_tighten_order_payment_methods.sql'), 'utf8')
   db.exec(m1)
   db.exec(m2)
   db.exec(m3)
+  db.exec(m4)
+  db.exec(m5)
+  db.exec(m6)
+  db.exec(m7)
   return { d1: new D1Wrapper(db), sqlite: db }
 }
 
@@ -136,7 +144,7 @@ function createValidOrderPayload() {
         wrappingId: 'ivory-paper',
       },
     ],
-    paymentMethod: 'cod_mock',
+    paymentMethod: 'bank_transfer',
   }
 }
 
@@ -743,8 +751,8 @@ test('27. orders.status set to received', async () => {
   assert.equal(orderRow.status, 'received')
 })
 
-// 28. Persistence 28: orders.payment_status set to 'mock_pending'
-test('28. orders.payment_status set to mock_pending', async () => {
+// 28. Persistence 28: orders.payment_status set to 'pending'
+test('28. orders.payment_status set to pending', async () => {
   const { d1, sqlite } = createSeededDatabase()
   seedCustomerUser(sqlite)
   const worker = createTestWorker(d1)
@@ -760,10 +768,10 @@ test('28. orders.payment_status set to mock_pending', async () => {
 
   assert.equal(response.status, 201)
   const body = await response.json()
-  assert.equal(body.data.order.paymentStatus, 'mock_pending')
+  assert.equal(body.data.order.paymentStatus, 'pending')
 
   const orderRow = sqlite.prepare('SELECT payment_status FROM orders WHERE id = ?').get(body.data.order.id)
-  assert.equal(orderRow.payment_status, 'mock_pending')
+  assert.equal(orderRow.payment_status, 'pending')
 })
 
 // 29. Persistence 29: order_items.options_snapshot_json contains size and wrapping snapshots

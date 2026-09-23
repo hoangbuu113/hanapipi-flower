@@ -46,6 +46,7 @@ function createSeededDatabase() {
     '0004_update_order_payment_constraints.sql',
     '0005_add_order_delivering_status.sql',
     '0006_add_momo_payment_method.sql',
+    '0007_tighten_order_payment_methods.sql',
   ]
   for (const m of migrationFiles) {
     db.exec(fs.readFileSync(path.resolve('drizzle', m), 'utf8'))
@@ -58,9 +59,8 @@ const testJwtKey = 'unit-test-momo-public-key'
 const testFulfilmentKey = Buffer.from('01234567890123456789012345678901').toString('base64')
 
 const defaultTestMomoConfig = {
-  accountName: 'HANAPIPI FLOWER',
-  phoneNumber: '0901234567',
-  qrMediaKey: 'payment_momo_qr_staging.png',
+  accountName: 'Trần Huỳnh Bảo Hân',
+  phoneNumber: '0335618019',
 }
 
 const defaultTestBankConfig = {
@@ -98,7 +98,6 @@ function createEnv(d1, {
   if (momoConfig !== null) {
     env.MOMO_ACCOUNT_NAME = momoConfig.accountName
     env.MOMO_PHONE_NUMBER = momoConfig.phoneNumber
-    env.MOMO_QR_MEDIA_KEY = momoConfig.qrMediaKey
   }
   return env
 }
@@ -203,7 +202,7 @@ test('1. D1 schema accepts payment_method = momo and stores pending payment_stat
   assert.equal(row.payment_status, 'pending')
 })
 
-test('2. Historical bank_transfer orders remain completely valid with migration 0006', async () => {
+test('2. Historical bank_transfer orders remain completely valid with migration 0007', async () => {
   const { d1, sqlite } = createSeededDatabase()
   seedUsers(sqlite)
   const harness = createTestHarness(d1)
@@ -227,7 +226,7 @@ test('2. Historical bank_transfer orders remain completely valid with migration 
   assert.equal(row.payment_method, 'bank_transfer')
 })
 
-test('3. MoMo payment presentation DTO contains authoritative fields and QR media URL', async () => {
+test('3. MoMo payment presentation DTO contains authoritative fields without an R2 QR dependency', async () => {
   const { d1, sqlite } = createSeededDatabase()
   seedUsers(sqlite)
   const harness = createTestHarness(d1)
@@ -253,9 +252,9 @@ test('3. MoMo payment presentation DTO contains authoritative fields and QR medi
   assert.equal(payment.statusLabel, 'Chờ thanh toán')
   assert.ok(payment.momo)
   assert.equal(payment.momo.available, true)
-  assert.equal(payment.momo.accountName, 'HANAPIPI FLOWER')
-  assert.equal(payment.momo.phoneNumber, '0901234567')
-  assert.equal(payment.momo.qrUrl, '/api/v1/media/payment_momo_qr_staging.png')
+  assert.equal(payment.momo.accountName, 'Trần Huỳnh Bảo Hân')
+  assert.equal(payment.momo.phoneNumber, '0335618019')
+  assert.equal(payment.momo.qrUrl, undefined)
   assert.equal(payment.momo.amountVnd, body.data.order.totalVnd)
   assert.equal(payment.momo.transferContent, `HANAPIPI ${body.data.order.orderCode}`)
   assert.equal(payment.transferContent, `HANAPIPI ${body.data.order.orderCode}`)
@@ -287,11 +286,12 @@ test('4. Missing MoMo configuration returns safe PAYMENT_CONFIG_UNAVAILABLE', as
   assert.ok(payment.momo.message)
 })
 
-test('5. formatPaymentMethod formats momo as MoMo and bank_transfer as Chuyển khoản ngân hàng', () => {
+test('5. only momo and bank_transfer are formatted payment methods', () => {
   assert.equal(formatPaymentMethod('momo'), 'MoMo')
   assert.equal(formatPaymentMethod('bank_transfer'), 'Chuyển khoản ngân hàng')
-  assert.equal(formatPaymentMethod('bank_transfer_mock'), 'Chuyển khoản ngân hàng')
-  assert.equal(formatPaymentMethod('cod'), 'Thanh toán khi nhận hoa')
+  assert.equal(formatPaymentMethod('cod'), 'cod')
+  assert.equal(formatPaymentMethod('cod_mock'), 'cod_mock')
+  assert.equal(formatPaymentMethod('bank_transfer_mock'), 'bank_transfer_mock')
 })
 
 test('6. Admin can confirm payment on pending MoMo order -> paid and preparing', async () => {
@@ -328,8 +328,8 @@ test('6. Admin can confirm payment on pending MoMo order -> paid and preparing',
   assert.equal(adminDetail.paymentMethod, 'momo')
   assert.equal(adminDetail.payment.method, 'momo')
   assert.equal(adminDetail.payment.methodLabel, 'MoMo')
-  assert.equal(adminDetail.payment.momo.accountName, 'HANAPIPI FLOWER')
-  assert.equal(adminDetail.payment.momo.phoneNumber, '0901234567')
+  assert.equal(adminDetail.payment.momo.accountName, 'Trần Huỳnh Bảo Hân')
+  assert.equal(adminDetail.payment.momo.phoneNumber, '0335618019')
 
   // Admin confirms payment
   const confirmRes = await harness.fetch(`/api/v1/admin/orders/${createdOrder.id}/confirm-payment`, {

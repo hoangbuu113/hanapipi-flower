@@ -45,10 +45,16 @@ function createSeededDatabase() {
   const m2 = fs.readFileSync(path.resolve('drizzle/0002_phase16_catalogue_seed.sql'), 'utf8')
   const m3 = fs.readFileSync(path.resolve('drizzle/0003_add_product_internal_note.sql'), 'utf8')
   const m4 = fs.readFileSync(path.resolve('drizzle/0004_update_order_payment_constraints.sql'), 'utf8')
+  const m5 = fs.readFileSync(path.resolve('drizzle/0005_add_order_delivering_status.sql'), 'utf8')
+  const m6 = fs.readFileSync(path.resolve('drizzle/0006_add_momo_payment_method.sql'), 'utf8')
+  const m7 = fs.readFileSync(path.resolve('drizzle/0007_tighten_order_payment_methods.sql'), 'utf8')
   db.exec(m1)
   db.exec(m2)
   db.exec(m3)
   db.exec(m4)
+  db.exec(m5)
+  db.exec(m6)
+  db.exec(m7)
   return { d1: new D1Wrapper(db), sqlite: db }
 }
 
@@ -208,9 +214,9 @@ test('2. order creation stores payment_status = pending in D1', async () => {
 
 test('3. payment method label is formatted cleanly in Vietnamese', async () => {
   assert.equal(formatPaymentMethod('bank_transfer'), 'Chuyển khoản ngân hàng')
-  assert.equal(formatPaymentMethod('bank_transfer_mock'), 'Chuyển khoản ngân hàng')
-  assert.equal(formatPaymentMethod('cod_mock'), 'Thanh toán khi nhận hoa')
-  assert.equal(formatPaymentMethod('cod'), 'Thanh toán khi nhận hoa')
+  assert.equal(formatPaymentMethod('bank_transfer_mock'), 'bank_transfer_mock')
+  assert.equal(formatPaymentMethod('cod_mock'), 'cod_mock')
+  assert.equal(formatPaymentMethod('cod'), 'cod')
 })
 
 test('4. payment status badge is formatted as Chờ thanh toán', async () => {
@@ -638,7 +644,7 @@ test('24. formatPaymentStatus maps pending and mock_pending to Chờ thanh toán
 
 test('25. formatPaymentMethod maps bank_transfer to Chuyển khoản ngân hàng', () => {
   assert.equal(formatPaymentMethod('bank_transfer'), 'Chuyển khoản ngân hàng')
-  assert.equal(formatPaymentMethod('cod'), 'Thanh toán khi nhận hoa')
+  assert.equal(formatPaymentMethod('cod'), 'cod')
 })
 
 test('26. list endpoint returns orders with paymentStatus pending and no QR payload', async () => {
@@ -663,7 +669,7 @@ test('26. list endpoint returns orders with paymentStatus pending and no QR payl
   assert.equal(body.data.orders[0].qrPayload, undefined)
 })
 
-test('27. backward compatibility with bank_transfer_mock and cod_mock', async () => {
+test('27. retired mock and COD payment methods are rejected', async () => {
   const { d1, sqlite } = createSeededDatabase()
   seedUsers(sqlite)
   const worker = createTestWorker(d1)
@@ -676,11 +682,20 @@ test('27. backward compatibility with bank_transfer_mock and cod_mock', async ()
     headers: { Authorization: 'Bearer customer-token-1', 'Content-Type': 'application/json' },
     method: 'POST',
   })
-  assert.equal(res.status, 201)
+  assert.equal(res.status, 400)
   const body = await res.json()
-  assert.equal(body.data.order.paymentMethod, 'bank_transfer_mock')
-  assert.equal(body.data.order.paymentStatus, 'mock_pending')
-  assert.equal(body.data.order.payment.bank.available, true)
+  assert.equal(body.error.code, 'INVALID_PAYMENT_METHOD')
+
+  for (const paymentMethod of ['cod', 'cod_mock']) {
+    payload.paymentMethod = paymentMethod
+    const rejected = await worker.fetch('/api/v1/orders', {
+      body: JSON.stringify(payload),
+      headers: { Authorization: 'Bearer customer-token-1', 'Content-Type': 'application/json' },
+      method: 'POST',
+    })
+    assert.equal(rejected.status, 400)
+    assert.equal((await rejected.json()).error.code, 'INVALID_PAYMENT_METHOD')
+  }
 })
 
 test('28. direct reload behavior preserves bank transfer instructions', async () => {

@@ -40,9 +40,8 @@
         "API_V1_ENABLED": "true",
         "API_ALLOWED_ORIGINS": "https://hanapipi-flower.hutstudio.workers.dev",
         "CLERK_AUTHORIZED_PARTIES": "https://hanapipi-flower.hutstudio.workers.dev",
-        "MOMO_ACCOUNT_NAME": "HANAPIPI FLOWER",
-        "MOMO_PHONE_NUMBER": "0901234567",
-        "MOMO_QR_MEDIA_KEY": "payment_momo_qr_staging.png"
+        "MOMO_ACCOUNT_NAME": "Trần Huỳnh Bảo Hân",
+        "MOMO_PHONE_NUMBER": "0335618019"
       },
       "d1_databases": [
         {

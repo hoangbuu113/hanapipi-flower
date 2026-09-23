@@ -2374,7 +2374,7 @@ function AdminPage() {
                     </div>
 
                     <div className="admin-order-actions-bar">
-                      {(selectedOrderDetail.paymentStatus === 'pending' || selectedOrderDetail.paymentStatus === 'mock_pending') && (
+                      {selectedOrderDetail.paymentStatus === 'pending' && (
                         <button
                           className="button button--primary button--small admin-action-confirm-payment"
                           disabled={isUpdatingOrder}

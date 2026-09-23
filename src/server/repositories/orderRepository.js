@@ -7,7 +7,7 @@ import { generateVietQrPayload } from '../vietqr.js'
 
 const MAX_ITEMS = 20
 const MAX_QUANTITY = 20
-const PAYMENT_METHODS = new Set(['momo', 'bank_transfer', 'bank_transfer_mock', 'cod', 'cod_mock'])
+const PAYMENT_METHODS = new Set(['momo', 'bank_transfer'])
 const PHONE_PATTERN = /^(0\d{9}|\+84\d{9})$/u
 
 function orderError(status, code, message, fieldErrors) {
@@ -143,11 +143,7 @@ function paymentLabel(paymentMethod) {
     case 'momo':
       return 'MoMo'
     case 'bank_transfer':
-    case 'bank_transfer_mock':
       return 'Chuyển khoản ngân hàng'
-    case 'cod':
-    case 'cod_mock':
-      return 'Thanh toán khi nhận hoa'
     default:
       return paymentMethod || 'Chuyển khoản ngân hàng'
   }
@@ -158,7 +154,7 @@ function buildPaymentPresentation(order, configs = {}) {
   const bankConfig = configs?.bankBin || configs?.accountNumber || configs?.bankName ? configs : configs?.bankConfig
   const momoConfig = configs?.momoConfig
 
-  const isBankTransfer = order.payment_method === 'bank_transfer' || order.payment_method === 'bank_transfer_mock'
+  const isBankTransfer = order.payment_method === 'bank_transfer'
   const isMomo = order.payment_method === 'momo'
   const transferContent = `HANAPIPI ${order.order_code}`
   const isBankConfigured = Boolean(
@@ -203,18 +199,13 @@ function buildPaymentPresentation(order, configs = {}) {
 
   let momo = null
   if (isMomo) {
-    const isMomoConfigured = Boolean(
-      momoConfig?.accountName
-      && momoConfig?.phoneNumber
-      && momoConfig?.qrMediaKey,
-    )
+    const isMomoConfigured = Boolean(momoConfig?.accountName && momoConfig?.phoneNumber)
     if (isMomoConfigured) {
       momo = {
         accountName: momoConfig.accountName,
         amountVnd: order.total_vnd,
         available: true,
         phoneNumber: momoConfig.phoneNumber,
-        qrUrl: `/api/v1/media/${momoConfig.qrMediaKey}`,
         transferContent,
       }
     } else {
@@ -235,7 +226,7 @@ function buildPaymentPresentation(order, configs = {}) {
     status: order.payment_status,
     statusLabel: order.payment_status === 'paid'
       ? 'Đã thanh toán'
-      : ((order.payment_status === 'pending' || order.payment_status === 'mock_pending') ? 'Chờ thanh toán' : 'Chờ xử lý'),
+      : (order.payment_status === 'pending' ? 'Chờ thanh toán' : 'Chờ xử lý'),
     transferContent: (isBankTransfer || isMomo) ? transferContent : null,
   }
 }
@@ -317,9 +308,7 @@ export function createOrderRepository(db, options = {}) {
         encryptFulfilmentValue(orderInput.gifting, fulfilmentKey),
       ])
 
-      const initialPaymentStatus = (orderInput.paymentMethod === 'momo' || orderInput.paymentMethod === 'bank_transfer' || orderInput.paymentMethod === 'cod')
-        ? 'pending'
-        : 'mock_pending'
+      const initialPaymentStatus = 'pending'
 
       const statements = [db.prepare(`
         INSERT INTO orders (
@@ -1046,7 +1035,7 @@ export function createOrderRepository(db, options = {}) {
         return this.getForAdmin(adminUser, order.id, callOptions)
       }
 
-      if (order.payment_status !== 'pending' && order.payment_status !== 'mock_pending') {
+      if (order.payment_status !== 'pending') {
         throw orderError(409, 'INVALID_PAYMENT_STATE', `Không thể xác nhận thanh toán cho đơn hàng có trạng thái: ${order.payment_status}.`)
       }
 
@@ -1058,7 +1047,7 @@ export function createOrderRepository(db, options = {}) {
         SET payment_status = 'paid',
             status = CASE WHEN status = 'received' THEN 'preparing' ELSE status END,
             updated_at_utc = ?
-        WHERE id = ? AND payment_status IN ('pending', 'mock_pending')
+        WHERE id = ? AND payment_status = 'pending'
       `).bind(nowUtc, order.id).run()
 
       if (!updateResult?.meta?.changes && updateResult?.changes === 0) {
