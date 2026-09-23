@@ -158,7 +158,8 @@ function assertSchema(database) {
 
   const orderSql = scalar(database, "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'orders'")
   assert(
-    orderSql.includes("payment_method IN ('bank_transfer', 'bank_transfer_mock', 'cod_mock', 'cod')")
+    orderSql.includes("payment_method IN ('momo', 'bank_transfer', 'bank_transfer_mock', 'cod_mock', 'cod')")
+    || orderSql.includes("payment_method IN ('bank_transfer', 'bank_transfer_mock', 'cod_mock', 'cod')")
     || orderSql.includes("payment_method IN ('cod_mock', 'bank_transfer_mock')"),
     'Payment method constraint is missing.',
   )

@@ -7,7 +7,7 @@ import { generateVietQrPayload } from '../vietqr.js'
 
 const MAX_ITEMS = 20
 const MAX_QUANTITY = 20
-const PAYMENT_METHODS = new Set(['bank_transfer', 'bank_transfer_mock', 'cod', 'cod_mock'])
+const PAYMENT_METHODS = new Set(['momo', 'bank_transfer', 'bank_transfer_mock', 'cod', 'cod_mock'])
 const PHONE_PATTERN = /^(0\d{9}|\+84\d{9})$/u
 
 function orderError(status, code, message, fieldErrors) {
@@ -140,6 +140,8 @@ function createOrderCode(now) {
 
 function paymentLabel(paymentMethod) {
   switch (paymentMethod) {
+    case 'momo':
+      return 'MoMo'
     case 'bank_transfer':
     case 'bank_transfer_mock':
       return 'Chuyển khoản ngân hàng'
@@ -151,8 +153,13 @@ function paymentLabel(paymentMethod) {
   }
 }
 
-function buildPaymentPresentation(order, bankConfig) {
+function buildPaymentPresentation(order, configs = {}) {
+  // Support both legacy buildPaymentPresentation(order, bankConfig) and buildPaymentPresentation(order, { bankConfig, momoConfig })
+  const bankConfig = configs?.bankBin || configs?.accountNumber || configs?.bankName ? configs : configs?.bankConfig
+  const momoConfig = configs?.momoConfig
+
   const isBankTransfer = order.payment_method === 'bank_transfer' || order.payment_method === 'bank_transfer_mock'
+  const isMomo = order.payment_method === 'momo'
   const transferContent = `HANAPIPI ${order.order_code}`
   const isBankConfigured = Boolean(
     bankConfig?.bankBin
@@ -194,16 +201,42 @@ function buildPaymentPresentation(order, bankConfig) {
     }
   }
 
+  let momo = null
+  if (isMomo) {
+    const isMomoConfigured = Boolean(
+      momoConfig?.accountName
+      && momoConfig?.phoneNumber
+      && momoConfig?.qrMediaKey,
+    )
+    if (isMomoConfigured) {
+      momo = {
+        accountName: momoConfig.accountName,
+        amountVnd: order.total_vnd,
+        available: true,
+        phoneNumber: momoConfig.phoneNumber,
+        qrUrl: `/api/v1/media/${momoConfig.qrMediaKey}`,
+        transferContent,
+      }
+    } else {
+      momo = {
+        available: false,
+        error: 'PAYMENT_CONFIG_UNAVAILABLE',
+        message: 'Thông tin thanh toán MoMo hiện chưa được cấu hình. Vui lòng liên hệ Hanapipi Flower.',
+      }
+    }
+  }
+
   return {
     amountVnd: order.total_vnd,
     bank,
     method: order.payment_method,
     methodLabel: paymentLabel(order.payment_method),
+    momo,
     status: order.payment_status,
     statusLabel: order.payment_status === 'paid'
       ? 'Đã thanh toán'
       : ((order.payment_status === 'pending' || order.payment_status === 'mock_pending') ? 'Chờ thanh toán' : 'Chờ xử lý'),
-    transferContent: isBankTransfer ? transferContent : null,
+    transferContent: (isBankTransfer || isMomo) ? transferContent : null,
   }
 }
 
@@ -284,7 +317,7 @@ export function createOrderRepository(db, options = {}) {
         encryptFulfilmentValue(orderInput.gifting, fulfilmentKey),
       ])
 
-      const initialPaymentStatus = (orderInput.paymentMethod === 'bank_transfer' || orderInput.paymentMethod === 'cod')
+      const initialPaymentStatus = (orderInput.paymentMethod === 'momo' || orderInput.paymentMethod === 'bank_transfer' || orderInput.paymentMethod === 'cod')
         ? 'pending'
         : 'mock_pending'
 
@@ -386,7 +419,7 @@ export function createOrderRepository(db, options = {}) {
         payment_method: orderInput.paymentMethod,
         payment_status: initialPaymentStatus,
         total_vnd: subtotalVnd,
-      }, options.bankConfig)
+      }, { bankConfig: options.bankConfig, momoConfig: options.momoConfig })
 
       return {
         address: orderInput.address,
@@ -663,7 +696,8 @@ export function createOrderRepository(db, options = {}) {
       }
 
       const bankConfig = callOptions.bankConfig ?? options.bankConfig
-      const payment = buildPaymentPresentation(order, bankConfig)
+      const momoConfig = callOptions.momoConfig ?? options.momoConfig
+      const payment = buildPaymentPresentation(order, { bankConfig, momoConfig })
 
       return {
         address,
@@ -933,7 +967,8 @@ export function createOrderRepository(db, options = {}) {
       }
 
       const bankConfig = callOptions.bankConfig ?? options.bankConfig
-      const payment = buildPaymentPresentation(order, bankConfig)
+      const momoConfig = callOptions.momoConfig ?? options.momoConfig
+      const payment = buildPaymentPresentation(order, { bankConfig, momoConfig })
 
       // Query audit events history for this order
       const auditResult = await db.prepare(`

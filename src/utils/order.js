@@ -1,4 +1,4 @@
-import { normalizeGiftAddOns } from './cart'
+import { normalizeGiftAddOns } from './cart.js'
 
 export function getCartItemPresentation(item) {
   if (!item) return { details: '', giftAddOns: [], name: '' }
@@ -114,6 +114,8 @@ export function formatPaymentStatus(status) {
 
 export function formatPaymentMethod(method) {
   switch (method) {
+    case 'momo':
+      return 'MoMo'
     case 'bank_transfer':
     case 'bank_transfer_mock':
       return 'Chuyển khoản ngân hàng'

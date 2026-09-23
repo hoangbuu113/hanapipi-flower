@@ -159,6 +159,8 @@ function CheckoutSuccessPage() {
   const hasGiftingDetails = giftAddOns.length > 0 || gifting.message || gifting.senderName || gifting.anonymous
   const orderId = order.code || order.orderCode
 
+  const isMomo = order.paymentMethod === 'momo'
+    || order.payment?.method === 'momo'
   const isBankTransfer = order.paymentMethod === 'bank_transfer'
     || order.paymentMethod === 'bank_transfer_mock'
     || order.payment?.method === 'bank_transfer'
@@ -210,6 +212,67 @@ function CheckoutSuccessPage() {
               </div>
             )}
           </dl>
+
+          {isMomo && isPaymentPending && (
+            <section className="bank-transfer-box momo-payment-box" aria-labelledby="momo-payment-title">
+              <div className="bank-transfer-box__header">
+                <h2 id="momo-payment-title">Thanh toán qua Ví MoMo</h2>
+                <span className="bank-transfer-badge">Chờ thanh toán</span>
+              </div>
+
+              {order.payment?.momo?.available ? (
+                <div className="bank-transfer-box__grid">
+                  <div className="bank-transfer-box__qr">
+                    <img
+                      alt="Mã QR Ví MoMo"
+                      className="momo-payment-qr-img"
+                      src={order.payment.momo.qrUrl}
+                      style={{ width: 180, height: 180, objectFit: 'contain', borderRadius: 8 }}
+                    />
+                    <p className="bank-transfer-box__qr-hint">Quét mã bằng ứng dụng MoMo để thanh toán</p>
+                  </div>
+                  <div className="bank-transfer-box__details">
+                    <dl className="bank-transfer-details">
+                      <div>
+                        <dt>Chủ tài khoản</dt>
+                        <dd><strong>{order.payment.momo.accountName}</strong></dd>
+                      </div>
+                      <div>
+                        <dt>Số điện thoại</dt>
+                        <dd className="bank-transfer-copyable">
+                          <code>{order.payment.momo.phoneNumber}</code>
+                          <CopyButton text={order.payment.momo.phoneNumber} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Số tiền</dt>
+                        <dd className="bank-transfer-copyable">
+                          <strong>{formatCurrency(order.payment.momo.amountVnd)}</strong>
+                          <CopyButton label="Sao chép số tiền" text={String(order.payment.momo.amountVnd)} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Lời nhắn chuyển tiền</dt>
+                        <dd className="bank-transfer-copyable">
+                          <code>{order.payment.momo.transferContent}</code>
+                          <CopyButton text={order.payment.momo.transferContent} />
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+              ) : (
+                <div className="bank-transfer-box__unavailable">
+                  <p>{order.payment?.momo?.message || 'Thông tin thanh toán MoMo hiện chưa được cấu hình. Vui lòng liên hệ Hanapipi Flower để được hỗ trợ.'}</p>
+                </div>
+              )}
+
+              <div className="bank-transfer-box__reassurance">
+                <p>❀ Đơn hoa sẽ được xử lý sau khi Hanapipi Flower xác nhận nhận được thanh toán.</p>
+                <p>❀ Vui lòng chuyển chính xác số tiền và lời nhắn để đơn được xác nhận nhanh nhất.</p>
+              </div>
+            </section>
+          )}
 
           {isBankTransfer && isPaymentPending && (
             <section className="bank-transfer-box" aria-labelledby="bank-transfer-title">
@@ -274,7 +337,7 @@ function CheckoutSuccessPage() {
             </section>
           )}
 
-          {isBankTransfer && !isPaymentPending && (order.paymentStatus === 'paid' || order.payment?.status === 'paid') && (
+          {(isBankTransfer || isMomo) && !isPaymentPending && (order.paymentStatus === 'paid' || order.payment?.status === 'paid') && (
             <section className="bank-transfer-box bank-transfer-box--paid" aria-labelledby="bank-transfer-paid-title">
               <div className="bank-transfer-box__header">
                 <h2 id="bank-transfer-paid-title">Thông tin thanh toán</h2>

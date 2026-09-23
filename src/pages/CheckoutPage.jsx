@@ -103,7 +103,7 @@ function CheckoutPage() {
         sizeId: item.sizeId || item.size?.id || item.size?.code,
         wrappingId: item.wrappingId || item.wrapping?.id || item.wrapping?.code || null,
       })),
-      paymentMethod: 'bank_transfer',
+      paymentMethod: 'momo',
     }
 
     setIsSubmitting(true)
@@ -143,9 +143,9 @@ function CheckoutPage() {
     </FormSection>
     <FormSection title="Phương thức thanh toán">
       <div className="checkout-payment-method">
-        <div className="checkout-payment-method__title">Chuyển khoản ngân hàng (VietQR)</div>
+        <div className="checkout-payment-method__title">Ví MoMo</div>
         <p className="checkout-payment-method__note">
-          Mã QR và thông tin chuyển khoản sẽ hiển thị ngay sau khi bạn đặt hoa.
+          Mã QR và thông tin chuyển tiền MoMo sẽ hiển thị ngay sau khi bạn đặt hoa.
         </p>
       </div>
     </FormSection>

@@ -934,16 +934,16 @@ test('36. crypto helper encrypts/decrypts correctly and rejects tampered ciphert
   )
 })
 
-// 37. Checkout UI: Exactly one payment section with bank_transfer VietQR notice
-test('37. CheckoutPage contains exactly one payment section with VietQR notice and no mock options', () => {
+// 37. Checkout UI: Exactly one payment section with MoMo notice and no mock options
+test('37. CheckoutPage contains exactly one payment section with MoMo notice and no mock options', () => {
   const checkoutSource = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
   const paymentSectionMatches = checkoutSource.match(/title="Phương thức thanh toán"/g)
   assert.equal(paymentSectionMatches?.length, 1, 'CheckoutPage must have exactly one "Phương thức thanh toán" section')
-  assert.ok(checkoutSource.includes('Chuyển khoản ngân hàng (VietQR)'))
-  assert.ok(checkoutSource.includes('Mã QR và thông tin chuyển khoản sẽ hiển thị ngay sau khi bạn đặt hoa.'))
+  assert.ok(checkoutSource.includes('Ví MoMo'), 'CheckoutPage must render Ví MoMo')
+  assert.ok(checkoutSource.includes('Mã QR và thông tin chuyển tiền MoMo sẽ hiển thị ngay sau khi bạn đặt hoa.'))
   assert.ok(!checkoutSource.includes('cod_mock'), 'CheckoutPage must not reference cod_mock')
   assert.ok(!checkoutSource.includes('bank_transfer_mock'), 'CheckoutPage must not reference bank_transfer_mock')
   assert.ok(!checkoutSource.includes('Thanh toán khi nhận hoa'), 'CheckoutPage must not render COD option')
   assert.ok(!checkoutSource.includes('Đây là bản demo'), 'CheckoutPage must not contain demo wording')
-  assert.ok(checkoutSource.includes("paymentMethod: 'bank_transfer'"), 'CheckoutPage submit payload must send bank_transfer')
+  assert.ok(checkoutSource.includes("paymentMethod: 'momo'"), 'CheckoutPage submit payload must send momo')
 })

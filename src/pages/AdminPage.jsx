@@ -2554,6 +2554,11 @@ function AdminPage() {
                         Ngân hàng nhận: {selectedOrderDetail.payment.bank.bankName} - STK: {selectedOrderDetail.payment.bank.accountNumber} ({selectedOrderDetail.payment.bank.accountName})
                       </p>
                     )}
+                    {selectedOrderDetail.payment?.momo && selectedOrderDetail.payment.momo.available && (
+                      <p>
+                        Ví MoMo: {selectedOrderDetail.payment.momo.accountName} - SĐT: {selectedOrderDetail.payment.momo.phoneNumber}
+                      </p>
+                    )}
                   </div>
 
                   {/* Audit History Timeline */}
