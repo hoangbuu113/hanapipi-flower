@@ -11,7 +11,7 @@ import { cartHasGiftAddOn, cartSubtotal } from '../utils/cart'
 import { isDeliveryDateAvailable } from '../utils/delivery'
 import './CheckoutPage.css'
 
-const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer: false, receiverName: '', receiverPhone: '', city: '', district: '', ward: '', address: '', message: '', cardSenderName: '', anonymousSender: false, payment: 'cod' }
+const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer: false, receiverName: '', receiverPhone: '', city: '', district: '', ward: '', address: '', message: '', cardSenderName: '', anonymousSender: false }
 
 function CheckoutPage() {
   const { addOrder, user } = useAccount()
@@ -103,7 +103,7 @@ function CheckoutPage() {
         sizeId: item.sizeId || item.size?.id || item.size?.code,
         wrappingId: item.wrappingId || item.wrapping?.id || item.wrapping?.code || null,
       })),
-      paymentMethod: form.payment === 'cod' ? 'cod_mock' : 'bank_transfer',
+      paymentMethod: 'bank_transfer',
     }
 
     setIsSubmitting(true)
@@ -141,17 +141,13 @@ function CheckoutPage() {
       <label className="checkout-checkbox"><input checked={form.anonymousSender} type="checkbox" onChange={(event) => update('anonymousSender', event.target.checked)} /> Không ghi tên người gửi</label>
       <p className="checkout-gifting-reassurance">Đơn giao đến người nhận không kèm hóa đơn hoặc thông tin giá.</p>
     </FormSection>
-    <FormSection title="Phương thức thanh toán"><div className="checkout-payment"><label><input checked={form.payment === 'cod'} name="payment" type="radio" onChange={() => update('payment', 'cod')} /> Thanh toán khi nhận hoa</label><label><input checked={form.payment === 'bank'} name="payment" type="radio" onChange={() => update('payment', 'bank')} /> Chuyển khoản ngân hàng</label></div><p className="checkout-demo-note">Đây là bản demo, chưa phát sinh thanh toán.</p></FormSection>
     <FormSection title="Phương thức thanh toán">
-      <div className="checkout-payment">
-        <label><input checked={form.payment === 'bank'} name="payment" type="radio" onChange={() => update('payment', 'bank')} /> Chuyển khoản ngân hàng (VietQR)</label>
-        <label><input checked={form.payment === 'cod'} name="payment" type="radio" onChange={() => update('payment', 'cod')} /> Thanh toán khi nhận hoa</label>
+      <div className="checkout-payment-method">
+        <div className="checkout-payment-method__title">Chuyển khoản ngân hàng (VietQR)</div>
+        <p className="checkout-payment-method__note">
+          Mã QR và thông tin chuyển khoản sẽ hiển thị ngay sau khi bạn đặt hoa.
+        </p>
       </div>
-      {form.payment === 'bank' ? (
-        <p className="checkout-demo-note">Mã QR và thông tin chuyển khoản sẽ hiển thị ngay sau khi bạn đặt hoa.</p>
-      ) : (
-        <p className="checkout-demo-note">Thanh toán trực tiếp cho nhân viên giao hoa khi nhận hoa.</p>
-      )}
     </FormSection>
     {submitError && (
       <p className="checkout-error checkout-submit-error" role="alert">

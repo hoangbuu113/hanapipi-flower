@@ -3,3 +3,6 @@
 .checkout-gifting-note{padding-left:13px;border-left:2px solid var(--accent-romantic)}
 .checkout-gifting-reassurance{font-weight:600}
 .checkout-field input:disabled{background:var(--background-secondary);color:var(--text-muted);cursor:not-allowed}
+.checkout-payment-method{display:grid;gap:6px;padding:16px 18px;border:1px solid var(--border);background:var(--surface)}
+.checkout-payment-method__title{font-size:14px;font-weight:700;color:var(--text-primary)}
+.checkout-payment-method__note{margin:0;color:var(--text-muted);font-size:13px;line-height:1.6}
