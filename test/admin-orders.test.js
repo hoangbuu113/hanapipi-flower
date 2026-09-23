@@ -11,6 +11,8 @@ import {
 } from '../src/services/adminClient.js'
 import {
   formatDeliveryDate,
+  formatDeliverySlot,
+  formatOrderAuditEvent,
   formatOrderStatus,
   formatPaymentMethod,
   formatPaymentStatus,
@@ -142,9 +144,9 @@ async function createTestOrder(testWorker, token = 'customer-token') {
     body: JSON.stringify({
       address: {
         city: 'TP. Hồ Chí Minh',
-        detail: '123 Nguyễn Huệ',
+        detail: 'Không giao',
         district: 'Quận 1',
-        ward: 'Bến Nghé',
+        ward: 'Phường Bến Nghé',
       },
       buyer: {
         email: 'customer@example.com',
@@ -152,7 +154,7 @@ async function createTestOrder(testWorker, token = 'customer-token') {
         phone: '0901234567',
       },
       recipient: {
-        name: 'Trần Thị B',
+        name: 'Nguyễn',
         phone: '0907654321',
       },
       delivery: {
@@ -161,7 +163,7 @@ async function createTestOrder(testWorker, token = 'customer-token') {
       },
       gifting: {
         anonymous: false,
-        message: 'Chúc mừng sinh nhật!',
+        message: 'Không xử lý giao',
         senderName: 'Bạn Thân',
       },
       items: [
@@ -248,17 +250,46 @@ test('Admin Orders Fulfilment Workflow - Comprehensive Suite', async (t) => {
       headers: { Authorization: 'Bearer admin-token' },
     })
     assert.equal(res.status, 200)
-    const body = await res.json()
+    const responseText = await res.text()
+    assert.doesNotMatch(responseText, /ciphertext|aes-gcm-v1|ORDER_FULFILMENT_KEY/u)
+    const body = JSON.parse(responseText)
     assert.ok(body.data?.order)
     const order = body.data.order
     assert.equal(order.id, created.id)
     assert.equal(order.buyer.name, 'Nguyễn Văn A')
     assert.equal(order.buyer.phone, '0901234567')
-    assert.equal(order.address.detail, '123 Nguyễn Huệ')
-    assert.equal(order.gifting.message, 'Chúc mừng sinh nhật!')
+    assert.equal(order.recipient.name, 'Nguyễn')
+    assert.equal(order.address.detail, 'Không giao')
+    assert.equal(order.address.ward, 'Phường Bến Nghé')
+    assert.equal(order.address.district, 'Quận 1')
+    assert.equal(order.address.city, 'TP. Hồ Chí Minh')
+    assert.equal(order.gifting.message, 'Không xử lý giao')
     assert.ok(Array.isArray(order.items))
     assert.equal(order.items.length, 1)
     assert.ok(Array.isArray(order.auditHistory))
+  })
+
+  await t.test('6a. Admin audit history preserves millisecond event order', async () => {
+    const created = await createTestOrder(testWorker)
+    const insertAudit = sqlite.prepare(`
+      INSERT INTO audit_events (
+        id, actor_user_id, action, entity_type, entity_id, result,
+        status_before, status_after, metadata_version, created_at_utc
+      ) VALUES (?, 'usr_admin_1', ?, 'order', ?, 'success', ?, ?, '1', ?)
+    `)
+    insertAudit.run('aud_z_payment', 'order_payment_confirmed', created.id, 'received', 'preparing', '2026-09-23T11:37:27.100Z')
+    insertAudit.run('aud_a_delivering', 'order_status_updated', created.id, 'preparing', 'delivering', '2026-09-23T11:37:27.200Z')
+    insertAudit.run('aud_b_completed', 'order_status_updated', created.id, 'delivering', 'completed', '2026-09-23T11:37:27.300Z')
+
+    const response = await testWorker.fetch(`/api/v1/admin/orders/${created.id}`, {
+      headers: { Authorization: 'Bearer admin-token' },
+    })
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.deepEqual(
+      body.data.order.auditHistory.map((event) => event.statusAfter),
+      ['preparing', 'delivering', 'completed'],
+    )
   })
 
   // 7. Admin GET /api/v1/admin/orders/:id with non-existent ID returns 404
@@ -744,6 +775,32 @@ test('Admin Orders Fulfilment Workflow - Comprehensive Suite', async (t) => {
     assert.equal(formatDeliveryDate(null), 'Chưa chọn ngày')
     const formatted = formatDeliveryDate('2026-10-01')
     assert.ok(formatted.includes('2026') || formatted.includes('10'))
+  })
+
+  await t.test('36a. delivery slots render localized labels without leaking internal enum values', () => {
+    assert.equal(formatDeliverySlot('morning'), 'Buổi sáng')
+    assert.equal(formatDeliverySlot('afternoon'), 'Buổi chiều')
+    assert.equal(formatDeliverySlot('evening'), 'Buổi tối')
+    assert.equal(formatDeliverySlot('09:00 – 12:00'), '09:00 – 12:00')
+  })
+
+  await t.test('36b. audit events render natural Vietnamese state changes', () => {
+    assert.equal(
+      formatOrderAuditEvent({ action: 'order_payment_confirmed' }),
+      'Xác nhận thanh toán: Chờ thanh toán → Đã thanh toán',
+    )
+    assert.equal(
+      formatOrderAuditEvent({ action: 'order_status_updated', statusBefore: 'received', statusAfter: 'preparing' }),
+      'Đơn hàng: Đã tiếp nhận → Đang chuẩn bị',
+    )
+    assert.equal(
+      formatOrderAuditEvent({ action: 'order_status_updated', statusBefore: 'preparing', statusAfter: 'delivering' }),
+      'Đơn hàng: Đang chuẩn bị → Đang giao',
+    )
+    assert.equal(
+      formatOrderAuditEvent({ action: 'order_status_updated', statusBefore: 'delivering', statusAfter: 'completed' }),
+      'Đơn hàng: Đang giao → Hoàn tất',
+    )
   })
 
   // 37. Customer order read model shows updated paid status after admin confirms payment

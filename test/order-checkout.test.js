@@ -611,10 +611,15 @@ test('21-24. plaintext PII not stored in D1; ciphertext decrypts cleanly', async
   const worker = createTestWorker(d1)
 
   const payload = createValidOrderPayload()
-  payload.buyer.name = 'Secret Buyer 99'
-  payload.recipient = { name: 'Secret Recipient 88', phone: '0909998877' }
-  payload.address.detail = 'Secret Villa 77'
-  payload.gifting.message = 'Top secret gift message 66'
+  payload.buyer.name = 'Nguyễn'
+  payload.recipient = { name: 'Nguyễn', phone: '0909998877' }
+  payload.address = {
+    city: 'TP. Hồ Chí Minh',
+    detail: 'Không giao',
+    district: 'Quận 1',
+    ward: 'Phường Bến Nghé',
+  }
+  payload.gifting.message = 'Không xử lý giao'
 
   const response = await worker.fetch('/api/v1/orders', {
     method: 'POST',
@@ -631,7 +636,7 @@ test('21-24. plaintext PII not stored in D1; ciphertext decrypts cleanly', async
 
   // 1. Verify plaintext is NOT present in any column
   const rowValues = Object.values(orderRow).filter(Boolean).map(String)
-  for (const text of ['Secret Buyer 99', 'Secret Recipient 88', 'Secret Villa 77', 'Top secret gift message 66']) {
+  for (const text of ['Nguyễn', 'Không giao', 'Phường Bến Nghé', 'Quận 1', 'TP. Hồ Chí Minh', 'Không xử lý giao']) {
     for (const val of rowValues) {
       assert.ok(!val.includes(text), `Plaintext "${text}" must not be stored in D1 column!`)
     }
@@ -646,16 +651,21 @@ test('21-24. plaintext PII not stored in D1; ciphertext decrypts cleanly', async
 
   // 3. Verify decrypting recovers the original values
   const decryptedBuyer = await decryptFulfilmentValue(orderRow.buyer_contact_ciphertext, testFulfilmentKey)
-  assert.equal(decryptedBuyer.name, 'Secret Buyer 99')
+  assert.equal(decryptedBuyer.name, 'Nguyễn')
 
   const decryptedRecipient = await decryptFulfilmentValue(orderRow.recipient_ciphertext, testFulfilmentKey)
-  assert.equal(decryptedRecipient.name, 'Secret Recipient 88')
+  assert.equal(decryptedRecipient.name, 'Nguyễn')
 
   const decryptedAddress = await decryptFulfilmentValue(orderRow.delivery_address_ciphertext, testFulfilmentKey)
-  assert.equal(decryptedAddress.detail, 'Secret Villa 77')
+  assert.deepEqual(decryptedAddress, {
+    city: 'TP. Hồ Chí Minh',
+    detail: 'Không giao',
+    district: 'Quận 1',
+    ward: 'Phường Bến Nghé',
+  })
 
   const decryptedGifting = await decryptFulfilmentValue(orderRow.gift_message_ciphertext, testFulfilmentKey)
-  assert.equal(decryptedGifting.message, 'Top secret gift message 66')
+  assert.equal(decryptedGifting.message, 'Không xử lý giao')
 })
 
 // 25. Crypto 25: Missing or invalid ORDER_FULFILMENT_KEY returns 503 FULFILMENT_ENCRYPTION_UNAVAILABLE

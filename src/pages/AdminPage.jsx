@@ -23,6 +23,8 @@ import {
 } from '../services/adminClient'
 import {
   formatDeliveryDate,
+  formatDeliverySlot,
+  formatOrderAuditEvent,
   formatOrderStatus,
   formatPaymentMethod,
   formatPaymentStatus,
@@ -1084,7 +1086,7 @@ function AdminPage() {
                           <div className="admin-order-delivery-cell">
                             <span>{formatDeliveryDate(order.deliveryDate)}</span>
                             {order.deliverySlot && (
-                              <span className="admin-order-delivery-slot">({order.deliverySlot})</span>
+                              <span className="admin-order-delivery-slot">{formatDeliverySlot(order.deliverySlot)}</span>
                             )}
                           </div>
                         </td>
@@ -2364,7 +2366,7 @@ function AdminPage() {
                         </span>
                       </div>
                       <div className="admin-order-status-item">
-                        <span className="admin-order-status-label">Tiến trình:</span>
+                        <span className="admin-order-status-label">Đơn hàng:</span>
                         <span className={`admin-badge admin-badge--order-${selectedOrderDetail.status || 'received'}`}>
                           {formatOrderStatus(selectedOrderDetail.status)}
                         </span>
@@ -2379,7 +2381,7 @@ function AdminPage() {
                           type="button"
                           onClick={() => handleConfirmOrderPayment(selectedOrderDetail.id)}
                         >
-                          {isUpdatingOrder ? 'Đang xử lý...' : '✓ Xác nhận đã nhận thanh toán'}
+                          {isUpdatingOrder ? 'Đang xử lý...' : 'Xác nhận đã nhận thanh toán'}
                         </button>
                       )}
 
@@ -2390,7 +2392,7 @@ function AdminPage() {
                           type="button"
                           onClick={() => handleUpdateOrderStatus(selectedOrderDetail.id, 'delivering')}
                         >
-                          {isUpdatingOrder ? 'Đang cập nhật...' : '🚚 Bắt đầu giao hàng'}
+                          {isUpdatingOrder ? 'Đang cập nhật...' : 'Bắt đầu giao hàng'}
                         </button>
                       )}
 
@@ -2401,13 +2403,13 @@ function AdminPage() {
                           type="button"
                           onClick={() => handleUpdateOrderStatus(selectedOrderDetail.id, 'completed')}
                         >
-                          {isUpdatingOrder ? 'Đang cập nhật...' : '★ Đánh dấu hoàn tất'}
+                          {isUpdatingOrder ? 'Đang cập nhật...' : 'Đánh dấu hoàn tất'}
                         </button>
                       )}
 
                       {selectedOrderDetail.status === 'completed' && (
                         <span className="admin-order-completed-indicator">
-                          ❀ Đơn hàng đã hoàn tất giao hoa
+                          Đơn hàng đã hoàn tất giao hoa
                         </span>
                       )}
                     </div>
@@ -2454,7 +2456,9 @@ function AdminPage() {
                       <p>
                         <strong>Thời gian giao: </strong>
                         {formatDeliveryDate(selectedOrderDetail.delivery?.date || selectedOrderDetail.deliveryDate)}
-                        {selectedOrderDetail.delivery?.slot || selectedOrderDetail.deliverySlot ? ` (${selectedOrderDetail.delivery?.slot || selectedOrderDetail.deliverySlot})` : ''}
+                        {selectedOrderDetail.delivery?.slot || selectedOrderDetail.deliverySlot
+                          ? ` · ${formatDeliverySlot(selectedOrderDetail.delivery?.slot || selectedOrderDetail.deliverySlot)}`
+                          : ''}
                       </p>
                     </div>
 
@@ -2532,7 +2536,16 @@ function AdminPage() {
                   {/* Payment Details */}
                   <div className="admin-order-card admin-order-card--payment">
                     <h4>Thông tin thanh toán</h4>
-                    <p>Phương thức: <strong>{formatPaymentMethod(selectedOrderDetail.paymentMethod)}</strong></p>
+                    <dl className="admin-order-payment-summary">
+                      <div>
+                        <dt>Phương thức</dt>
+                        <dd>{formatPaymentMethod(selectedOrderDetail.payment?.method ?? selectedOrderDetail.paymentMethod)}</dd>
+                      </div>
+                      <div>
+                        <dt>Trạng thái</dt>
+                        <dd>{formatPaymentStatus(selectedOrderDetail.paymentStatus)}</dd>
+                      </div>
+                    </dl>
                     {selectedOrderDetail.payment?.transferContent && (
                       <p>Nội dung chuyển khoản: <code>{selectedOrderDetail.payment.transferContent}</code></p>
                     )}
@@ -2546,7 +2559,7 @@ function AdminPage() {
                   {/* Audit History Timeline */}
                   {Array.isArray(selectedOrderDetail.auditHistory) && selectedOrderDetail.auditHistory.length > 0 && (
                     <div className="admin-order-audit-section">
-                      <h4>Lịch sử xử lý đơn hàng (Audit Trail)</h4>
+                      <h4>Lịch sử xử lý đơn hàng</h4>
                       <ul className="admin-order-audit-list">
                         {selectedOrderDetail.auditHistory.map((event) => (
                           <li key={event.id} className="admin-order-audit-item">
@@ -2562,15 +2575,7 @@ function AdminPage() {
                                 : '—'}
                             </span>
                             <span className="admin-order-audit-desc">
-                              {event.action === 'order_payment_confirmed' && (
-                                <>Xác nhận thanh toán: <strong>{formatPaymentStatus('pending')} → {formatPaymentStatus('paid')}</strong> (Đơn chuyển sang <strong>{formatOrderStatus('preparing')}</strong>)</>
-                              )}
-                              {event.action === 'order_status_updated' && (
-                                <>Cập nhật trạng thái: <strong>{formatOrderStatus(event.statusBefore)} → {formatOrderStatus(event.statusAfter)}</strong></>
-                              )}
-                              {event.action !== 'order_payment_confirmed' && event.action !== 'order_status_updated' && (
-                                <>{event.action}: {event.statusBefore} → {event.statusAfter}</>
-                              )}
+                              {formatOrderAuditEvent(event)}
                             </span>
                           </li>
                         ))}

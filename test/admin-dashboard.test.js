@@ -2402,3 +2402,19 @@ test('118. protected no-watering-flower media cannot be replaced through Admin A
   assert.equal(result.error.code, 'PROTECTED_PRODUCT')
   assert.equal(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('no-watering-flower').media_json, before)
 })
+
+test('119. Admin order detail localizes canonical values and wraps long fulfilment text', () => {
+  const pageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+  const pageCss = fs.readFileSync(path.resolve('src/pages/AdminPage.css'), 'utf8')
+
+  assert.match(pageCode, /formatDeliverySlot\(selectedOrderDetail\.delivery/u)
+  assert.match(pageCode, /formatPaymentMethod\(selectedOrderDetail\.payment\?\.method \?\? selectedOrderDetail\.paymentMethod\)/u)
+  assert.match(pageCode, /formatOrderAuditEvent\(event\)/u)
+  assert.doesNotMatch(pageCode, /Audit Trail/u)
+  assert.match(pageCss, /\.admin-order-card p\s*\{[^}]*overflow-wrap:\s*anywhere;/su)
+  assert.match(pageCss, /\.admin-order-gift-message\s*\{[^}]*white-space:\s*pre-wrap;/su)
+  assert.match(pageCss, /\.admin-order-audit-desc\s*\{[^}]*overflow-wrap:\s*anywhere;/su)
+  assert.match(pageCss, /\.admin-modal-backdrop\s*\{[^}]*align-items:\s*flex-start;/su)
+  assert.match(pageCss, /\.admin-modal--order-detail \.admin-order-code-header\s*\{[^}]*white-space:\s*nowrap;/su)
+  assert.match(pageCss, /@media \(max-width: 640px\)[\s\S]*\.admin-order-audit-item\s*\{\s*grid-template-columns:\s*1fr;/u)
+})

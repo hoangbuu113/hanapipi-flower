@@ -63,6 +63,17 @@ export function formatDeliveryDate(value) {
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(`${value}T12:00:00`))
 }
 
+const DELIVERY_SLOT_LABELS = {
+  afternoon: 'Buổi chiều',
+  evening: 'Buổi tối',
+  morning: 'Buổi sáng',
+}
+
+export function formatDeliverySlot(slot) {
+  if (!slot) return 'Chưa chọn khung giờ'
+  return DELIVERY_SLOT_LABELS[slot] ?? slot
+}
+
 export function formatOrderStatus(status) {
   switch (status) {
     case 'received':
@@ -112,4 +123,14 @@ export function formatPaymentMethod(method) {
     default:
       return method || 'Chuyển khoản ngân hàng'
   }
+}
+
+export function formatOrderAuditEvent(event) {
+  if (event?.action === 'order_payment_confirmed') {
+    return `Xác nhận thanh toán: ${formatPaymentStatus('pending')} → ${formatPaymentStatus('paid')}`
+  }
+  if (event?.action === 'order_status_updated') {
+    return `Đơn hàng: ${formatOrderStatus(event.statusBefore)} → ${formatOrderStatus(event.statusAfter)}`
+  }
+  return 'Cập nhật đơn hàng.'
 }

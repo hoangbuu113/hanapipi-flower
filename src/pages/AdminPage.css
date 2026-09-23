@@ -1070,13 +1070,13 @@
 
 /* Order Detail Modal */
 .admin-modal--order-detail {
-  max-width: 840px;
+  max-width: 880px;
 }
 
 .admin-order-modal-body {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .admin-order-status-banner {
@@ -1137,6 +1137,7 @@
 }
 
 .admin-order-card {
+  min-width: 0;
   padding: 14px 16px;
   background: var(--surface-subtle, #fcfbf9);
   border: 1px solid var(--border);
@@ -1156,6 +1157,7 @@
   font-size: 13px;
   color: var(--text-primary);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .admin-order-card p:last-child {
@@ -1179,6 +1181,8 @@
   border-left: 3px solid var(--accent-botanical, #3b533b);
   font-size: 13px;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .admin-order-anonymous-badge {
@@ -1227,6 +1231,34 @@
   background: #fcfbf9;
 }
 
+.admin-order-payment-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+  margin: 0 0 12px;
+}
+
+.admin-order-payment-summary div {
+  min-width: 0;
+}
+
+.admin-order-payment-summary dt {
+  margin-bottom: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-order-payment-summary dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .admin-order-card--payment code {
   font-family: monospace;
   font-size: 12px;
@@ -1263,10 +1295,11 @@
 }
 
 .admin-order-audit-item {
-  display: flex;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(128px, max-content) minmax(0, 1fr);
+  gap: 6px 16px;
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.55;
 }
 
 .admin-order-audit-time {
@@ -1277,4 +1310,62 @@
 
 .admin-order-audit-desc {
   color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .admin-modal-backdrop {
+    align-items: flex-start;
+    padding: 8px;
+  }
+
+  .admin-modal--order-detail {
+    max-height: calc(100vh - 16px);
+    padding: 18px;
+    gap: 18px;
+  }
+
+  .admin-modal--order-detail .admin-modal__header {
+    gap: 10px;
+  }
+
+  .admin-modal--order-detail .admin-order-code-header {
+    display: block;
+    font-size: 1rem;
+    margin-top: 4px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .admin-order-status-banner,
+  .admin-order-actions-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-order-status-badges,
+  .admin-order-payment-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-order-status-badges {
+    display: grid;
+    gap: 10px;
+  }
+
+  .admin-order-status-item {
+    justify-content: space-between;
+  }
+
+  .admin-order-actions-bar .button {
+    width: 100%;
+  }
+
+  .admin-order-audit-item {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-order-audit-time {
+    white-space: normal;
+  }
 }

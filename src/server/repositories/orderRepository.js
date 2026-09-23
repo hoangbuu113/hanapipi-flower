@@ -946,7 +946,7 @@ export function createOrderRepository(db, options = {}) {
           created_at_utc
         FROM audit_events
         WHERE entity_type = 'order' AND entity_id = ?
-        ORDER BY datetime(created_at_utc) ASC, id ASC
+        ORDER BY created_at_utc ASC, id ASC
       `).bind(order.id).all()
       const auditHistory = (auditResult?.results || []).map((ev) => ({
         action: ev.action,
