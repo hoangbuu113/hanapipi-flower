@@ -14,15 +14,15 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "hanapipi-flower-local",
-      "database_id": "local",
+      "database_name": "hanapipi-flower-prod",
+      "database_id": "3bd1a9f0-c971-4e93-b6c5-4fa0f8a8e368",
       "migrations_dir": "drizzle"
     }
   ],
   "r2_buckets": [
     {
       "binding": "MEDIA_BUCKET",
-      "bucket_name": "hanapipi-media"
+      "bucket_name": "hanapipi-media-prod"
     }
   ],
   "assets": {
