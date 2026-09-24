@@ -1,6 +1,7 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadEnv } from 'vite'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const configPath = path.resolve(projectRoot, 'dist', 'server', 'wrangler.json')
@@ -10,6 +11,18 @@ const expected = {
   name: 'hanapipi-flower',
   d1: 'hanapipi-flower-staging',
   r2: 'hanapipi-media-staging',
+}
+
+export function validateStagingClientBundle(scripts, publishableKey) {
+  if (!publishableKey?.startsWith('pk_test_')) {
+    throw new Error('Staging requires a Clerk TEST publishable key.')
+  }
+  if (!scripts.some((script) => script.includes(publishableKey))) {
+    throw new Error('Staging client bundle does not contain the configured Clerk TEST key.')
+  }
+  if (scripts.some((script) => /pk_live_[A-Za-z0-9_-]{20,}/u.test(script))) {
+    throw new Error('Staging client bundle contains a Clerk production publishable key.')
+  }
 }
 
 export async function verifyStagingBuild() {
@@ -51,6 +64,14 @@ export async function verifyStagingBuild() {
   if (mismatches.length > 0) {
     throw new Error(`Staging build verification failed:\n- ${mismatches.join('\n- ')}`)
   }
+
+  const clientAssetsPath = path.resolve(projectRoot, 'dist', 'client', 'assets')
+  const clientScripts = (await readdir(clientAssetsPath))
+    .filter((entry) => entry.endsWith('.js'))
+  const scriptContents = await Promise.all(clientScripts.map((entry) =>
+    readFile(path.resolve(clientAssetsPath, entry), 'utf8')))
+  const publishableKey = loadEnv('staging', projectRoot, 'VITE_').VITE_CLERK_PUBLISHABLE_KEY
+  validateStagingClientBundle(scriptContents, publishableKey)
 
   return {
     configPath,

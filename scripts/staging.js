@@ -25,7 +25,9 @@ function run(command, args, options = {}) {
 }
 
 async function buildStaging() {
-  run(npmCommand, [...npmPrefix, 'run', 'build'], {
+  // Vite's default build mode is production, which loads .env.production.local.
+  // The staging Worker must instead load the Clerk TEST publishable key.
+  run(npmCommand, [...npmPrefix, 'run', 'build', '--', '--mode', 'staging'], {
     env: { ...process.env, CLOUDFLARE_ENV: 'staging' },
   })
   return verifyStagingBuild()

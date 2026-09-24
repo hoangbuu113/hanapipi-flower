@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
-import { fetchCurrentUser } from '../src/services/apiClient.js'
+import { fetchCurrentUser, fetchUserAddresses } from '../src/services/apiClient.js'
+import { validateStagingClientBundle } from '../scripts/verify-staging-build.js'
 import {
   attemptAuthVerification,
   AUTH_VERIFICATION_FLOWS,
@@ -324,4 +325,54 @@ test('14. AuthPage resets challenge state from the mode-change handler without c
   assert.match(authPageSource, /<Link[^>]*onClick=\{handleAuthModeChange\}[^>]*>/u)
   assert.doesNotMatch(authPageSource, /\}, \[mode\]\)/u)
   assert.doesNotMatch(authPageSource, /setForm\(\{\s*email:\s*''/u)
+})
+
+test('15. staging build rejects a production Clerk key even when the Worker bindings are staging', () => {
+  const stagingScript = fs.readFileSync(new URL('../scripts/staging.js', import.meta.url), 'utf8')
+
+  assert.match(stagingScript, /'run', 'build', '--', '--mode', 'staging'/u)
+  assert.doesNotThrow(() => validateStagingClientBundle(['key=pk_test_fixture'], 'pk_test_fixture'))
+  assert.throws(() => validateStagingClientBundle(['key=pk_live_fixture'], 'pk_live_fixture'))
+  assert.throws(() => validateStagingClientBundle(['key=pk_live_abcdefghijklmnopqrstuvwxyz'], 'pk_test_fixture'))
+  assert.throws(() => validateStagingClientBundle(['no matching key'], 'pk_test_fixture'))
+})
+
+test('16. slow or failed saved-address loading cannot delay current-user hydration', async () => {
+  let finishAddressRequest
+  const addressRequest = fetchUserAddresses({
+    getToken: async () => 'test-session',
+    fetchImpl: () => new Promise((resolve) => { finishAddressRequest = resolve }),
+  })
+
+  const identity = await fetchCurrentUser({
+    getToken: async () => 'test-session',
+    fetchImpl: async () => new Response(JSON.stringify({
+      data: { user: { id: 'usr_test', role: 'customer', status: 'active' } },
+    }), { status: 200 }),
+  })
+  assert.equal(identity.ok, true)
+  assert.equal(identity.user.id, 'usr_test')
+
+  finishAddressRequest(new Response(JSON.stringify({
+    error: { code: 'AUTHENTICATION_REQUIRED', message: 'Session is not ready.' },
+  }), { status: 401 }))
+  const addressResult = await addressRequest
+  assert.equal(addressResult.ok, false)
+  assert.equal(addressResult.status, 401)
+  assert.equal(identity.ok, true)
+})
+
+test('17. login completion and error reset do not depend on saved-address state', () => {
+  const authSource = fs.readFileSync(new URL('../src/pages/AuthPage.jsx', import.meta.url), 'utf8')
+  const accountSource = fs.readFileSync(new URL('../src/context/AccountContext.jsx', import.meta.url), 'utf8')
+  const loginHandler = authSource.split('async function handleLogin(event) {')[1]
+    ?.split('async function handleRegister(event) {')[0] ?? ''
+  const authLoadingLine = accountSource.split('\n').find((line) => line.includes('const isAuthLoading =')) ?? ''
+
+  assert.match(loginHandler, /await setSignInActive\(\{ session: result\.createdSessionId \}\)\s*navigate\('\/account'\)/u)
+  assert.match(loginHandler, /catch \(err\) \{[\s\S]*setErrors\(\{ form:/u)
+  assert.match(loginHandler, /finally \{\s*setIsSubmitting\(false\)/u)
+  assert.doesNotMatch(loginHandler, /[Aa]ddress|refreshAddresses/u)
+  assert.doesNotMatch(authLoadingLine, /[Aa]ddress/u)
+  assert.match(accountSource, /if \(!isAuthLoaded \|\| !isSignedIn\) \{\s*return undefined[\s\S]*?fetchUserAddresses/u)
 })
