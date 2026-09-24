@@ -391,9 +391,21 @@
   white-space: nowrap;
 }
 
-.admin-archive-btn {
+.admin-delete-btn,
+.admin-delete-confirm-btn {
   color: var(--error, #963c36);
   white-space: nowrap;
+}
+
+.admin-delete-warning {
+  margin: -12px 0 0;
+  color: var(--error, #963c36);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-modal--delete-confirmation {
+  max-width: 480px;
 }
 
 .button--small {

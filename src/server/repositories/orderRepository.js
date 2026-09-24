@@ -1057,6 +1057,51 @@ export function createOrderRepository(db, options = {}) {
       }
     },
 
+    async deleteForAdmin(adminUser, idOrCode) {
+      if (adminUser?.role !== 'admin') {
+        throw orderError(403, 'FORBIDDEN', 'Bạn không có quyền truy cập tài nguyên này.')
+      }
+      if (typeof idOrCode !== 'string' || !idOrCode) {
+        throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+
+      const order = await db.prepare(`
+        SELECT id
+        FROM orders
+        WHERE id = ? OR order_code = ?
+        LIMIT 1
+      `).bind(idOrCode, idOrCode).first()
+      if (!order) {
+        throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+
+      const itemPredicate = 'order_id = ?'
+      const deleteResults = await db.batch([
+        db.prepare(`
+          DELETE FROM order_item_add_ons
+          WHERE order_item_id IN (SELECT id FROM order_items WHERE ${itemPredicate})
+        `).bind(order.id),
+        db.prepare(`DELETE FROM order_items WHERE ${itemPredicate}`).bind(order.id),
+        db.prepare(`
+          DELETE FROM audit_events
+          WHERE entity_type = 'order' AND entity_id = ?
+        `).bind(order.id),
+        db.prepare('DELETE FROM orders WHERE id = ?').bind(order.id),
+      ])
+
+      if (deleteResults.at(-1)?.meta?.changes !== 1) {
+        throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+      const remainingOrder = await db.prepare('SELECT 1 AS present FROM orders WHERE id = ? LIMIT 1')
+        .bind(order.id)
+        .first()
+      if (remainingOrder) {
+        throw orderError(500, 'ORDER_DELETE_FAILED', 'Không thể xóa đơn hoa.')
+      }
+
+      return { deleted: true }
+    },
+
     async confirmPayment(adminUser, idOrCode, callOptions = {}) {
       if (adminUser?.role !== 'admin') {
         throw orderError(403, 'FORBIDDEN', 'Bạn không có quyền truy cập tài nguyên này.')

@@ -8,6 +8,8 @@ import {
   confirmAdminOrderPayment,
   createAdminGiftAddOn,
   createAdminProduct,
+  deleteAdminOrder,
+  deleteAdminProduct,
   deleteAdminMedia,
   fetchAdminCatalogue,
   fetchAdminGiftAddOns,
@@ -15,7 +17,6 @@ import {
   fetchAdminOrders,
   fetchAdminProductVariants,
   saveAdminProductVariants,
-  setAdminProductArchived,
   toggleAdminGiftAddOnActive,
   updateAdminGiftAddOn,
   updateAdminOrderStatus,
@@ -71,8 +72,9 @@ function AdminPage() {
   const [isEditMediaBusy, setIsEditMediaBusy] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(null)
-  const [archiveProductId, setArchiveProductId] = useState(null)
-  const [archiveError, setArchiveError] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
 
   const [isCreating, setIsCreating] = useState(false)
   const [createForm, setCreateForm] = useState({
@@ -408,36 +410,45 @@ function AdminPage() {
     }
   }
 
-  const handleArchiveChange = async (product, archived) => {
-    if (archived) {
-      const confirmed = window.confirm(
-        `Lưu trữ "${product.name}"? Sản phẩm sẽ biến mất khỏi cửa hàng, nhưng toàn bộ dữ liệu vẫn được giữ lại.`,
-      )
-      if (!confirmed) return
+  const requestPermanentDelete = (kind, record) => {
+    if (kind === 'product' && record.slug === 'no-watering-flower') return
+    setDeleteError(null)
+    setDeleteTarget({ id: record.id, kind, label: kind === 'order' ? record.orderCode : record.name })
+  }
+
+  const cancelPermanentDelete = () => {
+    if (isDeleting) return
+    setDeleteTarget(null)
+    setDeleteError(null)
+  }
+
+  const confirmPermanentDelete = async () => {
+    if (!deleteTarget || isDeleting) return
+    setIsDeleting(true)
+    setDeleteError(null)
+
+    const result = deleteTarget.kind === 'order'
+      ? await deleteAdminOrder(deleteTarget.id, { getToken })
+      : await deleteAdminProduct(deleteTarget.id, { getToken })
+
+    setIsDeleting(false)
+    if (!result.ok) {
+      setDeleteError(result.error?.message || 'Không thể xóa dữ liệu.')
+      return
     }
 
-    setArchiveProductId(product.id)
-    setArchiveError(null)
-    setSaveSuccess(null)
-
-    const result = await setAdminProductArchived(product.id, archived, { getToken })
-    setArchiveProductId(null)
-
-    if (result.ok && result.product) {
-      setProducts((prev) => prev.map((item) => (
-        item.id === result.product.id ? result.product : item
-      )))
-      setSaveSuccess(
-        archived
-          ? `Đã lưu trữ "${result.product.name}". Dữ liệu sản phẩm vẫn được giữ lại.`
-          : `Đã khôi phục "${result.product.name}" về cửa hàng.`,
-      )
+    if (deleteTarget.kind === 'order') {
+      setOrders((current) => current.filter((order) => order.id !== deleteTarget.id))
+      if (selectedOrderDetail?.id === deleteTarget.id) handleCloseOrderDetail()
     } else {
-      setArchiveError(
-        result.error?.message
-          || (archived ? 'Không thể lưu trữ sản phẩm.' : 'Không thể khôi phục sản phẩm.'),
-      )
+      setProducts((current) => current.filter((product) => product.id !== deleteTarget.id))
+      setSaveSuccess(result.mediaCleanupComplete === false
+        ? 'Đã xóa sản phẩm. Một số tệp ảnh chưa thể xóa khỏi kho lưu trữ.'
+        : `Đã xóa vĩnh viễn sản phẩm “${deleteTarget.label}”.`)
     }
+
+    setDeleteTarget(null)
+    setDeleteError(null)
   }
 
   // 1. Authoritative Server Permission Verification
@@ -1108,6 +1119,14 @@ function AdminPage() {
                         </td>
                         <td>
                           <button
+                            className="button button--text button--small admin-delete-btn"
+                            disabled={isDeleting}
+                            type="button"
+                            onClick={() => requestPermanentDelete('order', order)}
+                          >
+                            Xóa
+                          </button>
+                          <button
                             className="button button--secondary button--small admin-view-order-btn"
                             type="button"
                             onClick={() => handleOpenOrderDetail(order)}
@@ -1167,12 +1186,6 @@ function AdminPage() {
           {saveSuccess && (
             <div className="admin-save-success" role="status">
               <p>{saveSuccess}</p>
-            </div>
-          )}
-
-          {archiveError && (
-            <div className="admin-catalogue-error admin-catalogue-error--compact" role="alert">
-              <p>{archiveError}</p>
             </div>
           )}
 
@@ -1375,7 +1388,7 @@ function AdminPage() {
                   {products.map((product) => {
                     const isPriceless = product.purchaseType === 'priceless' || product.priceVnd == null
                     const isProtected = product.slug === 'no-watering-flower' || isPriceless
-                    const isArchivePending = archiveProductId === product.id
+                    const isDeleteProtected = product.slug === 'no-watering-flower'
                     const imageSrc = getPrimaryMediaSrc(product)
                     const statusLabel = STATUS_LABELS[product.status] || product.status
 
@@ -1458,7 +1471,7 @@ function AdminPage() {
                           <div className="admin-inline-actions">
                             <button
                               className="button button--secondary button--small admin-edit-btn"
-                              disabled={isArchivePending}
+                              disabled={isDeleting}
                               type="button"
                               onClick={() => handleStartEdit(product)}
                             >
@@ -1466,21 +1479,20 @@ function AdminPage() {
                             </button>
                             <button
                               className="button button--secondary button--small admin-variants-btn"
-                              disabled={isArchivePending}
+                              disabled={isDeleting}
                               type="button"
                               onClick={() => handleOpenVariants(product)}
                             >
                               Tùy chọn
                             </button>
                             <button
-                              className={`button button--small ${product.active ? 'button--text admin-archive-btn' : 'button--primary'}`}
-                              disabled={isArchivePending}
+                              className="button button--text button--small admin-delete-btn"
+                              disabled={isDeleting || isDeleteProtected}
+                              title={isDeleteProtected ? 'Sản phẩm này được bảo vệ.' : undefined}
                               type="button"
-                              onClick={() => handleArchiveChange(product, product.active)}
+                              onClick={() => requestPermanentDelete('product', product)}
                             >
-                              {isArchivePending
-                                ? (product.active ? 'Đang lưu trữ...' : 'Đang khôi phục...')
-                                : (product.active ? 'Lưu trữ' : 'Khôi phục')}
+                              Xóa
                             </button>
                           </div>
                         </td>
@@ -2308,6 +2320,62 @@ function AdminPage() {
             </>
           )}
         </section>
+
+        {deleteTarget && (
+          <div className="admin-modal-backdrop" onClick={cancelPermanentDelete} role="presentation">
+            <section
+              aria-describedby="permanent-delete-description"
+              aria-labelledby="permanent-delete-title"
+              aria-modal="true"
+              className="admin-modal admin-modal--delete-confirmation"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+            >
+              <div className="admin-modal__header">
+                <div>
+                  <h3 id="permanent-delete-title">Xóa vĩnh viễn</h3>
+                  <p id="permanent-delete-description">
+                    {deleteTarget.kind === 'order'
+                      ? 'Xóa vĩnh viễn đơn hàng này? Hành động này không thể hoàn tác.'
+                      : `Xóa vĩnh viễn sản phẩm “${deleteTarget.label}”?`}
+                  </p>
+                </div>
+                <button
+                  className="button button--text button--small"
+                  disabled={isDeleting}
+                  type="button"
+                  onClick={cancelPermanentDelete}
+                >
+                  Đóng
+                </button>
+              </div>
+              <p className="admin-delete-warning">Không thể hoàn tác</p>
+              {deleteError && (
+                <div className="admin-catalogue-error admin-catalogue-error--compact" role="alert">
+                  <p>{deleteError}</p>
+                </div>
+              )}
+              <div className="admin-modal__footer">
+                <button
+                  className="button button--secondary"
+                  disabled={isDeleting}
+                  type="button"
+                  onClick={cancelPermanentDelete}
+                >
+                  Hủy
+                </button>
+                <button
+                  className="button button--text admin-delete-confirm-btn"
+                  disabled={isDeleting}
+                  type="button"
+                  onClick={confirmPermanentDelete}
+                >
+                  {isDeleting ? 'Đang xóa...' : 'Xóa vĩnh viễn'}
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
 
         {/* Order Detail & Fulfilment Modal */}
         {selectedOrderDetail && (

@@ -34,6 +34,49 @@ export function normalizeAdminProduct(rawProduct) {
   }
 }
 
+async function deleteAdminRecord(path, { getToken, fetchImpl = globalThis.fetch } = {}) {
+  if (typeof getToken !== 'function') throw new TypeError('A token getter function is required.')
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return { error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' }, ok: false, status: 401 }
+  }
+  if (!token) {
+    return { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục.' }, ok: false, status: 401 }
+  }
+
+  try {
+    const response = await fetchImpl(path, {
+      headers: { Authorization: `Bearer ${token}` },
+      method: 'DELETE',
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'DELETE_FAILED', message: 'Không thể xóa dữ liệu.' },
+        ok: false,
+        status: response.status,
+      }
+    }
+    if (!body?.data || typeof body.data !== 'object') {
+      return {
+        error: { code: 'MALFORMED_RESPONSE', message: 'Phản hồi từ máy chủ không hợp lệ.' },
+        ok: false,
+        status: response.status,
+      }
+    }
+    return { ...body.data, error: null, ok: true, status: response.status }
+  } catch {
+    return {
+      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' },
+      ok: false,
+      status: 0,
+    }
+  }
+}
+
 export async function checkAdminAccess({
   getToken,
   fetchImpl = globalThis.fetch,
@@ -317,6 +360,17 @@ export async function setAdminProductArchived(idOrSlug, archived, {
       status: 0,
     }
   }
+}
+
+export function deleteAdminProduct(idOrSlug, options = {}) {
+  if (!idOrSlug || typeof idOrSlug !== 'string') {
+    return Promise.resolve({
+      error: { code: 'INVALID_ID', message: 'Mã định danh sản phẩm không hợp lệ.' },
+      ok: false,
+      status: 400,
+    })
+  }
+  return deleteAdminRecord(`/api/v1/admin/products/${encodeURIComponent(idOrSlug)}`, options)
 }
 
 export async function updateAdminProduct(idOrSlug, fields, {
@@ -1050,6 +1104,17 @@ export async function fetchAdminOrderDetail(idOrCode, {
     if (signal?.aborted) throw err
     return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, ok: false, order: null, status: 0 }
   }
+}
+
+export function deleteAdminOrder(idOrCode, options = {}) {
+  if (!idOrCode || typeof idOrCode !== 'string') {
+    return Promise.resolve({
+      error: { code: 'INVALID_ID', message: 'Mã định danh đơn hàng không hợp lệ.' },
+      ok: false,
+      status: 400,
+    })
+  }
+  return deleteAdminRecord(`/api/v1/admin/orders/${encodeURIComponent(idOrCode)}`, options)
 }
 
 export async function confirmAdminOrderPayment(idOrCode, {

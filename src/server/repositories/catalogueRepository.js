@@ -53,6 +53,29 @@ function normalizeAdminMedia(imageUrl, productName) {
   }]
 }
 
+function catalogueError(status, code, message) {
+  const error = new Error(message)
+  error.status = status
+  error.code = code
+  return error
+}
+
+function getManagedMediaKeys(mediaJson) {
+  let media
+  try {
+    media = JSON.parse(mediaJson)
+  } catch {
+    return []
+  }
+  if (!Array.isArray(media)) return []
+
+  return media.flatMap((item) => {
+    if (typeof item?.src !== 'string') return []
+    const match = /^\/api\/v1\/media\/([^/?#]+)$/u.exec(item.src)
+    return match && isManagedMediaKey(match[1]) ? [match[1]] : []
+  })
+}
+
 function assertD1(db) {
   if (!db?.prepare || !db?.batch) {
     throw new TypeError('A D1-compatible database binding is required.')
@@ -625,6 +648,152 @@ export function createCatalogueRepository(db) {
       `).bind(nextActive, new Date().toISOString(), product.id).run()
 
       return this.getProductById(product.id, { forAdmin: true })
+    },
+
+    async deleteProduct(idOrSlug) {
+      if (typeof idOrSlug !== 'string' || idOrSlug.length === 0 || idOrSlug.length > 100) {
+        throw catalogueError(404, 'PRODUCT_NOT_FOUND', 'Không tìm thấy sản phẩm được yêu cầu.')
+      }
+
+      const product = await db.prepare(`
+        SELECT id, slug, media_json
+        FROM products
+        WHERE id = ? OR slug = ?
+        LIMIT 1
+      `).bind(idOrSlug, idOrSlug).first()
+      if (!product) {
+        throw catalogueError(404, 'PRODUCT_NOT_FOUND', 'Không tìm thấy sản phẩm được yêu cầu.')
+      }
+      if (product.id === 'no-watering-flower' || product.slug === 'no-watering-flower') {
+        throw catalogueError(409, 'PRODUCT_PROTECTED', 'Sản phẩm này được bảo vệ và không thể xóa.')
+      }
+
+      const orderItem = await db.prepare(`
+        SELECT 1 AS present
+        FROM order_items
+        WHERE product_id = ? OR product_slug_snapshot = ?
+        LIMIT 1
+      `).bind(product.id, product.slug).first()
+      if (orderItem) {
+        throw catalogueError(
+          409,
+          'PRODUCT_IN_USE',
+          'Sản phẩm đang được sử dụng trong đơn hàng. Hãy xóa các đơn hàng liên quan trước.',
+        )
+      }
+
+      const otherProducts = await db.prepare(`
+        SELECT media_json
+        FROM products
+        WHERE id <> ?
+      `).bind(product.id).all()
+      const otherMediaKeys = new Set((otherProducts.results ?? [])
+        .flatMap((row) => getManagedMediaKeys(row.media_json)))
+      const mediaKeys = getManagedMediaKeys(product.media_json)
+        .filter((key) => !otherMediaKeys.has(key))
+
+      const guard = `EXISTS (
+        SELECT 1
+        FROM products AS p
+        WHERE p.id = ?
+          AND p.slug <> 'no-watering-flower'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM order_items AS oi
+            WHERE oi.product_id = p.id OR oi.product_slug_snapshot = p.slug
+          )
+      )`
+      const cartItems = `
+        SELECT ci.id
+        FROM cart_items AS ci
+        WHERE ci.product_id = ?
+          OR ci.size_variant_id IN (SELECT id FROM product_variants WHERE product_id = ?)
+          OR ci.wrapping_variant_id IN (SELECT id FROM product_variants WHERE product_id = ?)
+      `
+      const wishlistItems = 'SELECT wishlist_id FROM wishlist_items WHERE product_id = ?'
+      const timestamp = new Date().toISOString()
+
+      const deleteResults = await db.batch([
+        db.prepare(`
+          UPDATE carts
+          SET revision = revision + 1, updated_at_utc = ?
+          WHERE id IN (SELECT cart_id FROM cart_items WHERE id IN (${cartItems}))
+            AND ${guard}
+        `).bind(timestamp, product.id, product.id, product.id, product.id),
+        db.prepare(`
+          UPDATE wishlists
+          SET revision = revision + 1, updated_at_utc = ?
+          WHERE id IN (${wishlistItems}) AND ${guard}
+        `).bind(timestamp, product.id, product.id),
+        db.prepare(`
+          DELETE FROM wishlist_items
+          WHERE product_id = ? AND ${guard}
+        `).bind(product.id, product.id),
+        db.prepare(`
+          DELETE FROM cart_item_add_ons
+          WHERE cart_item_id IN (${cartItems}) AND ${guard}
+        `).bind(product.id, product.id, product.id, product.id),
+        db.prepare(`
+          DELETE FROM cart_items
+          WHERE id IN (${cartItems}) AND ${guard}
+        `).bind(product.id, product.id, product.id, product.id),
+        db.prepare(`
+          DELETE FROM product_relations
+          WHERE (product_id = ? OR related_product_id = ?) AND ${guard}
+        `).bind(product.id, product.id, product.id),
+        db.prepare(`
+          DELETE FROM product_variants
+          WHERE product_id = ? AND ${guard}
+        `).bind(product.id, product.id),
+        db.prepare(`
+          DELETE FROM products
+          WHERE id = ?
+            AND slug <> 'no-watering-flower'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM order_items AS oi
+              WHERE oi.product_id = products.id OR oi.product_slug_snapshot = products.slug
+            )
+        `).bind(product.id),
+      ])
+
+      if (deleteResults.at(-1)?.meta?.changes !== 1) {
+        const current = await db.prepare('SELECT slug FROM products WHERE id = ? LIMIT 1')
+          .bind(product.id)
+          .first()
+        if (!current) throw catalogueError(404, 'PRODUCT_NOT_FOUND', 'Không tìm thấy sản phẩm được yêu cầu.')
+      }
+
+      const remaining = await db.prepare('SELECT slug FROM products WHERE id = ? LIMIT 1')
+        .bind(product.id)
+        .first()
+      if (remaining) {
+        if (remaining.slug === 'no-watering-flower') {
+          throw catalogueError(409, 'PRODUCT_PROTECTED', 'Sản phẩm này được bảo vệ và không thể xóa.')
+        }
+        const newlyReferenced = await db.prepare(`
+          SELECT 1 AS present
+          FROM order_items
+          WHERE product_id = ? OR product_slug_snapshot = ?
+          LIMIT 1
+        `).bind(product.id, remaining.slug).first()
+        if (newlyReferenced) {
+          throw catalogueError(
+            409,
+            'PRODUCT_IN_USE',
+            'Sản phẩm đang được sử dụng trong đơn hàng. Hãy xóa các đơn hàng liên quan trước.',
+          )
+        }
+        throw catalogueError(500, 'PRODUCT_DELETE_FAILED', 'Không thể xóa sản phẩm.')
+      }
+
+      return { deleted: true, mediaKeys }
+    },
+
+    async isProductMediaReferenced(key) {
+      if (!isManagedMediaKey(key)) return false
+      const products = await db.prepare('SELECT media_json FROM products').all()
+      return (products.results ?? []).some((row) => getManagedMediaKeys(row.media_json).includes(key))
     },
 
     async createProduct(data = {}) {

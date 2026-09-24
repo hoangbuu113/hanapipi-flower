@@ -7,6 +7,8 @@ import {
   checkAdminAccess,
   createAdminGiftAddOn,
   createAdminProduct,
+  deleteAdminOrder,
+  deleteAdminProduct,
   deleteAdminMedia,
   fetchAdminCatalogue,
   fetchAdminGiftAddOns,
@@ -48,7 +50,16 @@ class D1Wrapper {
   }
 
   async batch(statements) {
-    return Promise.all(statements.map((s) => s.run()))
+    this.db.exec('BEGIN')
+    try {
+      const results = []
+      for (const statement of statements) results.push(await statement.run())
+      this.db.exec('COMMIT')
+      return results
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 }
 
@@ -1153,25 +1164,24 @@ test('56. unexpected archive persistence errors return a safe 5xx response', asy
   assert.doesNotMatch(result.error.message, /SQLITE|secret-table-name/u)
 })
 
-test('57. Admin archive UI confirms destructive visibility change and exposes request states', () => {
+test('57. permanent delete UI requires explicit confirmation and exposes request states', () => {
   const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
 
-  assert.match(adminPageCode, /window\.confirm/u)
-  assert.match(adminPageCode, /Sản phẩm sẽ biến mất khỏi cửa hàng, nhưng toàn bộ dữ liệu vẫn được giữ lại/u)
-  assert.match(adminPageCode, /Đang lưu trữ\.\.\./u)
-  assert.match(adminPageCode, /Đang khôi phục\.\.\./u)
-  assert.match(adminPageCode, /setSaveSuccess/u)
-  assert.match(adminPageCode, /setArchiveError/u)
-  assert.match(adminPageCode, /disabled=\{isArchivePending\}/u)
+  assert.match(adminPageCode, /deleteAdminOrder/u)
+  assert.match(adminPageCode, /deleteAdminProduct/u)
+  assert.match(adminPageCode, /Xóa vĩnh viễn đơn hàng này\? Hành động này không thể hoàn tác\./u)
+  assert.match(adminPageCode, /aria-modal="true"/u)
+  assert.match(adminPageCode, /disabled=\{isDeleting\}/u)
+  assert.match(adminPageCode, /Không thể hoàn tác/u)
 })
 
-test('58. Admin archive UI updates only after canonical server success and protects the Easter egg', () => {
+test('58. delete UI updates after server success and protects no-watering-flower', () => {
   const adminPageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
 
-  assert.match(adminPageCode, /if \(result\.ok && result\.product\)/u)
-  assert.match(adminPageCode, /item\.id === result\.product\.id \? result\.product : item/u)
+  assert.match(adminPageCode, /setOrders\(\(current\) => current\.filter/u)
+  assert.match(adminPageCode, /setProducts\(\(current\) => current\.filter/u)
   assert.match(adminPageCode, /product\.slug === 'no-watering-flower'/u)
-  assert.match(adminPageCode, /isProtected \?/u)
+  assert.match(adminPageCode, /isDeleting \|\| isDeleteProtected/u)
   assert.doesNotMatch(adminPageCode, /filter\(.*archive/u)
 })
 
@@ -2417,6 +2427,190 @@ test('119. Admin order detail localizes canonical values and wraps long fulfilme
   assert.match(pageCss, /\.admin-modal-backdrop\s*\{[^}]*align-items:\s*flex-start;/su)
   assert.match(pageCss, /\.admin-modal--order-detail \.admin-order-code-header\s*\{[^}]*white-space:\s*nowrap;/su)
   assert.match(pageCss, /@media \(max-width: 640px\)[\s\S]*\.admin-order-audit-item\s*\{\s*grid-template-columns:\s*1fr;/u)
+})
+
+test('121. permanent product deletion cleans owned rows and handles media after D1 commit', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const now = new Date().toISOString()
+  sqlite.prepare(`
+    INSERT INTO users (id, auth_provider, provider_subject, role, status, locale, created_at_utc, updated_at_utc)
+    VALUES ('usr_customer_delete', 'clerk', 'customer_delete_subject', 'customer', 'active', 'vi-VN', ?, ?)
+  `).run(now, now)
+
+  const mediaBucket = new MemoryMediaBucket()
+  const removableMediaKey = 'prod_media_delete_owned.jpg'
+  const failedMediaKey = 'prod_media_delete_failed.jpg'
+  const sharedMediaKey = 'prod_media_delete_shared.jpg'
+  for (const key of [removableMediaKey, failedMediaKey, sharedMediaKey]) {
+    await mediaBucket.put(key, new Uint8Array([1, 2, 3]))
+  }
+  const originalDelete = mediaBucket.delete.bind(mediaBucket)
+  mediaBucket.delete = async (key) => {
+    if (key === failedMediaKey) throw new Error('simulated R2 failure')
+    return originalDelete(key)
+  }
+
+  const targetMedia = JSON.parse(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('nang-diu').media_json)
+  targetMedia.push(
+    { src: `/api/v1/media/${removableMediaKey}`, type: 'image' },
+    { src: `/api/v1/media/${failedMediaKey}`, type: 'image' },
+    { src: `/api/v1/media/${sharedMediaKey}`, type: 'image' },
+  )
+  sqlite.prepare('UPDATE products SET media_json = ? WHERE id = ?').run(JSON.stringify(targetMedia), 'nang-diu')
+  const sharedProductMedia = JSON.parse(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('happy-pastel').media_json)
+  sharedProductMedia.push({ src: `/api/v1/media/${sharedMediaKey}`, type: 'image' })
+  sqlite.prepare('UPDATE products SET media_json = ? WHERE id = ?').run(JSON.stringify(sharedProductMedia), 'happy-pastel')
+
+  const sizeVariant = sqlite.prepare(`
+    SELECT id FROM product_variants WHERE product_id = 'nang-diu' AND option_type = 'size' LIMIT 1
+  `).get()
+  sqlite.prepare(`
+    INSERT INTO carts (id, user_id, state, revision, created_at_utc, updated_at_utc)
+    VALUES ('cart_delete_test', 'usr_customer_delete', 'active', 0, ?, ?)
+  `).run(now, now)
+  sqlite.prepare(`
+    INSERT INTO cart_items (
+      id, cart_id, item_type, product_id, size_variant_id, quantity, unit_price_vnd,
+      line_key, catalogue_version_id, created_at_utc, updated_at_utc
+    ) VALUES (
+      'cart_item_delete_test', 'cart_delete_test', 'product', 'nang-diu', ?, 1, 1,
+      'product:nang-diu:test', 'catalogue-2026-08-24-v1', ?, ?
+    )
+  `).run(sizeVariant.id, now, now)
+  sqlite.prepare(`
+    INSERT INTO cart_item_add_ons (id, cart_item_id, gift_add_on_id, price_vnd)
+    VALUES ('cart_addon_delete_test', 'cart_item_delete_test', 'mini-scented-candle', 1000)
+  `).run()
+  sqlite.prepare(`
+    INSERT INTO wishlists (id, user_id, revision, created_at_utc, updated_at_utc)
+    VALUES ('wishlist_delete_test', 'usr_customer_delete', 0, ?, ?)
+  `).run(now, now)
+  sqlite.prepare(`
+    INSERT INTO wishlist_items (id, wishlist_id, product_id, created_at_utc)
+    VALUES ('wishlist_item_delete_test', 'wishlist_delete_test', 'nang-diu', ?)
+  `).run(now)
+
+  const testWorker = createTestWorker(d1, { mediaBucket })
+  assert.equal((await testWorker.fetch('/api/v1/admin/products/nang-diu', { method: 'DELETE' })).status, 401)
+  assert.equal((await testWorker.fetch('/api/v1/admin/products/nang-diu', {
+    headers: { Authorization: 'Bearer customer-token' },
+    method: 'DELETE',
+  })).status, 403)
+
+  sqlite.exec(`
+    CREATE TRIGGER fail_product_delete
+    BEFORE DELETE ON products WHEN OLD.id = 'nang-diu'
+    BEGIN
+      SELECT RAISE(ABORT, 'forced product delete failure');
+    END;
+  `)
+  const rolledBack = await deleteAdminProduct('nang-diu', {
+    fetchImpl: (url, options) => testWorker.fetch(url, options),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(rolledBack.ok, false)
+  assert.equal(rolledBack.status, 500)
+  assert.ok(sqlite.prepare('SELECT 1 FROM products WHERE id = ?').get('nang-diu'))
+  assert.ok(sqlite.prepare('SELECT 1 FROM cart_items WHERE id = ?').get('cart_item_delete_test'))
+  assert.ok(await mediaBucket.get(removableMediaKey))
+  sqlite.exec('DROP TRIGGER fail_product_delete')
+
+  const result = await deleteAdminProduct('nang-diu', {
+    fetchImpl: (url, options) => testWorker.fetch(url, options),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.mediaCleanupComplete, false)
+  assert.equal(sqlite.prepare('SELECT 1 FROM products WHERE id = ?').get('nang-diu'), undefined)
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM product_variants WHERE product_id = ?').get('nang-diu').count, 0)
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM product_relations WHERE product_id = ? OR related_product_id = ?').get('nang-diu', 'nang-diu').count, 0)
+  assert.equal(sqlite.prepare('SELECT 1 FROM cart_items WHERE id = ?').get('cart_item_delete_test'), undefined)
+  assert.equal(sqlite.prepare('SELECT 1 FROM cart_item_add_ons WHERE id = ?').get('cart_addon_delete_test'), undefined)
+  assert.equal(sqlite.prepare('SELECT 1 FROM wishlist_items WHERE id = ?').get('wishlist_item_delete_test'), undefined)
+  assert.equal(sqlite.prepare('SELECT revision FROM carts WHERE id = ?').get('cart_delete_test').revision, 1)
+  assert.equal(sqlite.prepare('SELECT revision FROM wishlists WHERE id = ?').get('wishlist_delete_test').revision, 1)
+  assert.equal(await mediaBucket.get(removableMediaKey), null)
+  assert.ok(await mediaBucket.get(failedMediaKey))
+  assert.ok(await mediaBucket.get(sharedMediaKey))
+  assert.ok(sqlite.prepare('SELECT 1 FROM products WHERE id = ?').get('happy-pastel'))
+  assert.ok(sqlite.prepare('SELECT 1 FROM products WHERE id = ?').get('no-watering-flower'))
+
+  const catalogueResponse = await testWorker.fetch('/api/v1/catalogue/products')
+  const catalogue = await catalogueResponse.json()
+  assert.equal(catalogue.data.items.some((product) => product.id === 'nang-diu'), false)
+  const adminResponse = await testWorker.fetch('/api/v1/admin/products?limit=50', {
+    headers: { Authorization: 'Bearer admin-token' },
+  })
+  const adminCatalogue = await adminResponse.json()
+  assert.equal(adminCatalogue.data.items.some((product) => product.id === 'nang-diu'), false)
+})
+
+test('122. order references block product deletion until the order is deleted', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const now = new Date().toISOString()
+  sqlite.prepare(`
+    INSERT INTO users (id, auth_provider, provider_subject, role, status, locale, created_at_utc, updated_at_utc)
+    VALUES ('usr_customer_delete', 'clerk', 'customer_delete_subject', 'customer', 'active', 'vi-VN', ?, ?)
+  `).run(now, now)
+  sqlite.prepare(`
+    INSERT INTO orders (
+      id, user_id, order_code, status, revision, subtotal_vnd, total_vnd, currency,
+      delivery_date, delivery_slot_id, fulfilment_metadata_json, payment_method,
+      payment_status, created_at_utc, updated_at_utc
+    ) VALUES (
+      'ord_product_delete_test', 'usr_customer_delete', 'HANAPIPI-TEST-01', 'received',
+      0, 1, 1, 'VND', '2026-10-01', 'morning', '{}', 'bank_transfer_mock',
+      'mock_pending', ?, ?
+    )
+  `).run(now, now)
+  sqlite.prepare(`
+    INSERT INTO order_items (
+      id, order_id, product_id, item_type, product_slug_snapshot, product_name_snapshot,
+      options_snapshot_json, composition_snapshot_json, unit_price_vnd, quantity, line_total_vnd
+    ) VALUES (
+      'oi_product_delete_test', 'ord_product_delete_test', 'nang-diu', 'product', 'nang-diu',
+      'Nang Diu', '{}', '[]', 1, 1, 1
+    )
+  `).run()
+
+  const testWorker = createTestWorker(d1)
+  const blocked = await deleteAdminProduct('nang-diu', {
+    fetchImpl: (url, options) => testWorker.fetch(url, options),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(blocked.ok, false)
+  assert.equal(blocked.status, 409)
+  assert.equal(blocked.error.code, 'PRODUCT_IN_USE')
+  assert.ok(sqlite.prepare('SELECT 1 FROM products WHERE id = ?').get('nang-diu'))
+
+  const deletedOrder = await deleteAdminOrder('ord_product_delete_test', {
+    fetchImpl: (url, options) => testWorker.fetch(url, options),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(deletedOrder.ok, true)
+  const deletedProduct = await deleteAdminProduct('nang-diu', {
+    fetchImpl: (url, options) => testWorker.fetch(url, options),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(deletedProduct.ok, true)
+  assert.ok(sqlite.prepare('SELECT 1 FROM products WHERE id = ?').get('happy-pastel'))
+})
+
+test('123. no-watering-flower is protected from permanent deletion server-side', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const result = await deleteAdminProduct('no-watering-flower', {
+    fetchImpl: (url, options) => testWorker.fetch(url, options),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 409)
+  assert.equal(result.error.code, 'PRODUCT_PROTECTED')
+  assert.ok(sqlite.prepare('SELECT 1 FROM products WHERE id = ?').get('no-watering-flower'))
 })
 
 test('120. Admin mutation surfaces a safe rate-limit retry message', async () => {

@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { DatabaseSync, backup } from 'node:sqlite'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { tmpdir } from 'node:os'
 import { createCatalogueSeed } from '../../db/seed/catalogueSeed.js'
 import {
   catalogueRepositoryLimits,
@@ -14,7 +15,6 @@ import { verifyCatalogueMigration } from './generate-catalogue-migration.js'
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const projectRoot = resolve(scriptDirectory, '..', '..')
 const migrationDirectory = join(projectRoot, 'drizzle')
-const qaTempRoot = join(projectRoot, 'qa', 'temp')
 
 const EXPECTED_TABLES = new Set([
   'audit_events',
@@ -303,8 +303,7 @@ async function verifyUserRepository(database) {
 }
 
 async function main() {
-  await mkdir(qaTempRoot, { recursive: true })
-  const tempDirectory = await mkdtemp(join(qaTempRoot, 'phase16-'))
+  const tempDirectory = await mkdtemp(join(tmpdir(), 'hanapipi-phase16-'))
   const primaryPath = join(tempDirectory, 'primary.sqlite')
   const backupPath = join(tempDirectory, 'backup.sqlite')
   const restoredPath = join(tempDirectory, 'restored.sqlite')

@@ -594,6 +594,35 @@ async function handleListAdminOrders(request, env, requestId, dependencies) {
   }
 }
 
+async function handleDeleteAdminOrder(idOrCode, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_ORDERS_PATH}/:id`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(auth.status, auth.code, auth.message, requestId), route, { errorCode: auth.code })
+  }
+
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, route, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
+
+  if (request.headers.has('Origin')) {
+    const originValidation = validateMutationOrigin(request, env)
+    if (!originValidation.ok) return originNotAllowed(requestId, route)
+  }
+
+  try {
+    const repositories = dependencies.createRepositories(env)
+    await repositories.orders.deleteForAdmin(auth.user, idOrCode)
+    return result(successResponse({ deleted: true }, requestId), route)
+  } catch (error) {
+    const status = error.status || 500
+    const code = error.code || 'INTERNAL_ERROR'
+    const message = error.status && error.code ? error.message : 'Không thể xóa đơn hàng.'
+    return result(errorResponse(status, code, message, requestId), route, { errorCode: code })
+  }
+}
+
 async function handleGetAdminOrder(idOrCode, request, env, requestId, dependencies) {
   const route = `${V1_ADMIN_ORDERS_PATH}/:id`
   const auth = await dependencies.authorizeAdmin(request, env, dependencies)
@@ -959,6 +988,55 @@ async function handleSetAdminProductArchived(idOrSlug, archived, request, env, r
       : 'Không thể thay đổi trạng thái lưu trữ của sản phẩm.'
     return result(errorResponse(status, code, message, requestId), route, { errorCode: code })
   }
+}
+
+async function handleDeleteAdminProduct(idOrSlug, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_PRODUCTS_PATH}/:id`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(auth.status, auth.code, auth.message, requestId), route, { errorCode: auth.code })
+  }
+
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, route, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
+
+  if (request.headers.has('Origin')) {
+    const originValidation = validateMutationOrigin(request, env)
+    if (!originValidation.ok) return originNotAllowed(requestId, route)
+  }
+
+  const repositories = dependencies.createRepositories(env)
+  let deletion
+  try {
+    deletion = await repositories.catalogue.deleteProduct(idOrSlug)
+  } catch (error) {
+    const status = error.status || 500
+    const code = error.code || 'INTERNAL_ERROR'
+    const message = error.status && error.code ? error.message : 'Không thể xóa sản phẩm.'
+    return result(errorResponse(status, code, message, requestId), route, { errorCode: code })
+  }
+
+  let mediaCleanupComplete = true
+  if (deletion.mediaKeys.length > 0) {
+    const mediaStorage = dependencies.createMediaStorage
+      ? dependencies.createMediaStorage(env)
+      : createMediaStorage(env)
+    for (const key of deletion.mediaKeys) {
+      try {
+        if (await repositories.catalogue.isProductMediaReferenced(key)) continue
+        await mediaStorage.delete(key)
+      } catch {
+        mediaCleanupComplete = false
+      }
+    }
+  }
+
+  return result(
+    successResponse({ deleted: true, mediaCleanupComplete }, requestId),
+    route,
+  )
 }
 
 async function handleCreateAdminProduct(request, env, requestId, dependencies) {
@@ -1862,8 +1940,11 @@ export function createApiRouter(options = {}) {
         }
         return handleUpdateAdminOrderStatus(adminOrderMatch.idOrCode, request, env, requestId, adminOrderDependencies)
       }
+      if (request.method === 'DELETE') {
+        return handleDeleteAdminOrder(adminOrderMatch.idOrCode, request, env, requestId, adminOrderDependencies)
+      }
       if (request.method !== 'GET') {
-        return methodNotAllowed(requestId, `${V1_ADMIN_ORDERS_PATH}/:id`, 'GET')
+        return methodNotAllowed(requestId, `${V1_ADMIN_ORDERS_PATH}/:id`, 'GET, DELETE')
       }
       return handleGetAdminOrder(adminOrderMatch.idOrCode, request, env, requestId, adminOrderDependencies)
     }
@@ -1987,7 +2068,16 @@ export function createApiRouter(options = {}) {
 
     const adminProductId = matchAdminProductParam(pathname)
     if (adminProductId) {
-      if (request.method !== 'PATCH') return methodNotAllowed(requestId, pathname, 'PATCH')
+      if (request.method === 'DELETE') {
+        return handleDeleteAdminProduct(adminProductId, request, env, requestId, {
+          authorizeAdmin,
+          createMediaStorage: options.mediaStorageFactory ?? createMediaStorage,
+          createRepositories,
+          rateLimitRequest,
+          verifyIdentity,
+        })
+      }
+      if (request.method !== 'PATCH') return methodNotAllowed(requestId, pathname, 'PATCH, DELETE')
       return handleUpdateAdminProduct(adminProductId, request, env, requestId, {
         authorizeAdmin,
         createRepositories,

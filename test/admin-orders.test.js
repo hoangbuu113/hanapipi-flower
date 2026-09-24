@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
 import {
   confirmAdminOrderPayment,
+  deleteAdminOrder,
   fetchAdminOrderDetail,
   fetchAdminOrders,
   updateAdminOrderStatus,
@@ -46,7 +47,16 @@ class D1Wrapper {
   }
 
   async batch(statements) {
-    return Promise.all(statements.map((s) => s.run()))
+    this.db.exec('BEGIN')
+    try {
+      const results = []
+      for (const statement of statements) results.push(await statement.run())
+      this.db.exec('COMMIT')
+      return results
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 }
 
@@ -827,4 +837,90 @@ test('Admin Orders Fulfilment Workflow - Comprehensive Suite', async (t) => {
     assert.equal(body.data.order.paymentStatus, 'paid')
     assert.equal(body.data.order.status, 'preparing')
   })
+})
+
+test('Admin permanently deletes only the selected order aggregate', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedTestUsers(sqlite)
+  const testWorker = createTestWorker(d1)
+  const target = await createTestOrder(testWorker)
+  const untouched = await createTestOrder(testWorker)
+  const targetItemId = sqlite.prepare('SELECT id FROM order_items WHERE order_id = ?').get(target.id).id
+  const now = new Date().toISOString()
+
+  sqlite.prepare(`
+    INSERT INTO audit_events (
+      id, actor_user_id, action, entity_type, entity_id, result, metadata_version, created_at_utc
+    ) VALUES (?, ?, ?, 'order', ?, 'success', 'v1', ?)
+  `).run('evt_delete_target', 'usr_admin_1', 'order_status_updated', target.id, now)
+  sqlite.prepare(`
+    INSERT INTO audit_events (
+      id, actor_user_id, action, entity_type, entity_id, result, metadata_version, created_at_utc
+    ) VALUES (?, ?, ?, 'order', ?, 'success', 'v1', ?)
+  `).run('evt_delete_untouched', 'usr_admin_1', 'order_status_updated', untouched.id, now)
+
+  const unauthorized = await testWorker.fetch(`/api/v1/admin/orders/${target.id}`, { method: 'DELETE' })
+  assert.equal(unauthorized.status, 401)
+  const forbidden = await testWorker.fetch(`/api/v1/admin/orders/${target.id}`, {
+    body: JSON.stringify({ role: 'admin', userId: 'usr_admin_1' }),
+    headers: { Authorization: 'Bearer customer-token', 'Content-Type': 'application/json' },
+    method: 'DELETE',
+  })
+  assert.equal(forbidden.status, 403)
+
+  const result = await deleteAdminOrder(target.id, {
+    fetchImpl: (url, options) => testWorker.fetch(url, options),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(result.ok, true)
+  assert.equal(sqlite.prepare('SELECT 1 FROM orders WHERE id = ?').get(target.id), undefined)
+  assert.equal(sqlite.prepare('SELECT 1 FROM order_items WHERE order_id = ?').get(target.id), undefined)
+  assert.equal(sqlite.prepare('SELECT 1 FROM order_item_add_ons WHERE order_item_id = ?').get(targetItemId), undefined)
+  assert.equal(sqlite.prepare("SELECT 1 FROM audit_events WHERE entity_type = 'order' AND entity_id = ?").get(target.id), undefined)
+  assert.ok(sqlite.prepare('SELECT 1 FROM orders WHERE id = ?').get(untouched.id))
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM order_items WHERE order_id = ?').get(untouched.id).count, 1)
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE entity_type = 'order' AND entity_id = ?").get(untouched.id).count, 1)
+
+  const repeated = await deleteAdminOrder(target.id, {
+    fetchImpl: (url, options) => testWorker.fetch(url, options),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(repeated.ok, false)
+  assert.equal(repeated.status, 404)
+  assert.equal(repeated.error.code, 'ORDER_NOT_FOUND')
+})
+
+test('Admin order deletion rolls back every child when the parent delete fails', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedTestUsers(sqlite)
+  const testWorker = createTestWorker(d1)
+  const target = await createTestOrder(testWorker)
+  const itemId = sqlite.prepare('SELECT id FROM order_items WHERE order_id = ?').get(target.id).id
+  const addOnCount = sqlite.prepare(`
+    SELECT COUNT(*) AS count FROM order_item_add_ons WHERE order_item_id = ?
+  `).get(itemId).count
+  const now = new Date().toISOString()
+  sqlite.prepare(`
+    INSERT INTO audit_events (
+      id, actor_user_id, action, entity_type, entity_id, result, metadata_version, created_at_utc
+    ) VALUES ('evt_delete_rollback', 'usr_admin_1', 'order_status_updated', 'order', ?, 'success', 'v1', ?)
+  `).run(target.id, now)
+  sqlite.exec(`
+    CREATE TRIGGER fail_order_delete
+    BEFORE DELETE ON orders
+    BEGIN
+      SELECT RAISE(ABORT, 'forced order delete failure');
+    END;
+  `)
+
+  const result = await deleteAdminOrder(target.id, {
+    fetchImpl: (url, options) => testWorker.fetch(url, options),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 500)
+  assert.ok(sqlite.prepare('SELECT 1 FROM orders WHERE id = ?').get(target.id))
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM order_items WHERE order_id = ?').get(target.id).count, 1)
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM order_item_add_ons WHERE order_item_id = ?').get(itemId).count, addOnCount)
+  assert.ok(sqlite.prepare("SELECT 1 FROM audit_events WHERE entity_type = 'order' AND entity_id = ?").get(target.id))
 })
