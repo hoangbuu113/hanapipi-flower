@@ -42,6 +42,7 @@ const V1_MEDIA_PATH = `${API_V1_PREFIX}/media`
 const V1_CATALOGUE_PATH = `${API_V1_PREFIX}/catalogue`
 const V1_CATALOGUE_PRODUCTS_PATH = `${API_V1_PREFIX}/catalogue/products`
 const V1_ORDERS_PATH = `${API_V1_PREFIX}/orders`
+const V1_ADDRESSES_PATH = `${API_V1_PREFIX}/addresses`
 const PREFLIGHT_HEADERS = ['authorization', 'content-type', 'idempotency-key', 'if-match']
 
 export const isApiPath = (pathname) => pathname === '/api' || pathname.startsWith('/api/')
@@ -304,6 +305,250 @@ async function handleGetUserOrder(idOrCode, request, env, requestId, dependencie
     const status = err.status || 500
     const code = err.code || 'INTERNAL_ERROR'
     const message = err.message || 'Không thể tải thông tin đơn hàng.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), route, { errorCode: code })
+  }
+}
+
+async function handleListUserAddresses(request, env, requestId, dependencies) {
+  const auth = await dependencies.authenticateUser(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), V1_ADDRESSES_PATH, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const addresses = await repositories.addresses.listForUser(auth.user)
+    return result(
+      successResponse({
+        addresses,
+        items: addresses,
+        total: addresses.length,
+      }, requestId),
+      V1_ADDRESSES_PATH,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tải danh sách địa chỉ.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), V1_ADDRESSES_PATH, { errorCode: code })
+  }
+}
+
+async function handleGetUserAddress(id, request, env, requestId, dependencies) {
+  const route = `${V1_ADDRESSES_PATH}/:id`
+  const auth = await dependencies.authenticateUser(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), route, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const address = await repositories.addresses.getForUser(auth.user, id)
+    return result(
+      successResponse({ address }, requestId),
+      route,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tải thông tin địa chỉ.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), route, { errorCode: code })
+  }
+}
+
+async function handleCreateUserAddress(request, env, requestId, dependencies) {
+  const auth = await dependencies.authenticateUser(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), V1_ADDRESSES_PATH, { errorCode: auth.code })
+  }
+
+  let body = null
+  try {
+    body = await request.json()
+  } catch {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), V1_ADDRESSES_PATH, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), V1_ADDRESSES_PATH, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const created = await repositories.addresses.createForUser(auth.user, body)
+    return result(
+      successResponse({ address: created }, requestId, { status: 201 }),
+      V1_ADDRESSES_PATH,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể tạo địa chỉ mới.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+      err.fieldErrors ? { fieldErrors: err.fieldErrors } : undefined,
+    ), V1_ADDRESSES_PATH, { errorCode: code })
+  }
+}
+
+async function handleUpdateUserAddress(id, request, env, requestId, dependencies) {
+  const route = `${V1_ADDRESSES_PATH}/:id`
+  const auth = await dependencies.authenticateUser(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), route, { errorCode: auth.code })
+  }
+
+  let body = null
+  try {
+    body = await request.json()
+  } catch {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), route, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return result(errorResponse(
+      400,
+      'INVALID_PAYLOAD',
+      'Dữ liệu yêu cầu không hợp lệ.',
+      requestId,
+    ), route, { errorCode: 'INVALID_PAYLOAD' })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const updated = await repositories.addresses.updateForUser(auth.user, id, body)
+    return result(
+      successResponse({ address: updated }, requestId),
+      route,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể cập nhật địa chỉ.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+      err.fieldErrors ? { fieldErrors: err.fieldErrors } : undefined,
+    ), route, { errorCode: code })
+  }
+}
+
+async function handleDeleteUserAddress(id, request, env, requestId, dependencies) {
+  const route = `${V1_ADDRESSES_PATH}/:id`
+  const auth = await dependencies.authenticateUser(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), route, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const deleted = await repositories.addresses.deleteForUser(auth.user, id)
+    return result(
+      successResponse(deleted, requestId),
+      route,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể xóa địa chỉ.'
+    return result(errorResponse(
+      status,
+      code,
+      message,
+      requestId,
+    ), route, { errorCode: code })
+  }
+}
+
+async function handleSetDefaultUserAddress(id, request, env, requestId, dependencies) {
+  const route = `${V1_ADDRESSES_PATH}/:id/default`
+  const auth = await dependencies.authenticateUser(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(
+      auth.status,
+      auth.code,
+      auth.message,
+      requestId,
+    ), route, { errorCode: auth.code })
+  }
+
+  const repositories = dependencies.createRepositories(env)
+
+  try {
+    const updated = await repositories.addresses.setDefaultForUser(auth.user, id)
+    return result(
+      successResponse({ address: updated }, requestId),
+      route,
+    )
+  } catch (err) {
+    const status = err.status || 500
+    const code = err.code || 'INTERNAL_ERROR'
+    const message = err.message || 'Không thể đặt địa chỉ mặc định.'
     return result(errorResponse(
       status,
       code,
@@ -1325,6 +1570,18 @@ function matchOrderIdOrCode(pathname) {
   return null
 }
 
+function matchAddressId(pathname) {
+  if (!pathname.startsWith(`${V1_ADDRESSES_PATH}/`)) return null
+  const remainder = pathname.slice(V1_ADDRESSES_PATH.length + 1).trim()
+  if (remainder.endsWith('/default')) {
+    const id = remainder.slice(0, -'/default'.length).trim()
+    if (id.length > 0 && !id.includes('/')) return { action: 'default', id: decodeURIComponent(id) }
+  } else if (remainder.length > 0 && !remainder.includes('/')) {
+    return { action: null, id: decodeURIComponent(remainder) }
+  }
+  return null
+}
+
 function matchAdminOrderId(pathname) {
   if (!pathname.startsWith(`${V1_ADMIN_ORDERS_PATH}/`)) return null
   const remainder = pathname.slice(V1_ADMIN_ORDERS_PATH.length + 1).trim()
@@ -1522,6 +1779,47 @@ export function createApiRouter(options = {}) {
         createRepositories,
         verifyIdentity,
       })
+    }
+
+    if (pathname === V1_ADDRESSES_PATH) {
+      if (!['GET', 'POST'].includes(request.method)) {
+        return methodNotAllowed(requestId, V1_ADDRESSES_PATH, 'GET, POST')
+      }
+      const addressDependencies = {
+        authenticateUser,
+        createRepositories,
+        verifyIdentity,
+      }
+      if (request.method === 'GET') {
+        return handleListUserAddresses(request, env, requestId, addressDependencies)
+      }
+      return handleCreateUserAddress(request, env, requestId, addressDependencies)
+    }
+
+    const addressMatch = matchAddressId(pathname)
+    if (addressMatch) {
+      const addressDependencies = {
+        authenticateUser,
+        createRepositories,
+        verifyIdentity,
+      }
+      if (addressMatch.action === 'default') {
+        if (request.method !== 'POST') {
+          return methodNotAllowed(requestId, `${V1_ADDRESSES_PATH}/:id/default`, 'POST')
+        }
+        return handleSetDefaultUserAddress(addressMatch.id, request, env, requestId, addressDependencies)
+      }
+
+      if (!['GET', 'PATCH', 'DELETE'].includes(request.method)) {
+        return methodNotAllowed(requestId, `${V1_ADDRESSES_PATH}/:id`, 'GET, PATCH, DELETE')
+      }
+      if (request.method === 'GET') {
+        return handleGetUserAddress(addressMatch.id, request, env, requestId, addressDependencies)
+      }
+      if (request.method === 'PATCH') {
+        return handleUpdateUserAddress(addressMatch.id, request, env, requestId, addressDependencies)
+      }
+      return handleDeleteUserAddress(addressMatch.id, request, env, requestId, addressDependencies)
     }
 
     if (pathname === V1_ADMIN_ME_PATH) {

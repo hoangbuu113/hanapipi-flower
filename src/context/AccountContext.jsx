@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth, useUser } from '@clerk/clerk-react'
 import { AccountContext } from './accountStore'
-import { fetchCurrentUser, fetchUserOrders } from '../services/apiClient'
+import {
+  createUserAddress,
+  deleteUserAddress,
+  fetchCurrentUser,
+  fetchUserAddresses,
+  fetchUserOrders,
+  setDefaultUserAddress,
+  updateUserAddress,
+} from '../services/apiClient'
 
 export function AccountProvider({ children }) {
   const [orders, setOrders] = useState([])
   const [isOrdersLoading, setIsOrdersLoading] = useState(false)
   const [ordersError, setOrdersError] = useState(null)
+
+  const [addresses, setAddresses] = useState([])
+  const [isAddressesLoading, setIsAddressesLoading] = useState(false)
+  const [addressesError, setAddressesError] = useState(null)
 
   const { isLoaded: isAuthLoaded, isSignedIn, getToken, signOut } = useAuth()
   const { isLoaded: isUserLoaded, user: clerkUser } = useUser()
@@ -125,6 +137,66 @@ export function AccountProvider({ children }) {
     }
   }, [isAuthLoaded, isSignedIn, getToken])
 
+  const refreshAddresses = useCallback(async () => {
+    if (!isSignedIn) {
+      setAddresses([])
+      setAddressesError(null)
+      setIsAddressesLoading(false)
+      return
+    }
+
+    setIsAddressesLoading(true)
+    try {
+      const result = await fetchUserAddresses({ getToken })
+      if (result.ok) {
+        setAddresses(result.addresses)
+        setAddressesError(null)
+      } else if (result.status === 404 && result.error?.code === 'API_NOT_FOUND') {
+        setAddressesError(null)
+      } else {
+        setAddressesError(result.error)
+      }
+    } catch {
+      setAddressesError({ code: 'HYDRATION_FAILED', message: 'Không thể kết nối đến máy chủ.' })
+    } finally {
+      setIsAddressesLoading(false)
+    }
+  }, [isSignedIn, getToken])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    if (!isAuthLoaded || !isSignedIn) {
+      return undefined
+    }
+
+    fetchUserAddresses({ getToken })
+      .then((result) => {
+        if (isCancelled) return
+        if (result.ok) {
+          setAddresses(result.addresses)
+          setAddressesError(null)
+        } else if (result.status === 404 && result.error?.code === 'API_NOT_FOUND') {
+          setAddressesError(null)
+        } else {
+          setAddressesError(result.error)
+        }
+      })
+      .catch(() => {
+        if (isCancelled) return
+        setAddressesError({ code: 'HYDRATION_FAILED', message: 'Không thể kết nối đến máy chủ.' })
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsAddressesLoading(false)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [isAuthLoaded, isSignedIn, getToken])
+
   const user = useMemo(() => {
     if (!isSignedIn || !clerkUser) return null
     return {
@@ -149,6 +221,8 @@ export function AccountProvider({ children }) {
       setD1User(null)
       setAuthError(null)
       setOrders([])
+      setAddresses([])
+      setAddressesError(null)
       try {
         window.localStorage.removeItem('hanapipi-flower:orders')
       } catch {
@@ -178,12 +252,57 @@ export function AccountProvider({ children }) {
     })
   }, [])
 
+  const addAddress = useCallback(async (payload) => {
+    const result = await createUserAddress({ address: payload, getToken })
+    if (result.ok && result.address) {
+      await refreshAddresses()
+    }
+    return result
+  }, [getToken, refreshAddresses])
+
+  const editAddress = useCallback(async (id, payload) => {
+    const result = await updateUserAddress({ address: payload, id, getToken })
+    if (result.ok && result.address) {
+      await refreshAddresses()
+    }
+    return result
+  }, [getToken, refreshAddresses])
+
+  const removeAddress = useCallback(async (id) => {
+    const result = await deleteUserAddress({ id, getToken })
+    if (result.ok) {
+      await refreshAddresses()
+    }
+    return result
+  }, [getToken, refreshAddresses])
+
+  const makeAddressDefault = useCallback(async (id) => {
+    const result = await setDefaultUserAddress({ id, getToken })
+    if (result.ok && result.address) {
+      await refreshAddresses()
+    }
+    return result
+  }, [getToken, refreshAddresses])
+
   const value = useMemo(() => ({
     orders,
     isOrdersLoading,
     ordersError,
     refreshOrders,
     retryOrders: refreshOrders,
+    addresses,
+    savedAddresses: addresses,
+    isAddressesLoading,
+    addressesError,
+    refreshAddresses,
+    addAddress,
+    createAddress: addAddress,
+    editAddress,
+    updateAddress: editAddress,
+    removeAddress,
+    deleteAddress: removeAddress,
+    makeAddressDefault,
+    setDefaultAddress: makeAddressDefault,
     user,
     d1User,
     isAuthLoading,
@@ -192,7 +311,28 @@ export function AccountProvider({ children }) {
     logout,
     updateProfile,
     addOrder,
-  }), [orders, isOrdersLoading, ordersError, refreshOrders, user, d1User, isAuthLoading, authError, hydrateUser, logout, updateProfile, addOrder])
+  }), [
+    orders,
+    isOrdersLoading,
+    ordersError,
+    refreshOrders,
+    addresses,
+    isAddressesLoading,
+    addressesError,
+    refreshAddresses,
+    addAddress,
+    editAddress,
+    removeAddress,
+    makeAddressDefault,
+    user,
+    d1User,
+    isAuthLoading,
+    authError,
+    hydrateUser,
+    logout,
+    updateProfile,
+    addOrder,
+  ])
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>
 }

@@ -39,12 +39,15 @@ function AccountPage() {
             <p>Vui lòng chờ trong giây lát.</p>
           </section>
         ) : user ? (
-          <ProfileForm
-            key={user.id}
-            logout={logout}
-            updateProfile={updateProfile}
-            user={user}
-          />
+          <>
+            <ProfileForm
+              key={user.id}
+              logout={logout}
+              updateProfile={updateProfile}
+              user={user}
+            />
+            <AddressBookSection />
+          </>
         ) : (
           <section className="account-signin">
             <h2>Đăng nhập để lưu thông tin cá nhân.</h2>
@@ -229,6 +232,364 @@ function ProfileForm({ logout, updateProfile, user }) {
         {saved && <p role="status">Đã lưu thông tin.</p>}
       </form>
     </section>
+  )
+}
+
+function AddressBookSection() {
+  const {
+    addAddress,
+    addressesError,
+    editAddress,
+    isAddressesLoading,
+    makeAddressDefault,
+    refreshAddresses,
+    removeAddress,
+    savedAddresses,
+  } = useAccount()
+
+  const [editingAddress, setEditingAddress] = useState(null)
+  const [actionError, setActionError] = useState(null)
+  const [isBusy, setIsBusy] = useState(false)
+
+  async function handleDelete(addressId) {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa địa chỉ này khỏi sổ địa chỉ?')) return
+    setIsBusy(true)
+    setActionError(null)
+    try {
+      const result = await removeAddress(addressId)
+      if (!result.ok) {
+        setActionError(result.error?.message || 'Không thể xóa địa chỉ.')
+      }
+    } catch {
+      setActionError('Đã xảy ra lỗi khi xóa địa chỉ.')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleSetDefault(addressId) {
+    setIsBusy(true)
+    setActionError(null)
+    try {
+      const result = await makeAddressDefault(addressId)
+      if (!result.ok) {
+        setActionError(result.error?.message || 'Không thể đặt địa chỉ mặc định.')
+      }
+    } catch {
+      setActionError('Đã xảy ra lỗi khi đặt địa chỉ mặc định.')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  return (
+    <section aria-labelledby="addresses-title" className="account-addresses">
+      <div className="account-addresses__header">
+        <div>
+          <p className="eyebrow">Sổ địa chỉ của bạn</p>
+          <h2 id="addresses-title">Địa chỉ đã lưu</h2>
+        </div>
+        {!editingAddress && (
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={() => {
+              setActionError(null)
+              setEditingAddress('new')
+            }}
+          >
+            + Thêm địa chỉ mới
+          </button>
+        )}
+      </div>
+
+      {actionError && (
+        <p className="auth-error" role="alert" style={{ marginBottom: 16 }}>
+          {actionError}
+        </p>
+      )}
+
+      {editingAddress ? (
+        <AddressForm
+          initial={editingAddress === 'new' ? null : editingAddress}
+          isFirst={savedAddresses.length === 0}
+          onCancel={() => setEditingAddress(null)}
+          onSubmit={async (payload) => {
+            if (editingAddress === 'new') {
+              const res = await addAddress(payload)
+              if (res.ok) setEditingAddress(null)
+              return res
+            }
+            const res = await editAddress(editingAddress.id, payload)
+            if (res.ok) setEditingAddress(null)
+            return res
+          }}
+        />
+      ) : isAddressesLoading && !savedAddresses.length ? (
+        <div className="account-orders__loading">
+          <p>Đang tải sổ địa chỉ...</p>
+        </div>
+      ) : addressesError && !savedAddresses.length ? (
+        <div className="account-orders__error" role="alert">
+          <p>{addressesError.message || 'Không thể tải sổ địa chỉ.'}</p>
+          <button className="button button--secondary" type="button" onClick={refreshAddresses}>
+            Thử lại
+          </button>
+        </div>
+      ) : savedAddresses.length > 0 ? (
+        <div className="account-address-grid">
+          {savedAddresses.map((addr) => (
+            <article
+              key={addr.id}
+              className={`account-address-card ${addr.isDefault ? 'account-address-card--default' : ''}`}
+            >
+              <div>
+                <header className="account-address-card__header">
+                  <span className="account-address-card__title">
+                    {addr.label || 'Địa chỉ giao hoa'}
+                  </span>
+                  {addr.isDefault && (
+                    <span className="account-address-card__badge">Mặc định</span>
+                  )}
+                </header>
+                <div className="account-address-card__body">
+                  <p className="account-address-card__recipient">
+                    {addr.recipientName || addr.recipient?.name} · {addr.recipientPhone || addr.recipient?.phone}
+                  </p>
+                  <p>
+                    {addr.detail || addr.address?.detail}, {addr.ward || addr.address?.ward}, {addr.district || addr.address?.district}, {addr.city || addr.address?.city}
+                  </p>
+                  {(addr.deliveryNote || addr.address?.deliveryNote) && (
+                    <p>
+                      <em>Ghi chú: {addr.deliveryNote || addr.address?.deliveryNote}</em>
+                    </p>
+                  )}
+                </div>
+              </div>
+              <footer className="account-address-card__actions">
+                {!addr.isDefault && (
+                  <button
+                    className="button button--text"
+                    disabled={isBusy}
+                    type="button"
+                    onClick={() => handleSetDefault(addr.id)}
+                  >
+                    Đặt làm mặc định
+                  </button>
+                )}
+                <button
+                  className="button button--text"
+                  disabled={isBusy}
+                  type="button"
+                  onClick={() => {
+                    setActionError(null)
+                    setEditingAddress(addr)
+                  }}
+                >
+                  Chỉnh sửa
+                </button>
+                <button
+                  className="button button--text button--text-danger"
+                  disabled={isBusy}
+                  type="button"
+                  onClick={() => handleDelete(addr.id)}
+                >
+                  Xóa
+                </button>
+              </footer>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="account-addresses__empty">
+          <h3>Chưa có địa chỉ nào được lưu.</h3>
+          <p>Lưu địa chỉ nhận hoa để việc gửi trao lần sau thêm nhanh chóng và chỉn chu.</p>
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={() => setEditingAddress('new')}
+          >
+            Thêm địa chỉ ngay
+          </button>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function AddressForm({ initial, isFirst, onCancel, onSubmit }) {
+  const [form, setForm] = useState(() => ({
+    city: initial?.city ?? initial?.address?.city ?? '',
+    deliveryNote: initial?.deliveryNote ?? initial?.address?.deliveryNote ?? '',
+    detail: initial?.detail ?? initial?.address?.detail ?? '',
+    district: initial?.district ?? initial?.address?.district ?? '',
+    isDefault: initial?.isDefault ?? (isFirst ? true : false),
+    label: initial?.label ?? '',
+    recipientName: initial?.recipientName ?? initial?.recipient?.name ?? '',
+    recipientPhone: initial?.recipientPhone ?? initial?.recipient?.phone ?? '',
+    ward: initial?.ward ?? initial?.address?.ward ?? '',
+  }))
+  const [errors, setErrors] = useState({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [serverError, setServerError] = useState(null)
+
+  function update(field, value) {
+    setForm((current) => ({ ...current, [field]: value }))
+    setErrors((current) => ({ ...current, [field]: '' }))
+    setServerError(null)
+  }
+
+  function validate() {
+    const next = {}
+    const phonePattern = /^(0\d{9}|\+84\d{9})$/u
+    if (!form.recipientName.trim()) next.recipientName = 'Vui lòng nhập họ và tên người nhận.'
+    if (!phonePattern.test(form.recipientPhone.replaceAll(/\s/gu, ''))) {
+      next.recipientPhone = 'Vui lòng nhập số điện thoại Việt Nam hợp lệ.'
+    }
+    if (!form.city) next.city = 'Vui lòng chọn tỉnh hoặc thành phố.'
+    if (!form.district) next.district = 'Vui lòng chọn quận hoặc huyện.'
+    if (!form.ward) next.ward = 'Vui lòng chọn phường hoặc xã.'
+    if (!form.detail.trim()) next.detail = 'Vui lòng nhập địa chỉ cụ thể.'
+    setErrors(next)
+    return Object.keys(next).length === 0
+  }
+
+  async function handleFormSubmit(e) {
+    e.preventDefault()
+    if (isSubmitting) return
+    if (!validate()) return
+
+    setIsSubmitting(true)
+    setServerError(null)
+    try {
+      const res = await onSubmit(form)
+      if (!res.ok) {
+        if (res.error?.fieldErrors) {
+          setErrors(res.error.fieldErrors)
+        }
+        setServerError(res.error?.message || 'Không thể lưu địa chỉ. Vui lòng thử lại.')
+      }
+    } catch {
+      setServerError('Đã xảy ra lỗi khi lưu địa chỉ. Vui lòng thử lại.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="account-address-form">
+      <h3>{initial ? 'Chỉnh sửa địa chỉ' : 'Thêm địa chỉ giao hoa'}</h3>
+      <form noValidate onSubmit={handleFormSubmit}>
+        <label>
+          <span>Tên gợi nhớ (ví dụ: Nhà, Công ty, Người thương)</span>
+          <input
+            placeholder="Ví dụ: Nhà riêng"
+            value={form.label}
+            onChange={(e) => update('label', e.target.value)}
+          />
+          {errors.label && <em className="auth-error">{errors.label}</em>}
+        </label>
+
+        <div className="account-address-form__row">
+          <label>
+            <span>Họ và tên người nhận *</span>
+            <input
+              value={form.recipientName}
+              onChange={(e) => update('recipientName', e.target.value)}
+            />
+            {errors.recipientName && <em className="auth-error">{errors.recipientName}</em>}
+          </label>
+          <label>
+            <span>Số điện thoại *</span>
+            <input
+              inputMode="tel"
+              placeholder="090 123 4567"
+              value={form.recipientPhone}
+              onChange={(e) => update('recipientPhone', e.target.value)}
+            />
+            {errors.recipientPhone && <em className="auth-error">{errors.recipientPhone}</em>}
+          </label>
+        </div>
+
+        <div className="account-address-form__row account-address-form__row--three">
+          <label>
+            <span>Tỉnh / thành phố *</span>
+            <select value={form.city} onChange={(e) => update('city', e.target.value)}>
+              <option value="">Chọn khu vực</option>
+              <option>TP. Hồ Chí Minh</option>
+              <option>Hà Nội</option>
+              <option>Đà Nẵng</option>
+            </select>
+            {errors.city && <em className="auth-error">{errors.city}</em>}
+          </label>
+          <label>
+            <span>Quận / huyện *</span>
+            <select value={form.district} onChange={(e) => update('district', e.target.value)}>
+              <option value="">Chọn quận / huyện</option>
+              <option>Quận 1</option>
+              <option>Quận 3</option>
+              <option>Quận Bình Thạnh</option>
+              <option>Quận Cầu Giấy</option>
+              <option>Quận Hải Châu</option>
+            </select>
+            {errors.district && <em className="auth-error">{errors.district}</em>}
+          </label>
+          <label>
+            <span>Phường / xã *</span>
+            <select value={form.ward} onChange={(e) => update('ward', e.target.value)}>
+              <option value="">Chọn phường / xã</option>
+              <option>Phường Bến Nghé</option>
+              <option>Phường Võ Thị Sáu</option>
+              <option>Phường 25</option>
+              <option>Phường Dịch Vọng</option>
+              <option>Phường Thạch Thang</option>
+            </select>
+            {errors.ward && <em className="auth-error">{errors.ward}</em>}
+          </label>
+        </div>
+
+        <label>
+          <span>Địa chỉ cụ thể *</span>
+          <input
+            placeholder="Số nhà, tên đường, tòa nhà, số căn hộ..."
+            value={form.detail}
+            onChange={(e) => update('detail', e.target.value)}
+          />
+          {errors.detail && <em className="auth-error">{errors.detail}</em>}
+        </label>
+
+        <label>
+          <span>Ghi chú giao hàng (tùy chọn)</span>
+          <textarea
+            placeholder="Ví dụ: Gọi trước khi đến, gửi bảo vệ nếu vắng mặt..."
+            value={form.deliveryNote}
+            onChange={(e) => update('deliveryNote', e.target.value)}
+          />
+          {errors.deliveryNote && <em className="auth-error">{errors.deliveryNote}</em>}
+        </label>
+
+        <label className="checkout-checkbox">
+          <input
+            checked={form.isDefault}
+            disabled={isFirst || Boolean(initial && initial.isDefault)}
+            type="checkbox"
+            onChange={(e) => update('isDefault', e.target.checked)}
+          />
+          Đặt làm địa chỉ mặc định
+        </label>
+
+        {serverError && <p className="auth-error" role="alert">{serverError}</p>}
+
+        <div className="account-address-form__actions">
+          <button className="button button--primary" disabled={isSubmitting} type="submit">
+            {isSubmitting ? 'Đang lưu...' : 'Lưu địa chỉ'}
+          </button>
+          <button className="button button--secondary" disabled={isSubmitting} type="button" onClick={onCancel}>
+            Hủy
+          </button>
+        </div>
+      </form>
+    </div>
   )
 }
 

@@ -1,3 +1,4 @@
+import { createAddressRepository } from './repositories/addressRepository.js'
 import { createCatalogueRepository } from './repositories/catalogueRepository.js'
 import { createOrderRepository } from './repositories/orderRepository.js'
 import { createUserRepository } from './repositories/userRepository.js'
@@ -14,6 +15,9 @@ export function createDatabaseRepositories(env) {
   const db = getDatabaseBinding(env)
   const catalogue = createCatalogueRepository(db)
   return {
+    addresses: createAddressRepository(db, {
+      fulfilmentKey: env?.ORDER_FULFILMENT_KEY,
+    }),
     catalogue,
     orders: createOrderRepository(db, {
       bankConfig: {

@@ -260,6 +260,335 @@ export async function fetchUserOrderDetail(idOrCode, { getToken, fetchImpl = glo
   }
 }
 
+export async function fetchUserAddresses({ getToken, fetchImpl = globalThis.fetch } = {}) {
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return {
+      addresses: [],
+      error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' },
+      ok: false,
+      status: 401,
+    }
+  }
+
+  if (!token) {
+    return {
+      addresses: [],
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để xem sổ địa chỉ.' },
+      ok: false,
+      status: 401,
+    }
+  }
+
+  try {
+    const response = await fetchImpl('/api/v1/addresses', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    let body = null
+    try {
+      body = await response.json()
+    } catch {
+      // Non-JSON response
+    }
+
+    if (!response.ok) {
+      return {
+        addresses: [],
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể tải sổ địa chỉ.' },
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    return {
+      addresses: body?.data?.addresses ?? body?.data?.items ?? [],
+      error: null,
+      ok: true,
+      status: response.status,
+    }
+  } catch {
+    return {
+      addresses: [],
+      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' },
+      ok: false,
+      status: 0,
+    }
+  }
+}
+
+export async function createUserAddress({ getToken, address, fetchImpl = globalThis.fetch } = {}) {
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return {
+      address: null,
+      error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' },
+      ok: false,
+      status: 401,
+    }
+  }
+
+  if (!token) {
+    return {
+      address: null,
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để lưu địa chỉ.' },
+      ok: false,
+      status: 401,
+    }
+  }
+
+  try {
+    const response = await fetchImpl('/api/v1/addresses', {
+      body: JSON.stringify(address),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    })
+
+    let body = null
+    try {
+      body = await response.json()
+    } catch {
+      // Non-JSON response
+    }
+
+    if (!response.ok) {
+      return {
+        address: null,
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể tạo địa chỉ mới.' },
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    return {
+      address: body?.data?.address ?? null,
+      error: null,
+      ok: true,
+      status: response.status,
+    }
+  } catch {
+    return {
+      address: null,
+      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' },
+      ok: false,
+      status: 0,
+    }
+  }
+}
+
+export async function updateUserAddress({ getToken, id, address, fetchImpl = globalThis.fetch } = {}) {
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return {
+      address: null,
+      error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' },
+      ok: false,
+      status: 401,
+    }
+  }
+
+  if (!token) {
+    return {
+      address: null,
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để cập nhật địa chỉ.' },
+      ok: false,
+      status: 401,
+    }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/addresses/${encodeURIComponent(id)}`, {
+      body: JSON.stringify(address),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'PATCH',
+    })
+
+    let body = null
+    try {
+      body = await response.json()
+    } catch {
+      // Non-JSON response
+    }
+
+    if (!response.ok) {
+      return {
+        address: null,
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể cập nhật địa chỉ.' },
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    return {
+      address: body?.data?.address ?? null,
+      error: null,
+      ok: true,
+      status: response.status,
+    }
+  } catch {
+    return {
+      address: null,
+      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' },
+      ok: false,
+      status: 0,
+    }
+  }
+}
+
+export async function deleteUserAddress({ getToken, id, fetchImpl = globalThis.fetch } = {}) {
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return {
+      error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' },
+      ok: false,
+      status: 401,
+    }
+  }
+
+  if (!token) {
+    return {
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để xóa địa chỉ.' },
+      ok: false,
+      status: 401,
+    }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/addresses/${encodeURIComponent(id)}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      method: 'DELETE',
+    })
+
+    let body = null
+    try {
+      body = await response.json()
+    } catch {
+      // Non-JSON response
+    }
+
+    if (!response.ok) {
+      return {
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể xóa địa chỉ.' },
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    return {
+      error: null,
+      id: body?.data?.id ?? id,
+      ok: true,
+      status: response.status,
+    }
+  } catch {
+    return {
+      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' },
+      ok: false,
+      status: 0,
+    }
+  }
+}
+
+export async function setDefaultUserAddress({ getToken, id, fetchImpl = globalThis.fetch } = {}) {
+  if (typeof getToken !== 'function') {
+    throw new TypeError('A token getter function is required.')
+  }
+
+  let token = null
+  try {
+    token = await getToken()
+  } catch {
+    return {
+      address: null,
+      error: { code: 'TOKEN_ERROR', message: 'Không thể xác thực phiên làm việc.' },
+      ok: false,
+      status: 401,
+    }
+  }
+
+  if (!token) {
+    return {
+      address: null,
+      error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để đặt địa chỉ mặc định.' },
+      ok: false,
+      status: 401,
+    }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/addresses/${encodeURIComponent(id)}/default`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      method: 'POST',
+    })
+
+    let body = null
+    try {
+      body = await response.json()
+    } catch {
+      // Non-JSON response
+    }
+
+    if (!response.ok) {
+      return {
+        address: null,
+        error: body?.error ?? { code: 'API_ERROR', message: 'Không thể đặt địa chỉ mặc định.' },
+        ok: false,
+        status: response.status,
+      }
+    }
+
+    return {
+      address: body?.data?.address ?? null,
+      error: null,
+      ok: true,
+      status: response.status,
+    }
+  } catch {
+    return {
+      address: null,
+      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' },
+      ok: false,
+      status: 0,
+    }
+  }
+}
+
 export {
   fetchProductDetail,
   fetchShopCatalogue,

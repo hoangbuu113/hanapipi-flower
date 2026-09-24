@@ -33,6 +33,7 @@ const EXPECTED_TABLES = new Set([
   'product_variants',
   'products',
   'schema_versions',
+  'user_addresses',
   'users',
   'wishlist_items',
   'wishlists',
@@ -95,6 +96,12 @@ const QUERY_PLANS = [
       WHERE entity_type = ? AND entity_id = ? AND action = ?
       ORDER BY created_at_utc DESC LIMIT 50
     `,
+  },
+  {
+    index: 'idx_user_addresses_user_created',
+    label: 'customer saved addresses',
+    parameters: ['user-id'],
+    sql: 'SELECT id FROM user_addresses WHERE user_id = ? AND deleted_at_utc IS NULL ORDER BY created_at_utc DESC',
   },
 ]
 
