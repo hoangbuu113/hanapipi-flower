@@ -36,13 +36,13 @@ function AuthPage({ mode }) {
     }
   }, [user, navigate])
 
-  useEffect(() => {
+  function handleAuthModeChange() {
     // A mode switch starts a fresh auth challenge without discarding form input.
     setVerificationFlow(null)
     setCode('')
     setErrors({})
     setIsSubmitting(false)
-  }, [mode])
+  }
 
   function update(key, value) {
     setForm((current) => ({ ...current, [key]: value }))
@@ -286,7 +286,7 @@ function AuthPage({ mode }) {
           </form>
           <p className="auth-switch">
             {isRegister ? 'Đã có tài khoản?' : 'Chưa có tài khoản?'}{' '}
-            <Link to={isRegister ? '/login' : '/register'}>
+            <Link to={isRegister ? '/login' : '/register'} onClick={handleAuthModeChange}>
               {isRegister ? 'Đăng nhập' : 'Đăng ký'}
             </Link>
           </p>

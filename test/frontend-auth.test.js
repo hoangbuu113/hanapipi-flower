@@ -317,9 +317,11 @@ test('13. switching login verification to register hides stale sign-in verificat
   assert.equal(getVerificationContent(activeFlow, 'customer@example.com'), null)
 })
 
-test('14. AuthPage resets challenge state on mode changes without clearing credentials', () => {
+test('14. AuthPage resets challenge state from the mode-change handler without clearing credentials', () => {
   const authPageSource = fs.readFileSync(new URL('../src/pages/AuthPage.jsx', import.meta.url), 'utf8')
 
-  assert.match(authPageSource, /setVerificationFlow\(null\)[\s\S]*setCode\(''\)[\s\S]*setErrors\(\{\}\)[\s\S]*setIsSubmitting\(false\)[\s\S]*\}, \[mode\]\)/u)
+  assert.match(authPageSource, /function handleAuthModeChange\(\) \{[\s\S]*setVerificationFlow\(null\)[\s\S]*setCode\(''\)[\s\S]*setErrors\(\{\}\)[\s\S]*setIsSubmitting\(false\)[\s\S]*\}/u)
+  assert.match(authPageSource, /<Link[^>]*onClick=\{handleAuthModeChange\}[^>]*>/u)
+  assert.doesNotMatch(authPageSource, /\}, \[mode\]\)/u)
   assert.doesNotMatch(authPageSource, /setForm\(\{\s*email:\s*''/u)
 })
