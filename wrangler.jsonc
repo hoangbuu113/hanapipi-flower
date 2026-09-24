@@ -8,8 +8,10 @@
   },
   "vars": {
     "API_V1_ENABLED": "false",
-    "API_ALLOWED_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173,https://hanapipi-flower.hoangbuu1010.chatgpt.site",
-    "CLERK_AUTHORIZED_PARTIES": "http://localhost:5173,http://127.0.0.1:5173,https://hanapipi-flower.hoangbuu1010.chatgpt.site"
+    "API_ALLOWED_ORIGINS": "https://hanapipi-flower-prod.hutstudio.workers.dev",
+    "CLERK_AUTHORIZED_PARTIES": "https://hanapipi-flower-prod.hutstudio.workers.dev",
+    "MOMO_ACCOUNT_NAME": "Trần Huỳnh Bảo Hân",
+    "MOMO_PHONE_NUMBER": "0335618019"
   },
   "d1_databases": [
     {
