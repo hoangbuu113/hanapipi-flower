@@ -3,6 +3,8 @@ import {
   decryptFulfilmentValue,
   encryptFulfilmentValue,
 } from '../fulfilmentCrypto.js'
+import { HCMC_CITY } from '../../data/hcmcAdministrativeUnits.js'
+import { validateHcmcDeliveryAddress } from '../../utils/hcmcDelivery.js'
 
 const PHONE_PATTERN = /^(0\d{9}|\+84\d{9})$/u
 
@@ -51,34 +53,16 @@ function normalizeAddressPayload(payload, { isPartial = false } = {}) {
     }
   }
 
-  let city = undefined
-  if (payload.city !== undefined || payload.address?.city !== undefined || !isPartial) {
-    const val = payload.city ?? payload.address?.city
-    if (typeof val !== 'string' || !val.trim() || val.trim().length > 120) {
-      fieldErrors.city = 'Vui lòng chọn tỉnh hoặc thành phố.'
-    } else {
-      city = val.trim()
-    }
-  }
-
-  let district = undefined
-  if (payload.district !== undefined || payload.address?.district !== undefined || !isPartial) {
-    const val = payload.district ?? payload.address?.district
-    if (typeof val !== 'string' || !val.trim() || val.trim().length > 120) {
-      fieldErrors.district = 'Vui lòng chọn quận hoặc huyện.'
-    } else {
-      district = val.trim()
-    }
-  }
-
-  let ward = undefined
-  if (payload.ward !== undefined || payload.address?.ward !== undefined || !isPartial) {
-    const val = payload.ward ?? payload.address?.ward
-    if (typeof val !== 'string' || !val.trim() || val.trim().length > 120) {
-      fieldErrors.ward = 'Vui lòng chọn phường hoặc xã.'
-    } else {
-      ward = val.trim()
-    }
+  const city = payload.city ?? payload.address?.city ?? (isPartial ? undefined : HCMC_CITY)
+  const unitCode = payload.unitCode ?? payload.address?.unitCode
+  const ward = payload.ward ?? payload.address?.ward
+  const location = !isPartial
+    ? validateHcmcDeliveryAddress({ city, detail: payload.detail ?? payload.address?.detail, unitCode, ward })
+    : null
+  if (location) {
+    Object.assign(fieldErrors, location.errors)
+  } else if (city !== undefined && city !== HCMC_CITY) {
+    fieldErrors.city = 'Hanapipi hiện chỉ giao hoa tại TP. Hồ Chí Minh.'
   }
 
   let detail = undefined
@@ -107,19 +91,20 @@ function normalizeAddressPayload(payload, { isPartial = false } = {}) {
   const isDefault = payload.isDefault !== undefined ? Boolean(payload.isDefault) : undefined
 
   if (Object.keys(fieldErrors).length > 0) {
-    throw addressError(400, 'INVALID_PAYLOAD', 'Dữ liệu địa chỉ chưa hợp lệ.', fieldErrors)
+    throw addressError(400, location?.rejectionCode || 'INVALID_PAYLOAD', 'Dữ liệu địa chỉ chưa hợp lệ.', fieldErrors)
   }
 
   return {
     city,
     deliveryNote,
     detail,
-    district,
+    district: '',
     isDefault,
     label,
     recipientName,
     recipientPhone,
-    ward,
+    unitCode,
+    ward: location?.unit?.name ?? ward,
   }
 }
 
@@ -130,6 +115,7 @@ function formatAddressDto(row, decryptedRecipient, decryptedAddress) {
       deliveryNote: decryptedAddress.deliveryNote || '',
       detail: decryptedAddress.detail,
       district: decryptedAddress.district,
+      unitCode: decryptedAddress.unitCode || null,
       ward: decryptedAddress.ward,
     },
     city: decryptedAddress.city,
@@ -137,6 +123,7 @@ function formatAddressDto(row, decryptedRecipient, decryptedAddress) {
     deliveryNote: decryptedAddress.deliveryNote || '',
     detail: decryptedAddress.detail,
     district: decryptedAddress.district,
+    unitCode: decryptedAddress.unitCode || null,
     id: row.id,
     isDefault: Boolean(row.is_default),
     label: row.label || '',
@@ -219,6 +206,7 @@ export function createAddressRepository(db, options = {}) {
       deliveryNote: normalized.deliveryNote || '',
       detail: normalized.detail,
       district: normalized.district,
+      unitCode: normalized.unitCode,
       ward: normalized.ward,
     }, fulfilmentKey)
 
@@ -270,6 +258,7 @@ export function createAddressRepository(db, options = {}) {
         deliveryNote: normalized.deliveryNote || '',
         detail: normalized.detail,
         district: normalized.district,
+        unitCode: normalized.unitCode,
         ward: normalized.ward,
       },
       city: normalized.city,
@@ -277,6 +266,7 @@ export function createAddressRepository(db, options = {}) {
       deliveryNote: normalized.deliveryNote || '',
       detail: normalized.detail,
       district: normalized.district,
+      unitCode: normalized.unitCode,
       id: addressId,
       isDefault: makeDefault,
       label: normalized.label,
@@ -313,9 +303,13 @@ export function createAddressRepository(db, options = {}) {
     const updatedRecipientName = normalized.recipientName ?? currentRecipient.name
     const updatedRecipientPhone = normalized.recipientPhone ?? currentRecipient.phone
     const updatedCity = normalized.city ?? currentAddress.city
-    const updatedDistrict = normalized.district ?? currentAddress.district
-    const updatedWard = normalized.ward ?? currentAddress.ward
+    const updatedUnitCode = normalized.unitCode ?? currentAddress.unitCode
+    const updatedWard = normalized.ward ?? (normalized.unitCode ? undefined : currentAddress.ward)
     const updatedDetail = normalized.detail ?? currentAddress.detail
+    const location = validateHcmcDeliveryAddress({ city: updatedCity, detail: updatedDetail, unitCode: updatedUnitCode, ward: updatedWard })
+    if (Object.keys(location.errors).length) {
+      throw addressError(400, location.rejectionCode || 'INVALID_PAYLOAD', 'Vui lòng chọn đơn vị hành chính hiện hành trước khi lưu.', location.errors)
+    }
     const updatedDeliveryNote = payload.deliveryNote !== undefined || payload.note !== undefined
       ? normalized.deliveryNote
       : (currentAddress.deliveryNote || '')
@@ -332,8 +326,9 @@ export function createAddressRepository(db, options = {}) {
       city: updatedCity,
       deliveryNote: updatedDeliveryNote,
       detail: updatedDetail,
-      district: updatedDistrict,
-      ward: updatedWard,
+      district: '',
+      unitCode: updatedUnitCode,
+      ward: location.unit.name,
     }, fulfilmentKey)
 
     if (setAsDefault) {
@@ -376,14 +371,16 @@ export function createAddressRepository(db, options = {}) {
         city: updatedCity,
         deliveryNote: updatedDeliveryNote,
         detail: updatedDetail,
-        district: updatedDistrict,
-        ward: updatedWard,
+        district: '',
+        unitCode: updatedUnitCode,
+        ward: location.unit.name,
       },
       city: updatedCity,
       createdAtUtc: row.created_at_utc,
       deliveryNote: updatedDeliveryNote,
       detail: updatedDetail,
-      district: updatedDistrict,
+      district: '',
+      unitCode: updatedUnitCode,
       id: addressId,
       isDefault: setAsDefault ? true : Boolean(row.is_default),
       label: updatedLabel,
@@ -394,7 +391,7 @@ export function createAddressRepository(db, options = {}) {
       recipientName: updatedRecipientName,
       recipientPhone: updatedRecipientPhone,
       updatedAtUtc: now,
-      ward: updatedWard,
+      ward: location.unit.name,
     }
   }
 
@@ -495,4 +492,3 @@ export function createAddressRepository(db, options = {}) {
     updateForUser,
   }
 }
-

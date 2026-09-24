@@ -4,6 +4,8 @@ import {
   encryptFulfilmentValue,
 } from '../fulfilmentCrypto.js'
 import { generateVietQrPayload } from '../vietqr.js'
+import { HCMC_CITY } from '../../data/hcmcAdministrativeUnits.js'
+import { validateHcmcDeliveryAddress } from '../../utils/hcmcDelivery.js'
 
 const MAX_ITEMS = 20
 const MAX_QUANTITY = 20
@@ -102,8 +104,26 @@ function normalizePayload(payload) {
   const address = {
     city: cleanString(payload.address?.city, { field: 'address.city', max: 120 }),
     detail: cleanString(payload.address?.detail, { field: 'address.detail', max: 240 }),
-    district: cleanString(payload.address?.district, { field: 'address.district', max: 120 }),
-    ward: cleanString(payload.address?.ward, { field: 'address.ward', max: 120 }),
+    ...(payload.address?.deliveryNote !== undefined ? {
+      deliveryNote: cleanString(payload.address.deliveryNote, { field: 'address.deliveryNote', max: 240, required: false }),
+    } : {}),
+    district: cleanString(payload.address?.district, { field: 'address.district', max: 120, required: false }),
+    unitCode: cleanString(payload.address?.unitCode, { field: 'address.unitCode', max: 5, required: false }),
+    ward: cleanString(payload.address?.ward, { field: 'address.ward', max: 120, required: false }),
+  }
+  const savedAddressId = cleanString(payload.savedAddressId, { field: 'savedAddressId', max: 100, required: false })
+  if (address.city !== HCMC_CITY || (!address.unitCode && !savedAddressId)) {
+    throw orderError(400, 'INVALID_DELIVERY_ADDRESS', 'Vui lòng chọn địa chỉ giao hoa tại TP. Hồ Chí Minh.', {
+      'address.unitCode': 'Vui lòng chọn phường, xã hoặc đặc khu hợp lệ.',
+    })
+  }
+  if (address.unitCode) {
+    const location = validateHcmcDeliveryAddress(address)
+    if (Object.keys(location.errors).length) {
+      throw orderError(400, location.rejectionCode || 'INVALID_DELIVERY_ADDRESS', 'Địa chỉ giao hoa chưa hợp lệ.', location.errors)
+    }
+    address.ward = location.unit.name
+    address.district = ''
   }
   const date = cleanString(payload.delivery?.date, { field: 'delivery.date', max: 10 })
   if (!isCalendarDate(date)) {
@@ -125,7 +145,7 @@ function normalizePayload(payload) {
     throw orderError(400, 'INVALID_PAYMENT_METHOD', 'Phương thức thanh toán không hợp lệ.')
   }
 
-  return { address, buyer, delivery, gifting, items, paymentMethod, recipient }
+  return { address, buyer, delivery, gifting, items, paymentMethod, recipient, savedAddressId }
 }
 
 function createId(prefix) {
@@ -241,6 +261,32 @@ export function createOrderRepository(db, options = {}) {
     async createForUser(user, payload) {
       if (!user?.id) throw new TypeError('Authenticated D1 user is required.')
       const orderInput = normalizePayload(payload)
+      if (!orderInput.address.unitCode) {
+        const saved = await db.prepare(`
+          SELECT address_ciphertext FROM user_addresses
+          WHERE id = ? AND user_id = ? AND deleted_at_utc IS NULL
+        `).bind(orderInput.savedAddressId, user.id).first()
+        if (!saved) throw orderError(400, 'INVALID_DELIVERY_ADDRESS', 'Địa chỉ đã lưu không còn khả dụng.')
+        const legacy = await decryptFulfilmentValue(saved.address_ciphertext, options.fulfilmentKey)
+        if (legacy.city !== HCMC_CITY || legacy.ward !== orderInput.address.ward || legacy.district !== orderInput.address.district) {
+          throw orderError(400, 'INVALID_DELIVERY_ADDRESS', 'Địa chỉ đã lưu không thuộc khu vực giao hoa hợp lệ.')
+        }
+        if (legacy.unitCode) {
+          const location = validateHcmcDeliveryAddress({ ...legacy, detail: orderInput.address.detail })
+          if (location.rejectionCode) {
+            throw orderError(400, location.rejectionCode, 'Địa chỉ đã lưu không thuộc khu vực giao hoa hiện hành.', { 'address.unitCode': location.errors.unitCode })
+          }
+          if (Object.keys(location.errors).length) {
+            throw orderError(400, 'INVALID_DELIVERY_ADDRESS', 'Địa chỉ đã lưu chưa khớp với đơn vị hành chính hiện hành.', location.errors)
+          }
+          orderInput.address.unitCode = location.unit.code
+          orderInput.address.ward = location.unit.name
+          orderInput.address.district = ''
+        }
+        if (!legacy.unitCode) delete orderInput.address.unitCode
+        // A verified legacy address may be used without guessing a current unit code.
+        // The order retains its own immutable detail snapshot, even if the saved address changes later.
+      }
       const allGiftAddOns = await catalogue.getGiftAddOns({ activeOnly: false })
       const giftAddOnById = new Map(allGiftAddOns.map((gift) => [gift.id, gift]))
       const canonicalItems = []

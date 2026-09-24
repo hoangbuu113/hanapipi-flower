@@ -11,6 +11,7 @@ import {
   updateUserAddress,
 } from '../src/services/apiClient.js'
 import { createWorker } from '../src/worker.js'
+import { encryptFulfilmentValue } from '../src/server/fulfilmentCrypto.js'
 
 class D1Wrapper {
   constructor(db) {
@@ -161,8 +162,9 @@ test('2. customer creates first address: automatically isDefault = true', async 
       recipientName: 'Nguyễn Văn A',
       recipientPhone: '0901234567',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: '123 Đồng Khởi',
       deliveryNote: 'Gọi trước khi giao',
       isDefault: false, // Even if false, first address becomes default
@@ -175,8 +177,9 @@ test('2. customer creates first address: automatically isDefault = true', async 
   assert.equal(body.data.address.recipientName, 'Nguyễn Văn A')
   assert.equal(body.data.address.recipientPhone, '0901234567')
   assert.equal(body.data.address.city, 'TP. Hồ Chí Minh')
-  assert.equal(body.data.address.district, 'Quận 1')
-  assert.equal(body.data.address.ward, 'Phường Bến Nghé')
+  assert.equal(body.data.address.district, '')
+  assert.equal(body.data.address.ward, 'Phường Sài Gòn')
+  assert.equal(body.data.address.unitCode, '26740')
   assert.equal(body.data.address.detail, '123 Đồng Khởi')
   assert.equal(body.data.address.deliveryNote, 'Gọi trước khi giao')
   assert.equal(body.data.address.isDefault, true)
@@ -194,8 +197,9 @@ test('3. customer creates second address without isDefault: isDefault is false',
       recipientName: 'Nguyễn Văn A',
       recipientPhone: '0901234567',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: '123 Đồng Khởi',
     }),
   })
@@ -208,8 +212,9 @@ test('3. customer creates second address without isDefault: isDefault is false',
       recipientName: 'Nguyễn Văn A (Cty)',
       recipientPhone: '0909876543',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 3',
-      ward: 'Phường Võ Thị Sáu',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: '456 Lê Văn Sỹ',
     }),
   })
@@ -242,8 +247,9 @@ test('4. customer creates third address with isDefault: true atomically unsets p
       recipientName: 'Nguyễn Văn A',
       recipientPhone: '0901234567',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: '123 Đồng Khởi',
     }),
   })
@@ -256,8 +262,9 @@ test('4. customer creates third address with isDefault: true atomically unsets p
       recipientName: 'Nguyễn Văn A',
       recipientPhone: '0909876543',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 3',
-      ward: 'Phường Võ Thị Sáu',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: '456 Lê Văn Sỹ',
     }),
   })
@@ -269,9 +276,10 @@ test('4. customer creates third address with isDefault: true atomically unsets p
       label: 'Nhà bố mẹ',
       recipientName: 'Nguyễn Văn B',
       recipientPhone: '0912345678',
-      city: 'Hà Nội',
-      district: 'Quận Cầu Giấy',
-      ward: 'Phường Dịch Vọng',
+      city: 'TP. Hồ Chí Minh',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: '789 Xuân Thủy',
       isDefault: true,
     }),
@@ -304,8 +312,9 @@ test('5. PII is encrypted at rest in D1 table user_addresses', async () => {
       recipientName: 'Tuyệt Mật Người Nhận',
       recipientPhone: '0988776655',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Tòa nhà Landmark 81 tầng 50 phòng 5001',
       deliveryNote: 'Giao tận tay',
     }),
@@ -336,9 +345,10 @@ test('6. raw ciphertext is never exposed over the API response', async () => {
       label: 'Nhà',
       recipientName: 'Minh Anh',
       recipientPhone: '0901112233',
-      city: 'Hà Nội',
-      district: 'Quận Cầu Giấy',
-      ward: 'Phường Dịch Vọng',
+      city: 'TP. Hồ Chí Minh',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Số 10 Duy Tân',
     }),
   })
@@ -361,9 +371,10 @@ test('7. missing ORDER_FULFILMENT_KEY returns 503 FULFILMENT_ENCRYPTION_UNAVAILA
       label: 'Nhà',
       recipientName: 'Minh Anh',
       recipientPhone: '0901112233',
-      city: 'Hà Nội',
-      district: 'Quận Cầu Giấy',
-      ward: 'Phường Dịch Vọng',
+      city: 'TP. Hồ Chí Minh',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Số 10 Duy Tân',
     }),
   })
@@ -385,8 +396,9 @@ test('8. customer isolation: User B cannot view, update, delete, or default User
       recipientName: 'User A',
       recipientPhone: '0901111111',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Đường A',
     }),
   })
@@ -440,8 +452,9 @@ test('9. customer updates an address (PATCH)', async () => {
       recipientName: 'Minh Anh',
       recipientPhone: '0901112233',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Số 10 Nguyễn Huệ',
     }),
   })
@@ -481,8 +494,9 @@ test('10. setting default address via POST /api/v1/addresses/:id/default', async
       recipientName: 'Minh Anh',
       recipientPhone: '0901112233',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Địa chỉ 1',
     }),
   })
@@ -497,8 +511,9 @@ test('10. setting default address via POST /api/v1/addresses/:id/default', async
       recipientName: 'Minh Anh',
       recipientPhone: '0901112233',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 3',
-      ward: 'Phường Võ Thị Sáu',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Địa chỉ 2',
     }),
   })
@@ -539,8 +554,9 @@ test('11. deleting default address automatically promotes the newest remaining a
       recipientName: 'Minh Anh',
       recipientPhone: '0901112233',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Địa chỉ 1',
     }),
   })
@@ -555,8 +571,9 @@ test('11. deleting default address automatically promotes the newest remaining a
       recipientName: 'Minh Anh',
       recipientPhone: '0901112233',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 3',
-      ward: 'Phường Võ Thị Sáu',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Địa chỉ 2',
     }),
   })
@@ -590,8 +607,9 @@ test('12. input validation: invalid phone number and missing fields rejected wit
       recipientName: 'Minh Anh',
       recipientPhone: '12345',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Số 10 Nguyễn Huệ',
     }),
   })
@@ -610,9 +628,7 @@ test('12. input validation: invalid phone number and missing fields rejected wit
   const bodyFields = await resMissingFields.json()
   assert.ok(bodyFields.error.fieldErrors.recipientName)
   assert.ok(bodyFields.error.fieldErrors.recipientPhone)
-  assert.ok(bodyFields.error.fieldErrors.city)
-  assert.ok(bodyFields.error.fieldErrors.district)
-  assert.ok(bodyFields.error.fieldErrors.ward)
+  assert.ok(bodyFields.error.fieldErrors.unitCode)
   assert.ok(bodyFields.error.fieldErrors.detail)
 })
 
@@ -631,8 +647,9 @@ test('13. apiClient address helpers function correctly with auth tokens', async 
       recipientName: 'Hoa Tươi Hanapipi',
       recipientPhone: '0901234567',
       city: 'TP. Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      unitCode: '26740',
+      district: '',
+      ward: 'Phường Sài Gòn',
       detail: 'Tầng 3, 12 Hoa Cúc',
     },
   })
@@ -682,3 +699,66 @@ test('13. apiClient address helpers function correctly with auth tokens', async 
   assert.equal(finalList.addresses.length, 0)
 })
 
+test('new saved addresses reject forged code/name and non-HCMC city', async () => {
+  const { d1 } = createSeededDatabase()
+  const { fetch: testFetch } = createTestWorker(d1)
+  const base = { recipientName: 'Minh Anh', recipientPhone: '0901112233', city: 'TP. Hồ Chí Minh', unitCode: '26740', detail: '18 Nguyễn Huệ' }
+  for (const [address, field] of [
+    [{ ...base, city: 'Hà Nội' }, 'city'],
+    [{ ...base, unitCode: '99999' }, 'unitCode'],
+    [{ ...base, ward: 'Phường Bến Nghé' }, 'ward'],
+    [{ ...base, detail: '' }, 'detail'],
+  ]) {
+    const response = await testFetch('/api/v1/addresses', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer customer-a-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify(address),
+    })
+    assert.equal(response.status, 400)
+    assert.ok((await response.json()).error.fieldErrors[field])
+  }
+})
+
+test('saved-address API distinguishes invalid codes from current units outside delivery scope', async () => {
+  const { d1 } = createSeededDatabase()
+  const { fetch: testFetch } = createTestWorker(d1)
+  const base = { recipientName: 'Minh Anh', recipientPhone: '0901112233', city: 'TP. Hồ Chí Minh', detail: '18 Nguyễn Huệ' }
+
+  for (const [unitCode, expectedCode] of [['99999', 'INVALID_ADMIN_UNIT'], ['25942', 'NOT_SERVICEABLE'], ['26506', 'NOT_SERVICEABLE']]) {
+    const response = await testFetch('/api/v1/addresses', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer customer-a-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...base, unitCode }),
+    })
+    assert.equal(response.status, 400)
+    assert.equal((await response.json()).error.code, expectedCode)
+  }
+})
+
+test('legacy saved address remains readable but needs an explicit current unit on edit', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  const { fetch: testFetch } = createTestWorker(d1)
+  await testFetch('/api/v1/addresses', { headers: { Authorization: 'Bearer customer-a-token' } })
+  const userId = sqlite.prepare("SELECT id FROM users WHERE provider_subject = 'user_cust_a_subject'").get().id
+  const recipientCiphertext = await encryptFulfilmentValue({ name: 'Minh Anh', phone: '0901112233' }, testFulfilmentKey)
+  const addressCiphertext = await encryptFulfilmentValue({ city: 'TP. Hồ Chí Minh', district: 'Quận 1', ward: 'Phường Bến Nghé', detail: '18 Nguyễn Huệ' }, testFulfilmentKey)
+  const now = new Date().toISOString()
+  sqlite.prepare(`INSERT INTO user_addresses (id, user_id, label, recipient_ciphertext, address_ciphertext, key_version, is_default, created_at_utc, updated_at_utc)
+    VALUES (?, ?, ?, ?, ?, 'aes-gcm-v1', 1, ?, ?)`).run('addr_legacy', userId, 'Địa chỉ cũ', recipientCiphertext, addressCiphertext, now, now)
+  const list = await testFetch('/api/v1/addresses', { headers: { Authorization: 'Bearer customer-a-token' } })
+  const legacy = (await list.json()).data.items[0]
+  assert.equal(legacy.district, 'Quận 1')
+  assert.equal(legacy.ward, 'Phường Bến Nghé')
+  assert.equal(legacy.unitCode, null)
+
+  const headers = { Authorization: 'Bearer customer-a-token', 'Content-Type': 'application/json' }
+  const rejected = await testFetch('/api/v1/addresses/addr_legacy', { method: 'PATCH', headers, body: JSON.stringify({ detail: '20 Nguyễn Huệ' }) })
+  assert.equal(rejected.status, 400)
+  assert.ok((await rejected.json()).error.fieldErrors.unitCode)
+  const converted = await testFetch('/api/v1/addresses/addr_legacy', { method: 'PATCH', headers, body: JSON.stringify({ detail: '20 Nguyễn Huệ', unitCode: '26740' }) })
+  assert.equal(converted.status, 200)
+  const current = (await converted.json()).data.address
+  assert.equal(current.unitCode, '26740')
+  assert.equal(current.ward, 'Phường Sài Gòn')
+  assert.equal(current.district, '')
+})

@@ -6,3 +6,7 @@
 .checkout-payment-method{display:grid;gap:6px;padding:16px 18px;border:1px solid var(--border);background:var(--surface)}
 .checkout-payment-method__title{font-size:14px;font-weight:700;color:var(--text-primary)}
 .checkout-payment-method__note{margin:0;color:var(--text-muted);font-size:13px;line-height:1.6}
+.checkout-city{margin:0;padding:8px 0;font-size:14px;line-height:1.6}
+.checkout-city strong,.checkout-legacy-location strong{font-size:12px}
+.checkout-legacy-location{min-width:0;font-size:13px}
+.checkout-legacy-location p{margin:6px 0;overflow-wrap:anywhere}

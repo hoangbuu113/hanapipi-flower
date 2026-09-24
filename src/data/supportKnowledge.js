@@ -46,7 +46,7 @@ export const deliveryKnowledge = {
     },
     {
       title: 'Phạm vi và chi phí',
-      text: 'Website hiện chưa tính phí giao động theo khu vực. Mọi thông tin giao nhận cần được xác nhận trước khi đơn hoa được xử lý thực tế.',
+      text: 'Hanapipi hiện nhận địa chỉ tại TP. Hồ Chí Minh. Website chưa tính phí giao động theo khu vực; thông tin giao nhận sẽ được xác nhận trước khi đơn hoa được xử lý thực tế.',
     },
   ],
 }

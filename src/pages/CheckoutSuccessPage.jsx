@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import qrcode from 'qrcode-generator'
 import Container from '../components/Container'
@@ -77,6 +77,7 @@ function CopyButton({ label = 'Sao chép', text }) {
 }
 
 function CheckoutSuccessPage() {
+  const location = useLocation()
   const { orderCode } = useParams()
   const { getToken, isLoaded: isAuthLoaded, isSignedIn } = useAuth()
   const { orders, user } = useAccount()
@@ -176,6 +177,7 @@ function CheckoutSuccessPage() {
           <p className="success-page__code">
             Mã đơn: <strong>{orderId}</strong>
           </p>
+          {location.state?.addressSaveFailed && <p className="success-page__notice" role="status">Đơn hoa đã được ghi nhận, nhưng chưa lưu được địa chỉ cho lần sau. Bạn có thể thử lại trong Tài khoản.</p>}
           <dl>
             {order.receiver?.name && (
               <div>

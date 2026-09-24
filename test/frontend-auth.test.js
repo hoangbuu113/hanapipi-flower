@@ -368,11 +368,17 @@ test('17. login completion and error reset do not depend on saved-address state'
   const loginHandler = authSource.split('async function handleLogin(event) {')[1]
     ?.split('async function handleRegister(event) {')[0] ?? ''
   const authLoadingLine = accountSource.split('\n').find((line) => line.includes('const isAuthLoading =')) ?? ''
+  const addressRequestIndex = accountSource.lastIndexOf('fetchUserAddresses({ getToken })')
+  const addressEffectStart = accountSource.lastIndexOf('  useEffect(() => {', addressRequestIndex)
+  const addressEffect = accountSource.slice(addressEffectStart)
+  const logoutHandler = accountSource.split('const logout = useCallback(async () => {')[1]
+    ?.split('}, [signOut])')[0] ?? ''
 
   assert.match(loginHandler, /await setSignInActive\(\{ session: result\.createdSessionId \}\)\s*navigate\('\/account'\)/u)
   assert.match(loginHandler, /catch \(err\) \{[\s\S]*setErrors\(\{ form:/u)
   assert.match(loginHandler, /finally \{\s*setIsSubmitting\(false\)/u)
   assert.doesNotMatch(loginHandler, /[Aa]ddress|refreshAddresses/u)
   assert.doesNotMatch(authLoadingLine, /[Aa]ddress/u)
-  assert.match(accountSource, /if \(!isAuthLoaded \|\| !isSignedIn\) \{\s*return undefined[\s\S]*?fetchUserAddresses/u)
+  assert.match(addressEffect, /if \(!isAuthLoaded \|\| !isUserLoaded \|\| !isSignedIn \|\| !canonicalUser\?\.id\) \{[\s\S]*?return undefined\s*\}[\s\S]*?fetchUserAddresses/u)
+  assert.match(logoutHandler, /addressesRequestVersion\.current\s*\+=\s*1[\s\S]*setAddresses\(\[\]\)[\s\S]*setAddressesOwnerId\(null\)/u)
 })

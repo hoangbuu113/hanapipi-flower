@@ -1,0 +1,8 @@
+.administrative-unit-selector{position:relative;min-width:0}
+.administrative-unit-selector label{display:block;margin-bottom:7px;font-size:12px;font-weight:700}
+.administrative-unit-selector input{width:100%;min-height:48px;border:1px solid var(--border);border-radius:0;padding:10px 12px;background:transparent;color:var(--text-primary);font:inherit;font-size:14px}
+.administrative-unit-selector__results{position:absolute;z-index:20;top:100%;left:0;right:0;max-height:260px;overflow-y:auto;border:1px solid var(--border);background:var(--surface,#fff);box-shadow:0 8px 20px rgb(0 0 0 / .1)}
+.administrative-unit-selector__results button{display:block;width:100%;min-height:44px;border:0;border-bottom:1px solid var(--border);padding:10px 12px;background:transparent;color:var(--text-primary);font:inherit;font-size:13px;text-align:left;cursor:pointer}
+.administrative-unit-selector__results button:hover,.administrative-unit-selector__results button.is-active{background:var(--surface-muted,#f3f0e9)}
+.administrative-unit-selector__results p{margin:0;padding:14px;color:var(--text-muted);font-size:13px}
+.administrative-unit-selector__error{display:block;margin-top:7px;color:var(--error);font-size:11px;font-style:normal;font-weight:700}

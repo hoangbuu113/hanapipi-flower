@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Container from '../components/Container'
+import AdministrativeUnitSelector from '../components/AdministrativeUnitSelector'
+import { HCMC_CITY } from '../data/hcmcAdministrativeUnits.js'
+import { getHcmcDeliveryUnit } from '../data/hcmcDeliveryUnits.js'
 import { useAccount } from '../context/accountStore'
 import { formatCurrency } from '../utils/formatCurrency'
 import {
@@ -357,7 +360,7 @@ function AddressBookSection() {
                     {addr.recipientName || addr.recipient?.name} · {addr.recipientPhone || addr.recipient?.phone}
                   </p>
                   <p>
-                    {addr.detail || addr.address?.detail}, {addr.ward || addr.address?.ward}, {addr.district || addr.address?.district}, {addr.city || addr.address?.city}
+                    {[addr.detail || addr.address?.detail, addr.ward || addr.address?.ward, addr.district || addr.address?.district, addr.city || addr.address?.city].filter(Boolean).join(', ')}
                   </p>
                   {(addr.deliveryNote || addr.address?.deliveryNote) && (
                     <p>
@@ -419,15 +422,13 @@ function AddressBookSection() {
 
 function AddressForm({ initial, isFirst, onCancel, onSubmit }) {
   const [form, setForm] = useState(() => ({
-    city: initial?.city ?? initial?.address?.city ?? '',
     deliveryNote: initial?.deliveryNote ?? initial?.address?.deliveryNote ?? '',
     detail: initial?.detail ?? initial?.address?.detail ?? '',
-    district: initial?.district ?? initial?.address?.district ?? '',
     isDefault: initial?.isDefault ?? (isFirst ? true : false),
     label: initial?.label ?? '',
     recipientName: initial?.recipientName ?? initial?.recipient?.name ?? '',
     recipientPhone: initial?.recipientPhone ?? initial?.recipient?.phone ?? '',
-    ward: initial?.ward ?? initial?.address?.ward ?? '',
+    unitCode: initial?.unitCode ?? initial?.address?.unitCode ?? '',
   }))
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -446,9 +447,7 @@ function AddressForm({ initial, isFirst, onCancel, onSubmit }) {
     if (!phonePattern.test(form.recipientPhone.replaceAll(/\s/gu, ''))) {
       next.recipientPhone = 'Vui lòng nhập số điện thoại Việt Nam hợp lệ.'
     }
-    if (!form.city) next.city = 'Vui lòng chọn tỉnh hoặc thành phố.'
-    if (!form.district) next.district = 'Vui lòng chọn quận hoặc huyện.'
-    if (!form.ward) next.ward = 'Vui lòng chọn phường hoặc xã.'
+    if (!getHcmcDeliveryUnit(form.unitCode)) next.unitCode = 'Vui lòng chọn phường, xã hoặc đặc khu trong khu vực giao hoa.'
     if (!form.detail.trim()) next.detail = 'Vui lòng nhập địa chỉ cụ thể.'
     setErrors(next)
     return Object.keys(next).length === 0
@@ -462,7 +461,7 @@ function AddressForm({ initial, isFirst, onCancel, onSubmit }) {
     setIsSubmitting(true)
     setServerError(null)
     try {
-      const res = await onSubmit(form)
+      const res = await onSubmit({ ...form, city: HCMC_CITY })
       if (!res.ok) {
         if (res.error?.fieldErrors) {
           setErrors(res.error.fieldErrors)
@@ -511,42 +510,11 @@ function AddressForm({ initial, isFirst, onCancel, onSubmit }) {
           </label>
         </div>
 
-        <div className="account-address-form__row account-address-form__row--three">
-          <label>
-            <span>Tỉnh / thành phố *</span>
-            <select value={form.city} onChange={(e) => update('city', e.target.value)}>
-              <option value="">Chọn khu vực</option>
-              <option>TP. Hồ Chí Minh</option>
-              <option>Hà Nội</option>
-              <option>Đà Nẵng</option>
-            </select>
-            {errors.city && <em className="auth-error">{errors.city}</em>}
-          </label>
-          <label>
-            <span>Quận / huyện *</span>
-            <select value={form.district} onChange={(e) => update('district', e.target.value)}>
-              <option value="">Chọn quận / huyện</option>
-              <option>Quận 1</option>
-              <option>Quận 3</option>
-              <option>Quận Bình Thạnh</option>
-              <option>Quận Cầu Giấy</option>
-              <option>Quận Hải Châu</option>
-            </select>
-            {errors.district && <em className="auth-error">{errors.district}</em>}
-          </label>
-          <label>
-            <span>Phường / xã *</span>
-            <select value={form.ward} onChange={(e) => update('ward', e.target.value)}>
-              <option value="">Chọn phường / xã</option>
-              <option>Phường Bến Nghé</option>
-              <option>Phường Võ Thị Sáu</option>
-              <option>Phường 25</option>
-              <option>Phường Dịch Vọng</option>
-              <option>Phường Thạch Thang</option>
-            </select>
-            {errors.ward && <em className="auth-error">{errors.ward}</em>}
-          </label>
+        <div className="account-address-form__row">
+          <p className="account-address-form__city"><strong>Thành phố giao hoa</strong><br />{HCMC_CITY}</p>
+          <AdministrativeUnitSelector error={errors.unitCode} onChange={(code) => update('unitCode', code)} value={form.unitCode} />
         </div>
+        {initial && !initial.unitCode && <p className="account-address-form__legacy">Địa chỉ cũ vẫn dùng được. Khi chỉnh sửa, vui lòng chọn phường/xã hiện hành để cập nhật.</p>}
 
         <label>
           <span>Địa chỉ cụ thể *</span>

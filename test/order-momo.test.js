@@ -141,9 +141,10 @@ function createValidOrderPayload(paymentMethod = 'momo') {
   return {
     address: {
       city: 'TP. Hồ Chí Minh',
+      unitCode: '26740',
       detail: '123 Nguyễn Huệ, Phường Bến Nghé',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      district: '',
+      ward: 'Phường Sài Gòn',
     },
     buyer: {
       email: 'buyer@example.com',

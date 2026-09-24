@@ -148,9 +148,10 @@ async function createTestOrder(testWorker, token = 'customer-token') {
     body: JSON.stringify({
       address: {
         city: 'TP. Hồ Chí Minh',
+        unitCode: '26740',
         detail: 'Không giao',
-        district: 'Quận 1',
-        ward: 'Phường Bến Nghé',
+        district: '',
+        ward: 'Phường Sài Gòn',
       },
       buyer: {
         email: 'customer@example.com',
@@ -264,8 +265,8 @@ test('Admin Orders Fulfilment Workflow - Comprehensive Suite', async (t) => {
     assert.equal(order.buyer.phone, '0901234567')
     assert.equal(order.recipient.name, 'Nguyễn')
     assert.equal(order.address.detail, 'Không giao')
-    assert.equal(order.address.ward, 'Phường Bến Nghé')
-    assert.equal(order.address.district, 'Quận 1')
+    assert.equal(order.address.ward, 'Phường Sài Gòn')
+    assert.equal(order.address.district, '')
     assert.equal(order.address.city, 'TP. Hồ Chí Minh')
     assert.equal(order.gifting.message, 'Không xử lý giao')
     assert.ok(Array.isArray(order.items))

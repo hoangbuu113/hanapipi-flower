@@ -19,6 +19,9 @@
 .account-address-form form{display:grid;gap:16px}
 .account-address-form__row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .account-address-form__row--three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.account-address-form__city{margin:0;padding:8px 0;font-size:14px;line-height:1.6}
+.account-address-form__city strong{font-size:12px}
+.account-address-form__legacy{margin:0;color:var(--text-muted);font-size:13px;line-height:1.5}
 .account-address-form__actions{display:flex;gap:14px;margin-top:10px}
 .account-address-form label{display:grid;gap:7px}
 .account-address-form label span{font-size:12px;font-weight:700}

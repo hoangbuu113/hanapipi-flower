@@ -119,9 +119,11 @@ function createOrderPayload(overrides = {}) {
   return {
     address: {
       city: 'TP. Hồ Chí Minh',
+
+      unitCode: '26740',
       detail: '123 Nguyễn Huệ, Phường Bến Nghé',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      district: '',
+      ward: 'Phường Sài Gòn',
     },
     buyer: {
       email: 'buyer@example.com',
@@ -485,7 +487,7 @@ test('15. GET /api/v1/orders (list) does NOT decrypt or expose recipient, buyer,
 
   await worker.fetch('/api/v1/orders', {
     body: JSON.stringify(createOrderPayload({
-      address: { city: 'SecretCity', detail: 'SecretDetailAddress123', district: 'SecretDistrict', ward: 'SecretWard' },
+      address: { city: 'TP. Hồ Chí Minh', unitCode: '26740', detail: 'SecretDetailAddress123', district: '', ward: 'Phường Sài Gòn' },
       buyer: { email: 'secretbuyer@private.com', name: 'SecretBuyerName', phone: '0901112233' },
       gifting: { message: 'SuperSecretGiftMessage456', senderName: 'SecretSender' },
       recipient: { name: 'SecretRecipientName', phone: '0904445566' },
@@ -512,7 +514,7 @@ test('16. GET /api/v1/orders/:idOrCode (detail) decrypts recipient, buyer, addre
 
   const createRes = await worker.fetch('/api/v1/orders', {
     body: JSON.stringify(createOrderPayload({
-      address: { city: 'TP. Hồ Chí Minh', detail: '456 Lê Duẩn', district: 'Quận 1', ward: 'Phường Bến Nghé' },
+      address: { city: 'TP. Hồ Chí Minh', unitCode: '26740', detail: '456 Lê Duẩn', district: '', ward: 'Phường Sài Gòn' },
       buyer: { email: 'buyer@example.com', name: 'Nguyễn Văn A', phone: '0901234567' },
       gifting: { anonymous: false, message: 'Yêu thương đong đầy!', senderName: 'Minh Anh' },
       recipient: { name: 'Trần Thị B', phone: '0909876543' },

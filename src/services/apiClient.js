@@ -291,6 +291,7 @@ export async function fetchUserAddresses({ getToken, fetchImpl = globalThis.fetc
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      signal: AbortSignal.timeout(10000),
     })
 
     let body = null
@@ -315,10 +316,12 @@ export async function fetchUserAddresses({ getToken, fetchImpl = globalThis.fetc
       ok: true,
       status: response.status,
     }
-  } catch {
+  } catch (error) {
     return {
       addresses: [],
-      error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' },
+      error: error?.name === 'TimeoutError' || error?.name === 'AbortError'
+        ? { code: 'ADDRESS_TIMEOUT', message: 'Tải sổ địa chỉ quá lâu. Vui lòng thử lại.' }
+        : { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' },
       ok: false,
       status: 0,
     }
@@ -594,4 +597,3 @@ export {
   fetchShopCatalogue,
   normalizeCatalogueProduct,
 } from './catalogueClient.js'
-

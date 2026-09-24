@@ -47,6 +47,7 @@ function createSeededDatabase() {
   const m5 = fs.readFileSync(path.resolve('drizzle/0005_add_order_delivering_status.sql'), 'utf8')
   const m6 = fs.readFileSync(path.resolve('drizzle/0006_add_momo_payment_method.sql'), 'utf8')
   const m7 = fs.readFileSync(path.resolve('drizzle/0007_tighten_order_payment_methods.sql'), 'utf8')
+  const m8 = fs.readFileSync(path.resolve('drizzle/0008_create_user_addresses.sql'), 'utf8')
   db.exec(m1)
   db.exec(m2)
   db.exec(m3)
@@ -54,6 +55,7 @@ function createSeededDatabase() {
   db.exec(m5)
   db.exec(m6)
   db.exec(m7)
+  db.exec(m8)
   return { d1: new D1Wrapper(db), sqlite: db }
 }
 
@@ -113,9 +115,10 @@ function createValidOrderPayload() {
   return {
     address: {
       city: 'TP. Hồ Chí Minh',
+      unitCode: '26740',
       detail: '123 Nguyễn Huệ, Phường Bến Nghé',
-      district: 'Quận 1',
-      ward: 'Phường Bến Nghé',
+      district: '',
+      ward: 'Phường Sài Gòn',
     },
     buyer: {
       email: 'buyer@example.com',
@@ -623,9 +626,10 @@ test('21-24. plaintext PII not stored in D1; ciphertext decrypts cleanly', async
   payload.recipient = { name: 'Nguyễn', phone: '0909998877' }
   payload.address = {
     city: 'TP. Hồ Chí Minh',
+    unitCode: '26740',
     detail: 'Không giao',
-    district: 'Quận 1',
-    ward: 'Phường Bến Nghé',
+    district: '',
+    ward: 'Phường Sài Gòn',
   }
   payload.gifting.message = 'Không xử lý giao'
 
@@ -644,7 +648,7 @@ test('21-24. plaintext PII not stored in D1; ciphertext decrypts cleanly', async
 
   // 1. Verify plaintext is NOT present in any column
   const rowValues = Object.values(orderRow).filter(Boolean).map(String)
-  for (const text of ['Nguyễn', 'Không giao', 'Phường Bến Nghé', 'Quận 1', 'TP. Hồ Chí Minh', 'Không xử lý giao']) {
+  for (const text of ['Nguyễn', 'Không giao', 'Phường Sài Gòn', 'TP. Hồ Chí Minh', 'Không xử lý giao']) {
     for (const val of rowValues) {
       assert.ok(!val.includes(text), `Plaintext "${text}" must not be stored in D1 column!`)
     }
@@ -667,9 +671,10 @@ test('21-24. plaintext PII not stored in D1; ciphertext decrypts cleanly', async
   const decryptedAddress = await decryptFulfilmentValue(orderRow.delivery_address_ciphertext, testFulfilmentKey)
   assert.deepEqual(decryptedAddress, {
     city: 'TP. Hồ Chí Minh',
+    unitCode: '26740',
     detail: 'Không giao',
-    district: 'Quận 1',
-    ward: 'Phường Bến Nghé',
+    district: '',
+    ward: 'Phường Sài Gòn',
   })
 
   const decryptedGifting = await decryptFulfilmentValue(orderRow.gift_message_ciphertext, testFulfilmentKey)
@@ -977,4 +982,94 @@ test('38. Checkout preserves a rate-limit error for non-destructive retry', asyn
     checkoutSource.indexOf('if (!result.ok)') < checkoutSource.indexOf('clearCart()'),
     'Cart must only clear after a successful server response.',
   )
+})
+
+test('new checkout distinguishes invalid administrative codes from unsupported delivery territories', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedCustomerUser(sqlite)
+  const worker = createTestWorker(d1)
+  for (const [address, expectedCode] of [
+    [{ ...createValidOrderPayload().address, city: 'Hà Nội' }, 'INVALID_DELIVERY_ADDRESS'],
+    [{ ...createValidOrderPayload().address, unitCode: '99999' }, 'INVALID_ADMIN_UNIT'],
+    [{ ...createValidOrderPayload().address, ward: 'Phường Bến Nghé' }, 'INVALID_DELIVERY_ADDRESS'],
+    [{ ...createValidOrderPayload().address, unitCode: '25942', ward: 'Phường Dĩ An' }, 'NOT_SERVICEABLE'],
+    [{ ...createValidOrderPayload().address, unitCode: '26506', ward: 'Phường Vũng Tàu' }, 'NOT_SERVICEABLE'],
+  ]) {
+    const response = await worker.fetch('/api/v1/orders', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer customer-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...createValidOrderPayload(), address }),
+    })
+    assert.equal(response.status, 400)
+    assert.equal((await response.json()).error.code, expectedCode)
+  }
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM orders').get().count, 0)
+})
+
+test('saved current codes outside delivery scope are rejected by the order server', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedCustomerUser(sqlite)
+  const worker = createTestWorker(d1)
+  const address = { city: 'TP. Hồ Chí Minh', district: '', ward: 'Phường Dĩ An', unitCode: '25942', detail: '18 Nguyễn Huệ' }
+  const addressCiphertext = await encryptFulfilmentValue(address, testFulfilmentKey)
+  const recipientCiphertext = await encryptFulfilmentValue({ name: 'Minh Anh', phone: '0901112233' }, testFulfilmentKey)
+  const now = new Date().toISOString()
+  sqlite.prepare(`INSERT INTO user_addresses (id, user_id, label, recipient_ciphertext, address_ciphertext, key_version, is_default, created_at_utc, updated_at_utc)
+    VALUES (?, ?, ?, ?, ?, 'aes-gcm-v1', 1, ?, ?)`).run('addr_dian', 'usr_cust_001', 'Ngoài khu vực giao', recipientCiphertext, addressCiphertext, now, now)
+
+  const payload = createValidOrderPayload()
+  payload.address = { ...address }
+  delete payload.address.unitCode
+  payload.savedAddressId = 'addr_dian'
+  const response = await worker.fetch('/api/v1/orders', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer customer-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  assert.equal(response.status, 400)
+  assert.equal((await response.json()).error.code, 'NOT_SERVICEABLE')
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM orders').get().count, 0)
+})
+
+test('verified legacy saved HCMC address remains selectable and order snapshot is immutable', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedCustomerUser(sqlite)
+  const worker = createTestWorker(d1)
+  const legacy = { city: 'TP. Hồ Chí Minh', district: 'Quận 1', ward: 'Phường Bến Nghé', detail: '18 Nguyễn Huệ' }
+  const addressCiphertext = await encryptFulfilmentValue(legacy, testFulfilmentKey)
+  const recipientCiphertext = await encryptFulfilmentValue({ name: 'Minh Anh', phone: '0901112233' }, testFulfilmentKey)
+  const now = new Date().toISOString()
+  sqlite.prepare(`INSERT INTO user_addresses (id, user_id, label, recipient_ciphertext, address_ciphertext, key_version, is_default, created_at_utc, updated_at_utc)
+    VALUES (?, ?, ?, ?, ?, 'aes-gcm-v1', 1, ?, ?)`).run('addr_legacy', 'usr_cust_001', 'Địa chỉ cũ', recipientCiphertext, addressCiphertext, now, now)
+  const payload = createValidOrderPayload()
+  payload.address = { ...legacy, detail: '20 Nguyễn Huệ' }
+  payload.savedAddressId = 'addr_legacy'
+  const created = await worker.fetch('/api/v1/orders', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer customer-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  assert.equal(created.status, 201)
+  const order = (await created.json()).data.order
+  const otherUser = await worker.fetch('/api/v1/orders', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer admin-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  assert.equal(otherUser.status, 400)
+  assert.equal((await otherUser.json()).error.code, 'INVALID_DELIVERY_ADDRESS')
+  sqlite.prepare("UPDATE user_addresses SET deleted_at_utc = ? WHERE id = 'addr_legacy'").run(new Date().toISOString())
+  const detail = await worker.fetch(`/api/v1/orders/${order.code}`, { headers: { Authorization: 'Bearer customer-token' } })
+  assert.equal(detail.status, 200)
+  assert.deepEqual((await detail.json()).data.order.address, payload.address)
+})
+
+test('Checkout renders one recipient/location flow and no obsolete province or district selectors', () => {
+  const source = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
+  assert.equal(source.match(/title="Thông tin người nhận"/gu)?.length, 1)
+  assert.equal(source.match(/title="Địa chỉ giao hoa"/gu)?.length, 1)
+  assert.ok(source.includes('<AdministrativeUnitSelector'))
+  assert.ok(!source.includes('<option>Hà Nội</option>'))
+  assert.ok(!source.includes('label="Quận / huyện"'))
 })

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth, useUser } from '@clerk/clerk-react'
 import { AccountContext } from './accountStore'
+import { getAuthenticatedAddressOwner, getVisibleSavedAddresses } from '../utils/accountAddressLifecycle.js'
 import {
   createUserAddress,
   deleteUserAddress,
@@ -17,18 +18,22 @@ export function AccountProvider({ children }) {
   const [ordersError, setOrdersError] = useState(null)
 
   const [addresses, setAddresses] = useState([])
+  const [addressesOwnerId, setAddressesOwnerId] = useState(null)
   const [isAddressesLoading, setIsAddressesLoading] = useState(false)
   const [addressesError, setAddressesError] = useState(null)
+  const addressesRequestVersion = useRef(0)
 
   const { isLoaded: isAuthLoaded, isSignedIn, getToken, signOut } = useAuth()
   const { isLoaded: isUserLoaded, user: clerkUser } = useUser()
 
   const [d1User, setD1User] = useState(null)
+  const [d1UserOwner, setD1UserOwner] = useState(null)
   const [authError, setAuthError] = useState(null)
 
   const hydrateUser = useCallback(async () => {
-    if (!isSignedIn) {
+    if (!isSignedIn || !isAuthLoaded || !isUserLoaded || !clerkUser?.id) {
       setD1User(null)
+      setD1UserOwner(null)
       setAuthError(null)
       return
     }
@@ -37,6 +42,7 @@ export function AccountProvider({ children }) {
       const result = await fetchCurrentUser({ getToken })
       if (result.ok && result.user) {
         setD1User(result.user)
+        setD1UserOwner(clerkUser.id)
         setAuthError(null)
       } else {
         setD1User(null)
@@ -46,12 +52,12 @@ export function AccountProvider({ children }) {
       setD1User(null)
       setAuthError({ code: 'HYDRATION_FAILED', message: 'Không thể kết nối đến máy chủ.' })
     }
-  }, [isSignedIn, getToken])
+  }, [isSignedIn, isAuthLoaded, isUserLoaded, clerkUser, getToken])
 
   useEffect(() => {
     let isCancelled = false
 
-    if (!isAuthLoaded || !isUserLoaded || !isSignedIn) {
+    if (!isAuthLoaded || !isUserLoaded || !isSignedIn || !clerkUser?.id) {
       return undefined
     }
 
@@ -60,6 +66,7 @@ export function AccountProvider({ children }) {
         if (isCancelled) return
         if (result.ok && result.user) {
           setD1User(result.user)
+          setD1UserOwner(clerkUser.id)
           setAuthError(null)
         } else {
           setD1User(null)
@@ -75,7 +82,21 @@ export function AccountProvider({ children }) {
     return () => {
       isCancelled = true
     }
-  }, [isAuthLoaded, isUserLoaded, isSignedIn, getToken])
+  }, [isAuthLoaded, isUserLoaded, isSignedIn, clerkUser, getToken])
+
+  const authenticatedAddressOwnerId = getAuthenticatedAddressOwner({
+    isAuthLoaded,
+    isUserLoaded,
+    isSignedIn,
+    clerkSubject: clerkUser?.id,
+    canonicalSubject: d1UserOwner,
+    canonicalUserId: d1User?.id,
+  })
+  const canonicalUser = authenticatedAddressOwnerId ? d1User : null
+  const visibleAddresses = useMemo(
+    () => getVisibleSavedAddresses(authenticatedAddressOwnerId, addressesOwnerId, addresses),
+    [authenticatedAddressOwnerId, addressesOwnerId, addresses],
+  )
 
   const refreshOrders = useCallback(async () => {
     if (!isSignedIn) {
@@ -138,18 +159,23 @@ export function AccountProvider({ children }) {
   }, [isAuthLoaded, isSignedIn, getToken])
 
   const refreshAddresses = useCallback(async () => {
-    if (!isSignedIn) {
+    if (!isAuthLoaded || !isUserLoaded || !isSignedIn || !canonicalUser?.id) {
+      addressesRequestVersion.current += 1
       setAddresses([])
+      setAddressesOwnerId(null)
       setAddressesError(null)
       setIsAddressesLoading(false)
       return
     }
 
+    const requestVersion = ++addressesRequestVersion.current
     setIsAddressesLoading(true)
     try {
       const result = await fetchUserAddresses({ getToken })
+      if (requestVersion !== addressesRequestVersion.current) return
       if (result.ok) {
         setAddresses(result.addresses)
+        setAddressesOwnerId(canonicalUser.id)
         setAddressesError(null)
       } else if (result.status === 404 && result.error?.code === 'API_NOT_FOUND') {
         setAddressesError(null)
@@ -157,24 +183,40 @@ export function AccountProvider({ children }) {
         setAddressesError(result.error)
       }
     } catch {
-      setAddressesError({ code: 'HYDRATION_FAILED', message: 'Không thể kết nối đến máy chủ.' })
+      if (requestVersion === addressesRequestVersion.current) setAddressesError({ code: 'HYDRATION_FAILED', message: 'Không thể kết nối đến máy chủ.' })
     } finally {
-      setIsAddressesLoading(false)
+      if (requestVersion === addressesRequestVersion.current) setIsAddressesLoading(false)
     }
-  }, [isSignedIn, getToken])
+  }, [isAuthLoaded, isUserLoaded, isSignedIn, canonicalUser, getToken])
 
   useEffect(() => {
     let isCancelled = false
 
-    if (!isAuthLoaded || !isSignedIn) {
+    if (!isAuthLoaded || !isUserLoaded || !isSignedIn || !canonicalUser?.id) {
+      addressesRequestVersion.current += 1
+      // Discard any previous account's address cache before a new identity hydrates.
+      // oxlint-disable-next-line react/set-state-in-effect
+      setAddresses([])
+      // oxlint-disable-next-line react/set-state-in-effect
+      setAddressesOwnerId(null)
+      // oxlint-disable-next-line react/set-state-in-effect
+      setIsAddressesLoading(false)
+      // oxlint-disable-next-line react/set-state-in-effect
+      setAddressesError(null)
       return undefined
     }
 
+    // oxlint-disable-next-line react/set-state-in-effect
+    setIsAddressesLoading(true)
+    // oxlint-disable-next-line react/set-state-in-effect
+    setAddressesError(null)
+    const requestVersion = ++addressesRequestVersion.current
     fetchUserAddresses({ getToken })
       .then((result) => {
-        if (isCancelled) return
+        if (isCancelled || requestVersion !== addressesRequestVersion.current) return
         if (result.ok) {
           setAddresses(result.addresses)
+          setAddressesOwnerId(canonicalUser.id)
           setAddressesError(null)
         } else if (result.status === 404 && result.error?.code === 'API_NOT_FOUND') {
           setAddressesError(null)
@@ -183,11 +225,11 @@ export function AccountProvider({ children }) {
         }
       })
       .catch(() => {
-        if (isCancelled) return
+        if (isCancelled || requestVersion !== addressesRequestVersion.current) return
         setAddressesError({ code: 'HYDRATION_FAILED', message: 'Không thể kết nối đến máy chủ.' })
       })
       .finally(() => {
-        if (!isCancelled) {
+        if (!isCancelled && requestVersion === addressesRequestVersion.current) {
           setIsAddressesLoading(false)
         }
       })
@@ -195,33 +237,37 @@ export function AccountProvider({ children }) {
     return () => {
       isCancelled = true
     }
-  }, [isAuthLoaded, isSignedIn, getToken])
+  }, [isAuthLoaded, isUserLoaded, isSignedIn, canonicalUser, getToken])
 
   const user = useMemo(() => {
     if (!isSignedIn || !clerkUser) return null
     return {
-      id: d1User?.id ?? clerkUser.id,
+      id: canonicalUser?.id ?? clerkUser.id,
       clerkId: clerkUser.id,
-      displayName: d1User?.displayName || clerkUser.fullName || clerkUser.firstName || '',
-      name: clerkUser.fullName || clerkUser.firstName || d1User?.displayName || '',
+      displayName: canonicalUser?.displayName || clerkUser.fullName || clerkUser.firstName || '',
+      name: clerkUser.fullName || clerkUser.firstName || canonicalUser?.displayName || '',
       email: clerkUser.primaryEmailAddress?.emailAddress || '',
       phone: clerkUser.primaryPhoneNumber?.phoneNumber || '',
-      role: d1User?.role ?? 'customer',
-      status: d1User?.status ?? 'active',
-      locale: d1User?.locale ?? 'vi-VN',
+      role: canonicalUser?.role ?? 'customer',
+      status: canonicalUser?.status ?? 'active',
+      locale: canonicalUser?.locale ?? 'vi-VN',
     }
-  }, [isSignedIn, clerkUser, d1User])
+  }, [isSignedIn, clerkUser, canonicalUser])
 
-  const isAuthLoading = !isAuthLoaded || !isUserLoaded || (Boolean(isSignedIn) && !d1User && !authError)
+  const isAuthLoading = !isAuthLoaded || !isUserLoaded || (Boolean(isSignedIn) && !canonicalUser && !authError)
 
   const logout = useCallback(async () => {
     try {
       await signOut()
     } finally {
+      addressesRequestVersion.current += 1
       setD1User(null)
+      setD1UserOwner(null)
       setAuthError(null)
       setOrders([])
       setAddresses([])
+      setAddressesOwnerId(null)
+      setIsAddressesLoading(false)
       setAddressesError(null)
       try {
         window.localStorage.removeItem('hanapipi-flower:orders')
@@ -290,8 +336,8 @@ export function AccountProvider({ children }) {
     ordersError,
     refreshOrders,
     retryOrders: refreshOrders,
-    addresses,
-    savedAddresses: addresses,
+    addresses: visibleAddresses,
+    savedAddresses: visibleAddresses,
     isAddressesLoading,
     addressesError,
     refreshAddresses,
@@ -304,7 +350,7 @@ export function AccountProvider({ children }) {
     makeAddressDefault,
     setDefaultAddress: makeAddressDefault,
     user,
-    d1User,
+    d1User: canonicalUser,
     isAuthLoading,
     authError,
     retryAuth: hydrateUser,
@@ -316,7 +362,7 @@ export function AccountProvider({ children }) {
     isOrdersLoading,
     ordersError,
     refreshOrders,
-    addresses,
+    visibleAddresses,
     isAddressesLoading,
     addressesError,
     refreshAddresses,
@@ -325,7 +371,7 @@ export function AccountProvider({ children }) {
     removeAddress,
     makeAddressDefault,
     user,
-    d1User,
+    canonicalUser,
     isAuthLoading,
     authError,
     hydrateUser,

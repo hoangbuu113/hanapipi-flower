@@ -1,17 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import Container from '../components/Container'
 import CheckoutSummary from '../components/CheckoutSummary'
 import DeliverySelector from '../components/DeliverySelector'
+import AdministrativeUnitSelector from '../components/AdministrativeUnitSelector'
+import { HCMC_CITY, getHcmcAdministrativeUnit } from '../data/hcmcAdministrativeUnits.js'
 import { useAccount } from '../context/accountStore'
 import { useCommerce } from '../context/commerceStore'
 import { createOrder } from '../services/apiClient'
 import { cartHasGiftAddOn, cartSubtotal } from '../utils/cart'
 import { isDeliveryDateAvailable } from '../utils/delivery'
+import { validateHcmcDeliveryAddress } from '../utils/hcmcDelivery.js'
+import { getCheckoutSavedAddressFields } from '../utils/savedAddress.js'
 import './CheckoutPage.css'
 
-const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer: false, receiverName: '', receiverPhone: '', city: '', district: '', ward: '', address: '', message: '', cardSenderName: '', anonymousSender: false }
+const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer: false, receiverName: '', receiverPhone: '', city: HCMC_CITY, district: '', ward: '', unitCode: '', address: '', deliveryNote: '', message: '', cardSenderName: '', anonymousSender: false }
 
 function CheckoutPage() {
   const { addAddress, addOrder, savedAddresses, user } = useAccount()
@@ -20,10 +24,12 @@ function CheckoutPage() {
   const [form, setForm] = useState(() => ({ ...initialForm, buyerName: user?.name ?? '', buyerPhone: user?.phone ?? '', email: user?.email ?? '' }))
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [saveForLater, setSaveForLater] = useState(false)
+  const [isManualAddress, setIsManualAddress] = useState(false)
   const [newAddressLabel, setNewAddressLabel] = useState('')
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
+  const accountSubjectRef = useRef(user?.clerkId ?? null)
   const navigate = useNavigate()
   const subtotal = cartSubtotal(cartItems)
   const includesHandwrittenCard = cartHasGiftAddOn(cartItems, 'handwritten-card')
@@ -34,22 +40,28 @@ function CheckoutPage() {
   }
 
   useEffect(() => {
+    const subject = user?.clerkId ?? null
+    if (subject === accountSubjectRef.current) return
+    accountSubjectRef.current = subject
+    // A checkout kept open across logout/account switch must not retain another user's address.
+    // oxlint-disable-next-line react/set-state-in-effect
+    setSelectedAddressId(null)
+    // oxlint-disable-next-line react/set-state-in-effect
+    setSaveForLater(false)
+    // oxlint-disable-next-line react/set-state-in-effect
+    setIsManualAddress(false)
+    // oxlint-disable-next-line react/set-state-in-effect
+    setForm({ ...initialForm, buyerName: user?.name ?? '', buyerPhone: user?.phone ?? '', email: user?.email ?? '' })
+  }, [user])
+
+  useEffect(() => {
     if (isSignedIn && savedAddresses && savedAddresses.length > 0 && selectedAddressId === null) {
       const defaultAddr = savedAddresses.find((a) => a.isDefault) || savedAddresses[0]
       if (defaultAddr) {
         // oxlint-disable-next-line react/set-state-in-effect
         setSelectedAddressId(defaultAddr.id)
         // oxlint-disable-next-line react/set-state-in-effect
-        setForm((current) => ({
-          ...current,
-          address: defaultAddr.detail || defaultAddr.address?.detail || current.address,
-          city: defaultAddr.city || defaultAddr.address?.city || current.city,
-          district: defaultAddr.district || defaultAddr.address?.district || current.district,
-          receiverIsBuyer: false,
-          receiverName: defaultAddr.recipientName || defaultAddr.recipient?.name || current.receiverName,
-          receiverPhone: defaultAddr.recipientPhone || defaultAddr.recipient?.phone || current.receiverPhone,
-          ward: defaultAddr.ward || defaultAddr.address?.ward || current.ward,
-        }))
+        setForm((current) => ({ ...current, ...getCheckoutSavedAddressFields(defaultAddr) }))
       }
     }
   }, [isSignedIn, savedAddresses, selectedAddressId])
@@ -57,28 +69,27 @@ function CheckoutPage() {
   function handleSelectSavedAddress(id) {
     setSelectedAddressId(id)
     if (id === 'new') {
-      setSaveForLater(true)
+      setSaveForLater(false)
+      setIsManualAddress(true)
+      setForm((current) => ({ ...current, address: '', city: HCMC_CITY, district: '', ward: '', unitCode: '', deliveryNote: '' }))
       return
     }
     const chosen = savedAddresses.find((a) => a.id === id)
     if (chosen) {
       setSaveForLater(false)
-      setForm((current) => ({
-        ...current,
-        address: chosen.detail || chosen.address?.detail || '',
-        city: chosen.city || chosen.address?.city || '',
-        district: chosen.district || chosen.address?.district || '',
-        receiverIsBuyer: false,
-        receiverName: chosen.recipientName || chosen.recipient?.name || '',
-        receiverPhone: chosen.recipientPhone || chosen.recipient?.phone || '',
-        ward: chosen.ward || chosen.address?.ward || '',
-      }))
+      setIsManualAddress(false)
+      setForm((current) => ({ ...current, ...getCheckoutSavedAddressFields(chosen) }))
       setErrors({})
     }
   }
 
   function update(key, value) {
-    setForm((current) => ({ ...current, [key]: value }))
+    setForm((current) => key === 'unitCode'
+      ? { ...current, unitCode: value, ward: getHcmcAdministrativeUnit(value)?.name || '', district: '' }
+      : { ...current, [key]: value })
+    if (['address', 'unitCode', 'ward', 'deliveryNote', 'receiverName', 'receiverPhone'].includes(key) && selectedAddressId && selectedAddressId !== 'new') {
+      setIsManualAddress(true)
+    }
     setErrors((current) => ({ ...current, [key]: '' }))
     setSubmitError(null)
   }
@@ -90,10 +101,15 @@ function CheckoutPage() {
     if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) next.email = 'Vui lòng kiểm tra lại địa chỉ email.'
     if (!form.receiverIsBuyer && !form.receiverName.trim()) next.receiverName = 'Vui lòng nhập tên người nhận.'
     if (!form.receiverIsBuyer && !phonePattern.test(form.receiverPhone.replace(/\s/g, ''))) next.receiverPhone = 'Vui lòng nhập số điện thoại người nhận hợp lệ.'
-    if (!form.city) next.city = 'Vui lòng chọn tỉnh hoặc thành phố.'
-    if (!form.district) next.district = 'Vui lòng chọn quận hoặc huyện.'
-    if (!form.ward) next.ward = 'Vui lòng chọn phường hoặc xã.'
-    if (!form.address.trim()) next.address = 'Vui lòng nhập địa chỉ giao hoa cụ thể.'
+    if (!form.unitCode && selectedAddressId && selectedAddressId !== 'new' && form.ward) {
+      if (form.city !== HCMC_CITY) next.city = 'Hanapipi hiện chỉ giao hoa tại TP. Hồ Chí Minh.'
+      if (!form.address.trim()) next.address = 'Vui lòng nhập địa chỉ giao hoa cụ thể.'
+    } else {
+      const location = validateHcmcDeliveryAddress({ city: form.city, detail: form.address, unitCode: form.unitCode, ward: form.unitCode ? undefined : form.ward })
+      if (location.errors.city) next.city = location.errors.city
+      if (location.errors.unitCode) next.unitCode = location.errors.unitCode
+      if (location.errors.detail) next.address = location.errors.detail
+    }
     if (!deliveryDraft.date || !deliveryDraft.slot) next.delivery = 'Vui lòng chọn ngày và khung giờ giao hoa.'
     else if (!isDeliveryDateAvailable(deliveryDraft.date)) next.delivery = 'Ngày giao đã qua thời hạn nhận đơn. Vui lòng chọn ngày khác.'
     setErrors(next)
@@ -124,7 +140,9 @@ function CheckoutPage() {
         city: form.city,
         detail: form.address.trim(),
         district: form.district,
+        unitCode: form.unitCode || undefined,
         ward: form.ward,
+        deliveryNote: form.deliveryNote.trim(),
       },
       buyer: {
         email: form.email.trim(),
@@ -151,6 +169,7 @@ function CheckoutPage() {
         wrappingId: item.wrappingId || item.wrapping?.id || item.wrapping?.code || null,
       })),
       paymentMethod: 'momo',
+      savedAddressId: selectedAddressId && selectedAddressId !== 'new' ? selectedAddressId : undefined,
     }
 
     setIsSubmitting(true)
@@ -158,7 +177,7 @@ function CheckoutPage() {
       const result = await createOrder({ getToken, order: payload })
       if (!result.ok) {
         if (result.error?.fieldErrors) {
-          setErrors((current) => ({ ...current, ...result.error.fieldErrors }))
+          setErrors((current) => ({ ...current, ...result.error.fieldErrors, unitCode: result.error.fieldErrors.unitCode || result.error.fieldErrors['address.unitCode'] || current.unitCode, address: result.error.fieldErrors.detail || result.error.fieldErrors['address.detail'] || current.address }))
         }
         setSubmitError(result.error?.message || 'Không thể tạo đơn hoa. Vui lòng thử lại.')
         return
@@ -167,24 +186,28 @@ function CheckoutPage() {
       addOrder(result.order)
       clearCart()
 
+      let addressSaveFailed = false
       if (saveForLater && isSignedIn) {
         try {
-          await addAddress({
+          const saved = await addAddress({
             city: form.city,
-            deliveryNote: '',
+            deliveryNote: form.deliveryNote.trim(),
             detail: form.address.trim(),
             district: form.district,
+            unitCode: form.unitCode,
             label: newAddressLabel.trim() || 'Địa chỉ mới',
             recipientName: receiver.name,
             recipientPhone: receiver.phone,
-            ward: form.ward,
           })
+          addressSaveFailed = !saved.ok
         } catch {
-          // Non-blocking address persistence failure
+          addressSaveFailed = true
         }
       }
 
-      navigate(`/checkout/success/${result.order.code || result.order.orderCode}`)
+      navigate(`/checkout/success/${result.order.code || result.order.orderCode}`, {
+        state: addressSaveFailed ? { addressSaveFailed: true } : undefined,
+      })
     } catch {
       setSubmitError('Đã xảy ra lỗi khi gửi thông tin đơn hoa. Vui lòng thử lại.')
     } finally {
@@ -196,8 +219,6 @@ function CheckoutPage() {
 
   return <main className="checkout-page"><Container><header className="checkout-page__intro"><p className="eyebrow">Gửi hoa thật chỉn chu</p><h1>Thông tin giao hoa và thanh toán</h1></header><div className="checkout-page__layout"><form className="checkout-form" noValidate onSubmit={submit}>
     <FormSection title="Thông tin người đặt"><Field error={errors.buyerName} label="Họ và tên" required><input autoComplete="name" value={form.buyerName} onChange={(event) => update('buyerName', event.target.value)} /></Field><div className="checkout-fields"><Field error={errors.buyerPhone} label="Số điện thoại" required><input autoComplete="tel" inputMode="tel" placeholder="090 123 4567" value={form.buyerPhone} onChange={(event) => update('buyerPhone', event.target.value)} /></Field><Field error={errors.email} label="Email"><input autoComplete="email" type="email" value={form.email} onChange={(event) => update('email', event.target.value)} /></Field></div></FormSection>
-    <FormSection title="Thông tin người nhận"><label className="checkout-checkbox"><input checked={form.receiverIsBuyer} type="checkbox" onChange={(event) => update('receiverIsBuyer', event.target.checked)} /> Người nhận là tôi</label>{!form.receiverIsBuyer && <div className="checkout-fields"><Field error={errors.receiverName} label="Họ và tên" required><input value={form.receiverName} onChange={(event) => update('receiverName', event.target.value)} /></Field><Field error={errors.receiverPhone} label="Số điện thoại" required><input inputMode="tel" value={form.receiverPhone} onChange={(event) => update('receiverPhone', event.target.value)} /></Field></div>}</FormSection>
-    <FormSection title="Địa chỉ giao hoa"><div className="checkout-fields checkout-fields--three"><Field error={errors.city} label="Tỉnh / thành phố" required><select value={form.city} onChange={(event) => update('city', event.target.value)}><option value="">Chọn khu vực</option><option>TP. Hồ Chí Minh</option><option>Hà Nội</option><option>Đà Nẵng</option></select></Field><Field error={errors.district} label="Quận / huyện" required><select value={form.district} onChange={(event) => update('district', event.target.value)}><option value="">Chọn quận / huyện</option><option>Quận 1</option><option>Quận 3</option><option>Quận Bình Thạnh</option><option>Quận Cầu Giấy</option><option>Quận Hải Châu</option></select></Field><Field error={errors.ward} label="Phường / xã" required><select value={form.ward} onChange={(event) => update('ward', event.target.value)}><option value="">Chọn phường / xã</option><option>Phường Bến Nghé</option><option>Phường Võ Thị Sáu</option><option>Phường 25</option><option>Phường Dịch Vọng</option><option>Phường Thạch Thang</option></select></Field></div><Field error={errors.address} label="Địa chỉ cụ thể" required><input placeholder="Ví dụ: 18 Nguyễn Huệ, tòa nhà A" value={form.address} onChange={(event) => update('address', event.target.value)} /></Field></FormSection>
     <FormSection title="Thông tin người nhận">
       {isSignedIn && savedAddresses && savedAddresses.length > 0 && (
         <Field label="Chọn từ sổ địa chỉ đã lưu">
@@ -209,12 +230,13 @@ function CheckoutPage() {
               const rName = addr.recipientName || addr.recipient?.name
               const dDetail = addr.detail || addr.address?.detail
               const dDistrict = addr.district || addr.address?.district
+              const dUnit = addr.ward || addr.address?.ward
               const dCity = addr.city || addr.address?.city
               const labelPrefix = addr.label ? `[${addr.label}] ` : ''
               const defaultSuffix = addr.isDefault ? ' (Mặc định)' : ''
               return (
                 <option key={addr.id} value={addr.id}>
-                  {labelPrefix}{rName} — {dDetail}, {dDistrict || dCity}{defaultSuffix}
+                  {labelPrefix}{rName} — {[dDetail, dUnit, dDistrict || dCity].filter(Boolean).join(', ')}{defaultSuffix}
                 </option>
               )
             })}
@@ -237,40 +259,19 @@ function CheckoutPage() {
       )}
     </FormSection>
     <FormSection title="Địa chỉ giao hoa">
-      <div className="checkout-fields checkout-fields--three">
-        <Field error={errors.city} label="Tỉnh / thành phố" required>
-          <select value={form.city} onChange={(event) => update('city', event.target.value)}>
-            <option value="">Chọn khu vực</option>
-            <option>TP. Hồ Chí Minh</option>
-            <option>Hà Nội</option>
-            <option>Đà Nẵng</option>
-          </select>
-        </Field>
-        <Field error={errors.district} label="Quận / huyện" required>
-          <select value={form.district} onChange={(event) => update('district', event.target.value)}>
-            <option value="">Chọn quận / huyện</option>
-            <option>Quận 1</option>
-            <option>Quận 3</option>
-            <option>Quận Bình Thạnh</option>
-            <option>Quận Cầu Giấy</option>
-            <option>Quận Hải Châu</option>
-          </select>
-        </Field>
-        <Field error={errors.ward} label="Phường / xã" required>
-          <select value={form.ward} onChange={(event) => update('ward', event.target.value)}>
-            <option value="">Chọn phường / xã</option>
-            <option>Phường Bến Nghé</option>
-            <option>Phường Võ Thị Sáu</option>
-            <option>Phường 25</option>
-            <option>Phường Dịch Vọng</option>
-            <option>Phường Thạch Thang</option>
-          </select>
-        </Field>
+      <div className="checkout-fields">
+        <p className="checkout-city"><strong>Thành phố giao hoa</strong><br />{form.city === HCMC_CITY ? HCMC_CITY : `${form.city} · ngoài khu vực giao hoa hiện tại`}</p>
+        {form.unitCode || !selectedAddressId || selectedAddressId === 'new' || !form.ward
+          ? <AdministrativeUnitSelector error={errors.unitCode} onChange={(code) => update('unitCode', code)} value={form.unitCode} />
+          : <div className="checkout-legacy-location"><strong>Địa chỉ đã lưu</strong><p>{[form.ward, form.district].filter(Boolean).join(', ')}</p><button className="button button--text" type="button" onClick={() => update('ward', '')}>Chọn phường/xã hiện hành</button></div>}
       </div>
+      {errors.city && <p className="checkout-error">{errors.city}</p>}
       <Field error={errors.address} label="Địa chỉ cụ thể" required>
         <input placeholder="Ví dụ: 18 Nguyễn Huệ, tòa nhà A" value={form.address} onChange={(event) => update('address', event.target.value)} />
       </Field>
-      {isSignedIn && (selectedAddressId === 'new' || !savedAddresses?.length) && (
+      <Field label="Ghi chú giao hàng"><textarea maxLength="240" value={form.deliveryNote} onChange={(event) => update('deliveryNote', event.target.value)} placeholder="Ví dụ: Gọi trước khi đến" /></Field>
+      {isSignedIn && isManualAddress && selectedAddressId && selectedAddressId !== 'new' && !form.unitCode && <p className="checkout-gifting-note">Chọn phường/xã hiện hành trước khi lưu địa chỉ mới.</p>}
+      {isSignedIn && form.unitCode && (isManualAddress || selectedAddressId === 'new' || !savedAddresses?.length) && (
         <div style={{ marginTop: 12 }}>
           <label className="checkout-checkbox">
             <input
@@ -278,7 +279,7 @@ function CheckoutPage() {
               type="checkbox"
               onChange={(event) => setSaveForLater(event.target.checked)}
             />
-            Lưu địa chỉ này vào sổ địa chỉ cho lần sau
+            Lưu địa chỉ này cho lần sau
           </label>
           {saveForLater && (
             <Field label="Tên gợi nhớ cho địa chỉ này (không bắt buộc)">
