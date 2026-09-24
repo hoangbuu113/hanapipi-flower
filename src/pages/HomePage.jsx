@@ -1,5 +1,5 @@
 import { ArrowRight, ArrowUpRight } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Container from '../components/Container'
 import EditorialVideo from '../components/EditorialVideo'
@@ -16,6 +16,7 @@ import { fetchShopCatalogue } from '../services/catalogueClient'
 import './HomePage.css'
 
 function HomePage() {
+  const heroRef = useRef(null)
   const [newsletterEmail, setNewsletterEmail] = useState('')
   const [newsletterError, setNewsletterError] = useState('')
   const [isSubscribed, setIsSubscribed] = useState(false)
@@ -23,6 +24,145 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [reloadIndex, setReloadIndex] = useState(0)
+
+  useEffect(() => {
+    const hero = heroRef.current
+    if (!hero) return
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const desktopViewport = window.matchMedia('(min-width: 720px)')
+    const finePointer = window.matchMedia(
+      '(hover: hover) and (pointer: fine) and (min-width: 1080px)',
+    )
+    let frameId = 0
+    let scrollEnabled = false
+    let pointerEnabled = false
+    let scrollDirty = false
+    let currentX = 0
+    let currentY = 0
+    let targetX = 0
+    let targetY = 0
+
+    const setMotion = (name, value) => hero.style.setProperty(name, value)
+
+    const resetMotion = () => {
+      currentX = 0
+      currentY = 0
+      targetX = 0
+      targetY = 0
+      setMotion('--hero-pointer-x', '0px')
+      setMotion('--hero-pointer-y', '0px')
+      setMotion('--hero-media-scroll-y', '0px')
+      setMotion('--hero-media-scale', '1')
+      setMotion('--hero-copy-y', '0px')
+    }
+
+    const updateMotion = () => {
+      frameId = 0
+
+      if (scrollEnabled && scrollDirty) {
+        scrollDirty = false
+        const bounds = hero.getBoundingClientRect()
+        const progress = Math.min(1, Math.max(0, -bounds.top / (bounds.height * 0.7)))
+        setMotion('--hero-media-scroll-y', `${-progress * 8}px`)
+        setMotion('--hero-media-scale', `${1 + progress * 0.035}`)
+        setMotion('--hero-copy-y', `${progress * 24}px`)
+      }
+
+      if (pointerEnabled || currentX !== 0 || currentY !== 0) {
+        currentX += (targetX - currentX) * 0.09
+        currentY += (targetY - currentY) * 0.09
+        setMotion('--hero-pointer-x', `${currentX}px`)
+        setMotion('--hero-pointer-y', `${currentY}px`)
+      }
+
+      if (
+        Math.abs(targetX - currentX) > 0.03 ||
+        Math.abs(targetY - currentY) > 0.03
+      ) {
+        frameId = window.requestAnimationFrame(updateMotion)
+      }
+    }
+
+    const scheduleMotion = () => {
+      if (!frameId) frameId = window.requestAnimationFrame(updateMotion)
+    }
+
+    const handleScroll = () => {
+      scrollDirty = true
+      scheduleMotion()
+    }
+
+    const handlePointerMove = (event) => {
+      const bounds = hero.getBoundingClientRect()
+      const horizontal = (event.clientX - bounds.left) / bounds.width - 0.5
+      const vertical = (event.clientY - bounds.top) / bounds.height - 0.5
+      targetX = Math.max(-1, Math.min(1, horizontal)) * 4
+      targetY = Math.max(-1, Math.min(1, vertical)) * 3
+      scheduleMotion()
+    }
+
+    const handlePointerLeave = () => {
+      targetX = 0
+      targetY = 0
+      scheduleMotion()
+    }
+
+    const syncMotion = () => {
+      const canAnimate = !reducedMotion.matches
+      const nextScrollEnabled = canAnimate && desktopViewport.matches
+      const nextPointerEnabled = canAnimate && finePointer.matches
+
+      if (nextScrollEnabled !== scrollEnabled) {
+        scrollEnabled = nextScrollEnabled
+        if (scrollEnabled) {
+          window.addEventListener('scroll', handleScroll, { passive: true })
+          scrollDirty = true
+          scheduleMotion()
+        } else {
+          window.removeEventListener('scroll', handleScroll)
+          setMotion('--hero-media-scroll-y', '0px')
+          setMotion('--hero-media-scale', '1')
+          setMotion('--hero-copy-y', '0px')
+        }
+      }
+
+      if (nextPointerEnabled !== pointerEnabled) {
+        pointerEnabled = nextPointerEnabled
+        if (pointerEnabled) {
+          hero.addEventListener('pointermove', handlePointerMove, { passive: true })
+          hero.addEventListener('pointerleave', handlePointerLeave)
+        } else {
+          hero.removeEventListener('pointermove', handlePointerMove)
+          hero.removeEventListener('pointerleave', handlePointerLeave)
+          targetX = 0
+          targetY = 0
+          scheduleMotion()
+        }
+      }
+
+      if (!canAnimate) {
+        if (frameId) window.cancelAnimationFrame(frameId)
+        frameId = 0
+        resetMotion()
+      }
+    }
+
+    reducedMotion.addEventListener('change', syncMotion)
+    desktopViewport.addEventListener('change', syncMotion)
+    finePointer.addEventListener('change', syncMotion)
+    syncMotion()
+
+    return () => {
+      reducedMotion.removeEventListener('change', syncMotion)
+      desktopViewport.removeEventListener('change', syncMotion)
+      finePointer.removeEventListener('change', syncMotion)
+      window.removeEventListener('scroll', handleScroll)
+      hero.removeEventListener('pointermove', handlePointerMove)
+      hero.removeEventListener('pointerleave', handlePointerLeave)
+      if (frameId) window.cancelAnimationFrame(frameId)
+    }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -79,7 +219,7 @@ function HomePage() {
 
   return (
     <main className="home-page">
-      <section className="home-hero" aria-labelledby="hero-title">
+      <section className="home-hero" ref={heroRef} aria-labelledby="hero-title">
         <Container className="home-hero__grid">
           <div className="home-hero__copy">
             <p className="eyebrow">Hoa cho những điều khó nói</p>
