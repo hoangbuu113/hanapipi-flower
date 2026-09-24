@@ -2418,3 +2418,20 @@ test('119. Admin order detail localizes canonical values and wraps long fulfilme
   assert.match(pageCss, /\.admin-modal--order-detail \.admin-order-code-header\s*\{[^}]*white-space:\s*nowrap;/su)
   assert.match(pageCss, /@media \(max-width: 640px\)[\s\S]*\.admin-order-audit-item\s*\{\s*grid-template-columns:\s*1fr;/u)
 })
+
+test('120. Admin mutation surfaces a safe rate-limit retry message', async () => {
+  const result = await updateAdminProduct('nang-diu', { priceVnd: 590000 }, {
+    fetchImpl: async () => Response.json({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Có quá nhiều thao tác quản trị. Vui lòng đợi một phút rồi thử lại.',
+      },
+    }, { headers: { 'Retry-After': '60' }, status: 429 }),
+    getToken: async () => 'admin-token',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 429)
+  assert.equal(result.error.code, 'RATE_LIMITED')
+  assert.match(result.error.message, /thao tác quản trị/u)
+})

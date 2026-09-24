@@ -35,6 +35,7 @@ export function createWorker(options = {}) {
     conciergeHandler: options.conciergeHandler,
     databaseRepositoriesFactory: options.databaseRepositoriesFactory,
     identityVerifier: options.identityVerifier,
+    rateLimitRequest: options.rateLimitRequest,
   })
   const logger = options.logger ?? console
 

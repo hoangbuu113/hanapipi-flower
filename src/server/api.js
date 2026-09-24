@@ -16,6 +16,7 @@ import {
   resolveAllowedOrigin,
   validateMutationOrigin,
 } from './request.js'
+import { enforceRateLimit } from './rateLimit.js'
 
 import {
   ALLOWED_MEDIA_TYPES,
@@ -73,6 +74,50 @@ function originNotAllowed(requestId, route) {
     'Nguồn yêu cầu không được chấp nhận.',
     requestId,
   ), route, { errorCode: 'ORIGIN_NOT_ALLOWED' })
+}
+
+const RATE_LIMIT_MESSAGES = Object.freeze({
+  adminMutation: 'Có quá nhiều thao tác quản trị. Vui lòng đợi một phút rồi thử lại.',
+  concierge: 'Hanapipi đang nhận nhiều lời nhắn. Vui lòng đợi một phút rồi thử lại.',
+  orderCreation: 'Bạn đã gửi quá nhiều yêu cầu đặt hoa. Vui lòng đợi một phút rồi thử lại; giỏ hàng vẫn được giữ nguyên.',
+})
+
+const RATE_LIMIT_UNAVAILABLE_MESSAGE =
+  'Bảo vệ yêu cầu hiện tạm thời chưa sẵn sàng. Vui lòng thử lại sau.'
+
+function rateLimitError(decision, requestId, route, policy, options = {}) {
+  const message = decision.code === 'RATE_LIMITED'
+    ? RATE_LIMIT_MESSAGES[policy]
+    : RATE_LIMIT_UNAVAILABLE_MESSAGE
+  const headers = {
+    'Retry-After': String(decision.retryAfterSeconds ?? 60),
+  }
+
+  if (options.legacy) {
+    return result(jsonResponse({ code: decision.code, message }, decision.status, headers), route, {
+      errorCode: decision.code,
+    })
+  }
+
+  return result(errorResponse(
+    decision.status,
+    decision.code,
+    message,
+    requestId,
+    { headers },
+  ), route, {
+    allowedOrigin: options.allowedOrigin,
+    errorCode: decision.code,
+  })
+}
+
+async function limitAuthenticatedMutation(authUser, env, requestId, route, policy, dependencies) {
+  const decision = await dependencies.rateLimitRequest({
+    env,
+    identity: authUser?.id,
+    policy,
+  })
+  return decision.allowed ? null : rateLimitError(decision, requestId, route, policy)
 }
 
 function parseRequestedHeaders(request) {
@@ -150,6 +195,11 @@ async function handleCreateOrder(request, env, requestId, dependencies) {
       requestId,
     ), V1_ORDERS_PATH, { errorCode: auth.code })
   }
+
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, V1_ORDERS_PATH, 'orderCreation', dependencies,
+  )
+  if (rateLimited) return rateLimited
 
   let body = null
   try {
@@ -344,6 +394,11 @@ async function handleConfirmAdminOrderPayment(idOrCode, request, env, requestId,
     ), route, { errorCode: auth.code })
   }
 
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, route, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
+
   if (request.headers.has('Origin')) {
     const originValidation = validateMutationOrigin(request, env)
     if (!originValidation.ok) {
@@ -386,6 +441,11 @@ async function handleUpdateAdminOrderStatus(idOrCode, request, env, requestId, d
       requestId,
     ), route, { errorCode: auth.code })
   }
+
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, route, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
 
   if (request.headers.has('Origin')) {
     const originValidation = validateMutationOrigin(request, env)
@@ -510,6 +570,11 @@ async function handleUpdateAdminProduct(idOrSlug, request, env, requestId, depen
     ), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: auth.code })
   }
 
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, `${V1_ADMIN_PRODUCTS_PATH}/:id`, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
+
   let body = null
   try {
     body = await request.json()
@@ -623,6 +688,11 @@ async function handleSetAdminProductArchived(idOrSlug, archived, request, env, r
     ), route, { errorCode: auth.code })
   }
 
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, route, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
+
   const repositories = dependencies.createRepositories(env)
   try {
     const updated = await repositories.catalogue.setProductArchived(idOrSlug, archived)
@@ -656,6 +726,11 @@ async function handleCreateAdminProduct(request, env, requestId, dependencies) {
       requestId,
     ), V1_ADMIN_PRODUCTS_PATH, { errorCode: auth.code })
   }
+
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, V1_ADMIN_PRODUCTS_PATH, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
 
   let body = null
   try {
@@ -820,6 +895,11 @@ async function handleSaveAdminProductVariants(productId, request, env, requestId
     return result(errorResponse(auth.status, auth.code, auth.message, requestId), route, { errorCode: auth.code })
   }
 
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, route, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
+
   let body = null
   try {
     body = await request.json()
@@ -868,6 +948,11 @@ async function handleCreateAdminGiftAddOn(request, env, requestId, dependencies)
     return result(errorResponse(auth.status, auth.code, auth.message, requestId), V1_ADMIN_GIFT_ADD_ONS_PATH, { errorCode: auth.code })
   }
 
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, V1_ADMIN_GIFT_ADD_ONS_PATH, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
+
   let body = null
   try {
     body = await request.json()
@@ -898,6 +983,11 @@ async function handleUpdateAdminGiftAddOn(id, request, env, requestId, dependenc
     return result(errorResponse(auth.status, auth.code, auth.message, requestId), route, { errorCode: auth.code })
   }
 
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, route, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
+
   let body = null
   try {
     body = await request.json()
@@ -927,6 +1017,11 @@ async function handleToggleAdminGiftAddOn(id, request, env, requestId, dependenc
   if (!auth.ok) {
     return result(errorResponse(auth.status, auth.code, auth.message, requestId), route, { errorCode: auth.code })
   }
+
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, route, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
 
   let active = null
   try {
@@ -969,6 +1064,11 @@ async function handleUploadAdminMedia(request, env, requestId, dependencies) {
       requestId,
     ), V1_ADMIN_MEDIA_PATH, { errorCode: auth.code })
   }
+
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, V1_ADMIN_MEDIA_PATH, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
 
   let mimeType = ''
   let buffer = null
@@ -1069,6 +1169,11 @@ async function handleDeleteAdminMedia(key, request, env, requestId, dependencies
       requestId,
     ), `${V1_ADMIN_MEDIA_PATH}/${key}`, { errorCode: auth.code })
   }
+
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, `${V1_ADMIN_MEDIA_PATH}/${key}`, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
 
   if (!isValidMediaKey(key)) {
     return result(errorResponse(
@@ -1337,6 +1442,7 @@ async function handleGetProduct(slug, request, env, requestId, dependencies) {
 
 export function createApiRouter(options = {}) {
   const conciergeHandler = options.conciergeHandler ?? handleConciergeRequest
+  const rateLimitRequest = options.rateLimitRequest ?? enforceRateLimit
   const verifyIdentity = options.identityVerifier ?? createClerkIdentityVerifier({
     verifyToken: options.clerkTokenVerifier,
   })
@@ -1350,6 +1456,14 @@ export function createApiRouter(options = {}) {
     const { pathname } = new URL(request.url)
 
     if (pathname === LEGACY_CONCIERGE_PATH) {
+      if (request.method === 'POST') {
+        const decision = await rateLimitRequest({ env, policy: 'concierge', request })
+        if (!decision.allowed) {
+          return rateLimitError(
+            decision, requestId, LEGACY_CONCIERGE_PATH, 'concierge', { legacy: true },
+          )
+        }
+      }
       const response = await conciergeHandler(request, env)
       return result(response, LEGACY_CONCIERGE_PATH, {
         allowedOrigin: resolveAllowedOrigin(request, env),
@@ -1389,6 +1503,7 @@ export function createApiRouter(options = {}) {
       const orderDependencies = {
         authenticateUser,
         createRepositories,
+        rateLimitRequest,
         verifyIdentity,
       }
       if (request.method === 'GET') {
@@ -1423,6 +1538,7 @@ export function createApiRouter(options = {}) {
       const adminOrderDependencies = {
         authorizeAdmin,
         createRepositories,
+        rateLimitRequest,
         verifyIdentity,
       }
       return handleListAdminOrders(request, env, requestId, adminOrderDependencies)
@@ -1433,6 +1549,7 @@ export function createApiRouter(options = {}) {
       const adminOrderDependencies = {
         authorizeAdmin,
         createRepositories,
+        rateLimitRequest,
         verifyIdentity,
       }
       if (adminOrderMatch.action === 'confirm-payment') {
@@ -1460,6 +1577,7 @@ export function createApiRouter(options = {}) {
       const adminProductDependencies = {
         authorizeAdmin,
         createRepositories,
+        rateLimitRequest,
         verifyIdentity,
       }
       if (request.method === 'GET') {
@@ -1475,6 +1593,7 @@ export function createApiRouter(options = {}) {
       return handleUploadAdminMedia(request, env, requestId, {
         authorizeAdmin,
         createMediaStorage: options.mediaStorageFactory ?? createMediaStorage,
+        rateLimitRequest,
         verifyIdentity,
       })
     }
@@ -1487,6 +1606,7 @@ export function createApiRouter(options = {}) {
       return handleDeleteAdminMedia(adminMediaKey, request, env, requestId, {
         authorizeAdmin,
         createMediaStorage: options.mediaStorageFactory ?? createMediaStorage,
+        rateLimitRequest,
         verifyIdentity,
       })
     }
@@ -1506,7 +1626,12 @@ export function createApiRouter(options = {}) {
       if (!['GET', 'PUT', 'POST'].includes(request.method)) {
         return methodNotAllowed(requestId, pathname, 'GET, PUT, POST')
       }
-      const adminVariantDependencies = { authorizeAdmin, createRepositories, verifyIdentity }
+      const adminVariantDependencies = {
+        authorizeAdmin,
+        createRepositories,
+        rateLimitRequest,
+        verifyIdentity,
+      }
       if (request.method === 'GET') {
         return handleGetAdminProductVariants(adminProductVariantsId, request, env, requestId, adminVariantDependencies)
       }
@@ -1517,7 +1642,12 @@ export function createApiRouter(options = {}) {
       if (!['GET', 'POST'].includes(request.method)) {
         return methodNotAllowed(requestId, V1_ADMIN_GIFT_ADD_ONS_PATH, 'GET, POST')
       }
-      const adminGiftDependencies = { authorizeAdmin, createRepositories, verifyIdentity }
+      const adminGiftDependencies = {
+        authorizeAdmin,
+        createRepositories,
+        rateLimitRequest,
+        verifyIdentity,
+      }
       if (request.method === 'GET') {
         return handleListAdminGiftAddOns(request, env, requestId, adminGiftDependencies)
       }
@@ -1526,7 +1656,12 @@ export function createApiRouter(options = {}) {
 
     const adminGiftAddOn = matchAdminGiftAddOnId(pathname)
     if (adminGiftAddOn) {
-      const adminGiftDependencies = { authorizeAdmin, createRepositories, verifyIdentity }
+      const adminGiftDependencies = {
+        authorizeAdmin,
+        createRepositories,
+        rateLimitRequest,
+        verifyIdentity,
+      }
       if (adminGiftAddOn.action === 'toggle-active') {
         if (!['PATCH', 'POST'].includes(request.method)) {
           return methodNotAllowed(requestId, pathname, 'PATCH, POST')
@@ -1548,7 +1683,7 @@ export function createApiRouter(options = {}) {
         request,
         env,
         requestId,
-        { authorizeAdmin, createRepositories, verifyIdentity },
+        { authorizeAdmin, createRepositories, rateLimitRequest, verifyIdentity },
       )
     }
 
@@ -1559,6 +1694,7 @@ export function createApiRouter(options = {}) {
         authorizeAdmin,
         createRepositories,
         createMediaStorage: options.mediaStorageFactory ?? createMediaStorage,
+        rateLimitRequest,
         verifyIdentity,
       })
     }
@@ -1582,6 +1718,17 @@ export function createApiRouter(options = {}) {
 
       const origin = validateMutationOrigin(request, env)
       if (!origin.ok) return originNotAllowed(requestId, V1_CONCIERGE_PATH)
+
+      const decision = await rateLimitRequest({ env, policy: 'concierge', request })
+      if (!decision.allowed) {
+        return rateLimitError(
+          decision,
+          requestId,
+          V1_CONCIERGE_PATH,
+          'concierge',
+          { allowedOrigin: origin.origin },
+        )
+      }
 
       const response = await conciergeHandler(request, env, { skipOriginCheck: true })
       const versionedResponse = await wrapVersionedResponse(response, requestId)

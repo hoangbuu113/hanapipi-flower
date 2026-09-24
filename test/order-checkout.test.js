@@ -955,3 +955,26 @@ test('37. CheckoutPage contains exactly one payment section with MoMo notice and
   assert.ok(!checkoutSource.includes('Đây là bản demo'), 'CheckoutPage must not contain demo wording')
   assert.ok(checkoutSource.includes("paymentMethod: 'momo'"), 'CheckoutPage submit payload must send momo')
 })
+
+test('38. Checkout preserves a rate-limit error for non-destructive retry', async () => {
+  const result = await createOrder({
+    fetchImpl: async () => Response.json({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'Bạn đã gửi quá nhiều yêu cầu đặt hoa. Vui lòng thử lại.',
+      },
+    }, { headers: { 'Retry-After': '60' }, status: 429 }),
+    getToken: async () => 'customer-token',
+    order: createValidOrderPayload(),
+  })
+  const checkoutSource = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
+
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 429)
+  assert.equal(result.error.code, 'RATE_LIMITED')
+  assert.match(result.error.message, /thử lại/u)
+  assert.ok(
+    checkoutSource.indexOf('if (!result.ok)') < checkoutSource.indexOf('clearCart()'),
+    'Cart must only clear after a successful server response.',
+  )
+})

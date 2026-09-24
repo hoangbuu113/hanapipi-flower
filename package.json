@@ -28,7 +28,7 @@
     "test:cart": "node --import ./test/register-assets.js --test test/cart-catalogue.test.js",
     "test:order": "node --import ./test/register-assets.js --test test/order-checkout.test.js test/orders-read.test.js test/order-payment.test.js test/admin-orders.test.js test/order-momo.test.js",
     "lint": "oxlint",
-    "test:worker": "node --import ./test/register-assets.js --test test/worker-api.test.js",
+    "test:worker": "node --import ./test/register-assets.js --test test/worker-api.test.js test/rate-limit.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

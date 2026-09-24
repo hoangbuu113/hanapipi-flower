@@ -6,6 +6,8 @@ import { validateConciergeResponse } from '../utils/conciergeSchema.js'
 const DEFAULT_TIMEOUT_MS = 14000
 const FALLBACK_NOTICE =
   'Kết nối tư vấn đang bận một chút, mình vẫn có thể hỗ trợ bạn bằng thông tin của Hanapipi Flower.'
+const RATE_LIMIT_NOTICE =
+  'Hanapipi đang nhận nhiều lời nhắn. Bạn vui lòng đợi một phút rồi thử lại nhé.'
 
 function compactHistory(history) {
   return history
@@ -77,7 +79,18 @@ export async function getConciergeReply({
       method: 'POST',
       signal: controller.signal,
     })
-    if (!response.ok) throw new Error('Concierge request was not successful')
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null)
+      const errorCode = errorPayload?.code ?? errorPayload?.error?.code
+      if (response.status === 429 && errorCode === 'RATE_LIMITED') {
+        return {
+          ...localResponse,
+          notice: RATE_LIMIT_NOTICE,
+          usedFallback: true,
+        }
+      }
+      throw new Error('Concierge request was not successful')
+    }
 
     const validated = validateConciergeResponse(await response.json(), catalogue)
     if (!validated) throw new Error('Concierge response did not match the contract')

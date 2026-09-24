@@ -469,3 +469,23 @@ test('13. Order utils: no direct static catalogue import remains in src/utils/or
   const source = fs.readFileSync(path.resolve('src/utils/order.js'), 'utf8')
   assert.ok(!source.includes('data/products'), 'src/utils/order.js must not import data/products')
 })
+
+test('14. Concierge rate limit keeps a local answer and shows a Vietnamese retry notice', async () => {
+  const response = await getConciergeReply({
+    apiUrl: '/api/concierge',
+    catalogue: [],
+    currentProduct: null,
+    fetchImpl: async () => Response.json({
+      code: 'RATE_LIMITED',
+      message: 'Rate limited.',
+    }, { headers: { 'Retry-After': '60' }, status: 429 }),
+    grounding: getGroundedCandidates('Tư vấn hoa sinh nhật', []),
+    history: [],
+    message: 'Tư vấn hoa sinh nhật',
+    pageContext: { productId: null, route: '/' },
+  })
+
+  assert.equal(response.usedFallback, true)
+  assert.match(response.notice, /đợi một phút/u)
+  assert.ok(response.message)
+})

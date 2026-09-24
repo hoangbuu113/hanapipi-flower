@@ -77,10 +77,14 @@ export async function wrapVersionedResponse(response, requestId) {
     )
   }
 
+  const headers = {}
   const allow = response.headers.get('Allow')
-  const headers = allow ? { Allow: allow } : undefined
+  const retryAfter = response.headers.get('Retry-After')
+  if (allow) headers.Allow = allow
+  if (retryAfter) headers['Retry-After'] = retryAfter
+  const forwardedHeaders = Object.keys(headers).length > 0 ? headers : undefined
   if (response.ok) {
-    return successResponse(payload, requestId, { headers, status: response.status })
+    return successResponse(payload, requestId, { headers: forwardedHeaders, status: response.status })
   }
 
   return errorResponse(
@@ -88,7 +92,7 @@ export async function wrapVersionedResponse(response, requestId) {
     typeof payload?.code === 'string' ? payload.code : 'API_ERROR',
     typeof payload?.message === 'string' ? payload.message : 'Yêu cầu chưa thể được xử lý.',
     requestId,
-    { headers },
+    { headers: forwardedHeaders },
   )
 }
 
