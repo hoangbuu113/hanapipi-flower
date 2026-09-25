@@ -207,17 +207,40 @@ test('7. Malformed API data does not replace authoritative data with static cata
 test('8. Homepage hero renders independently of catalogue loading/error', () => {
   const homeContent = fs.readFileSync(path.resolve('src/pages/HomePage.jsx'), 'utf8')
   // Hero section is defined before best-sellers and does not depend on products, isLoading, or error
-  const heroIndex = homeContent.indexOf('<section className="home-hero"')
+  const heroIndex = homeContent.indexOf('className="home-hero"')
   const bestSellersIndex = homeContent.indexOf('<section className="home-section" id="best-sellers"')
   assert.ok(heroIndex !== -1, 'Hero section must exist')
   assert.ok(bestSellersIndex !== -1, 'Best sellers section must exist')
   assert.ok(heroIndex < bestSellersIndex, 'Hero section must render before best sellers')
 
-  // Verify critical hero copy and structure are preserved
-  assert.ok(homeContent.includes('Một bó hoa, một điều muốn nói.'))
-  assert.ok(homeContent.includes('Hoa cho những điều khó nói'))
-  assert.ok(homeContent.includes('Những thiết kế hoa tươi được chọn kỹ cho những dịp đáng nhớ.'))
-  assert.ok(homeContent.includes('homeImages.hero'))
+  const slidesStart = homeContent.indexOf('const homeHeroSlides = [')
+  const slidesEnd = homeContent.indexOf('\n]\n', slidesStart)
+  const slideConfig = homeContent.slice(slidesStart, slidesEnd)
+  assert.equal((slideConfig.match(/^\s+eyebrow:/gm) ?? []).length, 4)
+  const headlineArrays = [...slideConfig.matchAll(/headline: \[([^\]]+)\]/g)]
+  assert.equal(headlineArrays.length, 4)
+  for (const [, lines] of headlineArrays) {
+    assert.equal((lines.match(/'[^']+'/g) ?? []).length, 3, 'Every hero headline has three intentional lines')
+  }
+  assert.ok(homeContent.includes('home-hero__headline-line'))
+  assert.ok(homeContent.indexOf('className="home-hero__actions"') > homeContent.indexOf('className="home-hero__copy-content"'))
+  assert.ok(homeContent.includes('HERO_ROTATION_INTERVAL = 3500'))
+  assert.ok(homeContent.includes('HERO_TRANSITION_DURATION = 600'))
+  assert.ok(homeContent.includes("document.addEventListener('visibilitychange', syncVisibility)"))
+  assert.ok(homeContent.includes('setHeroTimerReset((current) => current + 1)'))
+  assert.ok(homeContent.includes('home-hero__controls'))
+  assert.ok(homeContent.includes('aria-pressed={index === activeHeroSlide}'))
+  assert.ok(homeContent.includes("window.matchMedia('(prefers-reduced-motion: reduce)')"))
+  const heroStyles = fs.readFileSync(path.resolve('src/pages/HomePage.css'), 'utf8')
+  assert.ok(heroStyles.includes('height: calc(27.85px + 3lh + 82.4px)'))
+  assert.ok(heroStyles.includes('height: calc(27.85px + 3lh + 71px)'))
+  assert.ok(heroStyles.includes('position: absolute;'))
+  const imageStackRule = heroStyles.match(/\.home-hero__image-stack\s*\{([^}]*)\}/)?.[1]
+  assert.ok(imageStackRule, 'Hero carousel needs a size-defining image stack')
+  assert.match(imageStackRule, /position:\s*relative;/)
+  assert.match(imageStackRule, /aspect-ratio:\s*2\s*\/\s*3;/)
+  assert.match(imageStackRule, /min-height:\s*620px;/)
+  assert.ok(homeContent.indexOf('className="home-hero__controls"') < homeContent.indexOf('</figcaption>'))
 })
 
 test('9. Catalogue section error does not blank the whole Homepage', () => {

@@ -5,6 +5,10 @@ import Container from '../components/Container'
 import EditorialVideo from '../components/EditorialVideo'
 import ProductCard from '../components/ProductCard'
 import SectionHeading from '../components/SectionHeading'
+import heroAnchorBouquet from '../assets/hero-bouquet.jpg'
+import heroWindowFlorals from '../assets/social-window.jpg'
+import heroBirthdayBouquet from '../assets/occasion-birthday.jpg'
+import heroWhiteBouquet from '../assets/occasion-white.jpg'
 import { editorialMedia } from '../data/editorialMedia'
 import {
   homeImages,
@@ -15,8 +19,48 @@ import {
 import { fetchShopCatalogue } from '../services/catalogueClient'
 import './HomePage.css'
 
+const HERO_ROTATION_INTERVAL = 3500
+const HERO_TRANSITION_DURATION = 600
+
+const homeHeroSlides = [
+  {
+    alt: 'Bình hoa hồng và cosmos bên cửa sổ trong ánh sáng tự nhiên.',
+    description: 'Những thiết kế hoa tươi được chọn kỹ cho những dịp đáng nhớ.',
+    eyebrow: 'Hoa cho những điều khó nói',
+    headline: ['Một bó hoa,', 'một điều', 'muốn nói.'],
+    image: heroWindowFlorals,
+  },
+  {
+    alt: 'Bó hoa hồng phấn và kem trong bình gốm dưới nắng sớm.',
+    description: 'Một cách dịu dàng để gửi đi điều bạn đang nghĩ.',
+    eyebrow: 'Khi lời nói chưa đủ',
+    headline: ['Khó nói,', 'để hoa', 'nói thay.'],
+    image: heroAnchorBouquet,
+  },
+  {
+    alt: 'Bó hoa hồng, ranunculus và cúc trắng cho dịp sinh nhật.',
+    description: 'Một chút màu sắc để ngày thường trở nên đáng nhớ.',
+    eyebrow: 'Không cần dịp đặc biệt',
+    headline: ['Mỗi ngày,', 'vẫn đáng', 'có hoa.'],
+    image: heroBirthdayBouquet,
+  },
+  {
+    alt: 'Bó hoa hồng trắng và tulip trắng được gói cùng ruy băng lụa.',
+    description: 'Một bó hoa nhỏ cho người bạn đang nghĩ tới.',
+    eyebrow: 'Dành cho người bạn thương',
+    headline: ['Gửi thương,', 'đến người', 'bạn yêu.'],
+    image: heroWhiteBouquet,
+  },
+]
+
 function HomePage() {
   const heroRef = useRef(null)
+  const [activeHeroSlide, setActiveHeroSlide] = useState(0)
+  const [previousHeroSlide, setPreviousHeroSlide] = useState(null)
+  const [heroTimerReset, setHeroTimerReset] = useState(0)
+  const [isDocumentVisible, setIsDocumentVisible] = useState(
+    () => typeof document === 'undefined' || !document.hidden,
+  )
   const [newsletterEmail, setNewsletterEmail] = useState('')
   const [newsletterError, setNewsletterError] = useState('')
   const [isSubscribed, setIsSubscribed] = useState(false)
@@ -24,6 +68,42 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [reloadIndex, setReloadIndex] = useState(0)
+
+  useEffect(() => {
+    const syncVisibility = () => setIsDocumentVisible(!document.hidden)
+
+    syncVisibility()
+    document.addEventListener('visibilitychange', syncVisibility)
+    return () => document.removeEventListener('visibilitychange', syncVisibility)
+  }, [])
+
+  useEffect(() => {
+    if (previousHeroSlide === null) return undefined
+
+    const timeoutId = window.setTimeout(
+      () => setPreviousHeroSlide(null),
+      HERO_TRANSITION_DURATION,
+    )
+    return () => window.clearTimeout(timeoutId)
+  }, [previousHeroSlide])
+
+  useEffect(() => {
+    if (!isDocumentVisible) return undefined
+
+    const timeoutId = window.setTimeout(() => {
+      setPreviousHeroSlide(activeHeroSlide)
+      setActiveHeroSlide((current) => (current + 1) % homeHeroSlides.length)
+    }, HERO_ROTATION_INTERVAL)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [activeHeroSlide, heroTimerReset, isDocumentVisible])
+
+  function selectHeroSlide(index) {
+    setHeroTimerReset((current) => current + 1)
+    if (index === activeHeroSlide) return
+    setPreviousHeroSlide(activeHeroSlide)
+    setActiveHeroSlide(index)
+  }
 
   useEffect(() => {
     const hero = heroRef.current
@@ -65,7 +145,7 @@ function HomePage() {
         const bounds = hero.getBoundingClientRect()
         const progress = Math.min(1, Math.max(0, -bounds.top / (bounds.height * 0.7)))
         setMotion('--hero-media-scroll-y', `${-progress * 8}px`)
-        setMotion('--hero-media-scale', `${1 + progress * 0.035}`)
+        setMotion('--hero-media-scale', `${1 + progress * 0.02}`)
         setMotion('--hero-copy-y', `${progress * 24}px`)
       }
 
@@ -219,14 +299,37 @@ function HomePage() {
 
   return (
     <main className="home-page">
-      <section className="home-hero" ref={heroRef} aria-labelledby="hero-title">
+      <section
+        className="home-hero"
+        ref={heroRef}
+        aria-labelledby="hero-title"
+        style={{ '--hero-transition-duration': `${HERO_TRANSITION_DURATION}ms` }}
+      >
         <Container className="home-hero__grid">
           <div className="home-hero__copy">
-            <p className="eyebrow">Hoa cho những điều khó nói</p>
-            <h1 id="hero-title">Một bó hoa, một điều muốn nói.</h1>
-            <p className="home-hero__description">
-              Những thiết kế hoa tươi được chọn kỹ cho những dịp đáng nhớ.
-            </p>
+            <div className="home-hero__copy-content">
+              {homeHeroSlides.map((slide, index) => {
+                const isActive = index === activeHeroSlide
+                const isLeaving = index === previousHeroSlide
+                if (!isActive && !isLeaving) return null
+
+                return (
+                  <div
+                    className={`home-hero__copy-slide${isActive ? ' home-hero__copy-slide--active' : ' home-hero__copy-slide--leaving'}`}
+                    key={slide.eyebrow}
+                    aria-hidden={!isActive}
+                  >
+                    <p className="eyebrow">{slide.eyebrow}</p>
+                    <h1 id={isActive ? 'hero-title' : undefined}>
+                      {slide.headline.map((line) => <span className="home-hero__headline-line" key={line}>{line}</span>)}
+                    </h1>
+                    <p className="home-hero__description">
+                      {slide.description}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
             <div className="home-hero__actions">
               <Link className="button button--primary" to="/shop">
                 Khám phá bộ sưu tập
@@ -240,12 +343,42 @@ function HomePage() {
           </div>
 
           <figure className="home-hero__media">
-            <img
-              alt="Bó hoa hồng phấn và kem trong bình gốm dưới nắng sớm"
-              fetchPriority="high"
-              loading="eager"
-              src={homeImages.hero}
-            />
+            <div className="home-hero__image-stack">
+              {homeHeroSlides.map((slide, index) => {
+                const isActive = index === activeHeroSlide
+                const isLeaving = index === previousHeroSlide
+
+                return (
+                  <div
+                    className={`home-hero__image-layer${isActive ? ' home-hero__image-layer--active' : isLeaving ? ' home-hero__image-layer--leaving' : ''}`}
+                    key={slide.eyebrow}
+                  >
+                    <img
+                      alt={isActive ? slide.alt : ''}
+                      aria-hidden={!isActive}
+                      decoding="async"
+                      fetchPriority={index === 0 ? 'high' : 'auto'}
+                      loading="eager"
+                      src={slide.image}
+                    />
+                  </div>
+                )
+              })}
+              <div className="home-hero__controls" role="group" aria-label="Chọn nội dung nổi bật">
+                {homeHeroSlides.map((slide, index) => (
+                  <button
+                    aria-label={`Hiện nội dung ${index + 1}`}
+                    aria-pressed={index === activeHeroSlide}
+                    className={`home-hero__indicator${index === activeHeroSlide ? ' home-hero__indicator--active' : ''}`}
+                    key={slide.eyebrow}
+                    onClick={() => selectHeroSlide(index)}
+                    type="button"
+                  >
+                    <span aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </div>
             <figcaption>Được hái tươi và bó tay mỗi ngày.</figcaption>
           </figure>
         </Container>
