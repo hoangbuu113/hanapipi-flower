@@ -9,6 +9,7 @@ import {
   createAdminGiftAddOn,
   createAdminProduct,
   deleteAdminOrder,
+  deleteAdminGiftAddOn,
   deleteAdminProduct,
   deleteAdminMedia,
   fetchAdminCatalogue,
@@ -17,6 +18,7 @@ import {
   fetchAdminOrders,
   fetchAdminProductVariants,
   saveAdminProductVariants,
+  setAdminProductArchived,
   toggleAdminGiftAddOnActive,
   updateAdminGiftAddOn,
   updateAdminOrderStatus,
@@ -76,6 +78,8 @@ function AdminPage() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+  const [visibilityBusyId, setVisibilityBusyId] = useState(null)
+  const [visibilityError, setVisibilityError] = useState(null)
 
   const [isCreating, setIsCreating] = useState(false)
   const [createForm, setCreateForm] = useState({
@@ -431,7 +435,9 @@ function AdminPage() {
 
     const result = deleteTarget.kind === 'order'
       ? await deleteAdminOrder(deleteTarget.id, { getToken })
-      : await deleteAdminProduct(deleteTarget.id, { getToken })
+      : deleteTarget.kind === 'gift'
+        ? await deleteAdminGiftAddOn(deleteTarget.id, { getToken })
+        : await deleteAdminProduct(deleteTarget.id, { getToken })
 
     setIsDeleting(false)
     if (!result.ok) {
@@ -442,6 +448,9 @@ function AdminPage() {
     if (deleteTarget.kind === 'order') {
       setOrders((current) => current.filter((order) => order.id !== deleteTarget.id))
       if (selectedOrderDetail?.id === deleteTarget.id) handleCloseOrderDetail()
+    } else if (deleteTarget.kind === 'gift') {
+      setGiftAddOns((current) => current.filter((item) => item.id !== deleteTarget.id))
+      setSaveSuccess(`Đã xóa vĩnh viễn món quà “${deleteTarget.label}”.`)
     } else {
       setProducts((current) => current.filter((product) => product.id !== deleteTarget.id))
       setSaveSuccess(result.mediaCleanupComplete === false
@@ -451,6 +460,21 @@ function AdminPage() {
 
     setDeleteTarget(null)
     setDeleteError(null)
+  }
+
+  const handleProtectedVisibility = async (product) => {
+    if (product.slug !== 'no-watering-flower' || visibilityBusyId) return
+    setVisibilityBusyId(product.id)
+    setVisibilityError(null)
+    setSaveSuccess(null)
+    const result = await setAdminProductArchived(product.id, product.active, { getToken })
+    setVisibilityBusyId(null)
+    if (!result.ok || !result.product) {
+      setVisibilityError(result.error?.message || 'Không thể thay đổi hiển thị sản phẩm.')
+      return
+    }
+    setProducts((current) => current.map((item) => item.id === result.product.id ? result.product : item))
+    setSaveSuccess(product.active ? 'Đã ẩn sản phẩm khỏi cửa hàng.' : 'Đã hiện lại sản phẩm trong cửa hàng.')
   }
 
   // 1. Authoritative Server Permission Verification
@@ -1190,6 +1214,11 @@ function AdminPage() {
               <p>{saveSuccess}</p>
             </div>
           )}
+          {visibilityError && (
+            <div className="admin-catalogue-error admin-catalogue-error--compact" role="alert">
+              <p>{visibilityError}</p>
+            </div>
+          )}
 
           {isCreating && (
             <section aria-label="Tạo sản phẩm mới" className="admin-create-panel">
@@ -1487,6 +1516,16 @@ function AdminPage() {
                             >
                               Tùy chọn
                             </button>
+                            {product.slug === 'no-watering-flower' && (
+                              <button
+                                className="button button--text button--small"
+                                disabled={visibilityBusyId === product.id || isDeleting}
+                                type="button"
+                                onClick={() => handleProtectedVisibility(product)}
+                              >
+                                {visibilityBusyId === product.id ? 'Đang lưu...' : product.active ? 'Ẩn khỏi cửa hàng' : 'Hiện lại'}
+                              </button>
+                            )}
                             <button
                               className="button button--text button--small admin-delete-btn"
                               disabled={isDeleting || isDeleteProtected}
@@ -2304,6 +2343,14 @@ function AdminPage() {
                               >
                                 {item.active ? 'Tạm ẩn' : 'Hiện lại'}
                               </button>
+                              <button
+                                className="button button--text button--small admin-delete-btn"
+                                disabled={isDeleting || togglingGiftAddOnId === item.id}
+                                type="button"
+                                onClick={() => requestPermanentDelete('gift', item)}
+                              >
+                                Xóa
+                              </button>
                             </div>
                           )}
                         </td>
@@ -2333,7 +2380,9 @@ function AdminPage() {
                   <p id="permanent-delete-description">
                     {deleteTarget.kind === 'order'
                       ? 'Xóa vĩnh viễn đơn hàng này? Hành động này không thể hoàn tác.'
-                      : `Xóa vĩnh viễn sản phẩm “${deleteTarget.label}”?`}
+                      : deleteTarget.kind === 'gift'
+                        ? 'Xóa vĩnh viễn món quà này? Hành động này không thể hoàn tác.'
+                        : `Xóa vĩnh viễn sản phẩm “${deleteTarget.label}”?`}
                   </p>
                 </div>
                 <button

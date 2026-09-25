@@ -680,7 +680,7 @@ export function createCatalogueRepository(db) {
       const product = await this.getProductById(idOrSlug) ?? await this.getProductBySlug(idOrSlug)
       if (!product) return null
 
-      if (product.purchaseType === 'priceless' || product.slug === 'no-watering-flower') {
+      if (product.purchaseType === 'priceless' && product.slug !== 'no-watering-flower') {
         const err = new Error('Sản phẩm được bảo vệ không thể lưu trữ hoặc khôi phục.')
         err.code = 'PROTECTED_PRODUCT'
         err.status = 400
@@ -1364,6 +1364,34 @@ export function createCatalogueRepository(db) {
       await db.prepare('UPDATE gift_add_ons SET active = ? WHERE id = ?').bind(active ? 1 : 0, id).run()
       const row = await db.prepare('SELECT id, name, short_description, price_vnd, active, sort_order FROM gift_add_ons WHERE id = ?').bind(id).first()
       return mapGiftAddOn(row)
+    },
+
+    async deleteGiftAddOn(id) {
+      if (typeof id !== 'string' || !id.trim() || id.length > 100) {
+        throw catalogueError(404, 'GIFT_ADD_ON_NOT_FOUND', 'Không tìm thấy món quà.')
+      }
+      const existing = await db.prepare('SELECT id FROM gift_add_ons WHERE id = ?').bind(id).first()
+      if (!existing) throw catalogueError(404, 'GIFT_ADD_ON_NOT_FOUND', 'Không tìm thấy món quà.')
+
+      // Cart references are RESTRICT. Historical order references are SET NULL;
+      // immutable order add-on ID/name/price snapshots remain untouched.
+      const cartReference = await db.prepare('SELECT 1 FROM cart_item_add_ons WHERE gift_add_on_id = ? LIMIT 1').bind(id).first()
+      if (cartReference) {
+        throw catalogueError(409, 'GIFT_ADD_ON_IN_USE', 'Món quà đang nằm trong giỏ hàng. Hãy tạm ẩn thay vì xóa.')
+      }
+
+      try {
+        const deletion = await db.prepare('DELETE FROM gift_add_ons WHERE id = ?').bind(id).run()
+        if (deletion.meta?.changes === 0) {
+          throw catalogueError(404, 'GIFT_ADD_ON_NOT_FOUND', 'Không tìm thấy món quà.')
+        }
+      } catch (error) {
+        if (/FOREIGN KEY constraint failed/iu.test(error.message ?? '')) {
+          throw catalogueError(409, 'GIFT_ADD_ON_IN_USE', 'Món quà đang được tham chiếu và chưa thể xóa.')
+        }
+        throw error
+      }
+      return { deleted: true }
     },
   }
 }

@@ -1010,6 +1010,13 @@ export async function toggleAdminGiftAddOnActive(id, active, {
   }
 }
 
+export function deleteAdminGiftAddOn(id, options = {}) {
+  if (!id || typeof id !== 'string') {
+    return Promise.resolve({ error: { code: 'INVALID_ID', message: 'Mã món quà không hợp lệ.' }, ok: false, status: 400 })
+  }
+  return deleteAdminRecord(`/api/v1/admin/gift-add-ons/${encodeURIComponent(id)}`, options)
+}
+
 export async function fetchAdminOrders({
   getToken,
   fetchImpl = globalThis.fetch,

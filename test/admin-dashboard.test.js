@@ -7,6 +7,7 @@ import {
   checkAdminAccess,
   createAdminGiftAddOn,
   createAdminProduct,
+  deleteAdminGiftAddOn,
   deleteAdminOrder,
   deleteAdminProduct,
   deleteAdminMedia,
@@ -1037,7 +1038,7 @@ test('48. restored product reappears in the public catalogue', async () => {
   assert.equal(body.data.items.some((product) => product.id === 'nang-diu'), true)
 })
 
-test('49. no-watering-flower archive is rejected server-side', async () => {
+test('49. no-watering-flower can be hidden from public listings without losing its special detail', async () => {
   const { d1, sqlite } = createSeededDatabase()
   seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
@@ -1046,24 +1047,39 @@ test('49. no-watering-flower archive is rejected server-side', async () => {
     getToken: async () => 'admin-token',
   })
 
-  assert.equal(result.status, 400)
-  assert.equal(result.error.code, 'PROTECTED_PRODUCT')
+  assert.equal(result.ok, true)
+  assert.equal(result.product.active, false)
+  assert.equal(result.product.priceVnd, null)
+  assert.equal(result.product.isPurchasable, false)
+  const listing = await testWorker.fetch('/api/v1/catalogue/products?limit=50')
+  assert.equal((await listing.json()).data.items.some((product) => product.slug === 'no-watering-flower'), false)
+  const detail = await testWorker.fetch('/api/v1/catalogue/products/no-watering-flower')
+  assert.equal(detail.status, 200)
+  assert.equal((await detail.json()).data.product.media.length, 4)
 })
 
-test('50. no-watering-flower restore is rejected server-side', async () => {
+test('50. no-watering-flower can be shown again without becoming purchasable', async () => {
   const { d1, sqlite } = createSeededDatabase()
   seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
+  await setAdminProductArchived('no-watering-flower', true, {
+    fetchImpl: (url, opts) => testWorker.fetch(url, opts),
+    getToken: async () => 'admin-token',
+  })
   const result = await setAdminProductArchived('no-watering-flower', false, {
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
     getToken: async () => 'admin-token',
   })
 
-  assert.equal(result.status, 400)
-  assert.equal(result.error.code, 'PROTECTED_PRODUCT')
+  assert.equal(result.ok, true)
+  assert.equal(result.product.active, true)
+  assert.equal(result.product.priceVnd, null)
+  assert.equal(result.product.isPurchasable, false)
+  const listing = await testWorker.fetch('/api/v1/catalogue/products?limit=50')
+  assert.equal((await listing.json()).data.items.some((product) => product.slug === 'no-watering-flower'), true)
 })
 
-test('51. protected product remains unchanged after failed archive and restore attempts', async () => {
+test('51. protected product visibility changes leave identity, price and gallery unchanged', async () => {
   const { d1, sqlite } = createSeededDatabase()
   seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
@@ -1077,7 +1093,10 @@ test('51. protected product remains unchanged after failed archive and restore a
   }
 
   const after = sqlite.prepare(`SELECT * FROM products WHERE id = 'no-watering-flower'`).get()
-  assert.deepEqual(after, before)
+  assert.equal(after.active, before.active)
+  for (const field of ['id', 'slug', 'name', 'price_vnd', 'purchase_type', 'media_json']) {
+    assert.equal(after[field], before[field])
+  }
 })
 
 test('52. archive of an unknown product returns 404', async () => {
@@ -1875,6 +1894,87 @@ test('88. public GET /api/v1/catalogue/products/:slug returns updated variants a
   assert.ok(body.data.product.variants.some((v) => v.code === 'grand'), 'Updated variant must be present in public product')
   assert.ok(body.data.giftAddOns.some((g) => g.name === 'Quà công khai'), 'Active gift add-on must be present in public response')
   assert.ok(!body.data.giftAddOns.some((g) => g.name === 'Quà ẩn'), 'Inactive gift add-on must NOT be present in public response')
+})
+
+test('88a. unused gift add-on can be deleted by Admin only and repeated delete is 404', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const fetchImpl = (url, options) => testWorker.fetch(url, options)
+  const created = await createAdminGiftAddOn({ name: 'Quà thử xóa', priceVnd: 45000 }, { fetchImpl, getToken: async () => 'admin-token' })
+  assert.equal(created.ok, true)
+
+  const guest = await deleteAdminGiftAddOn(created.item.id, { fetchImpl, getToken: async () => null })
+  const customer = await deleteAdminGiftAddOn(created.item.id, { fetchImpl, getToken: async () => 'customer-token' })
+  assert.equal(guest.status, 401)
+  assert.equal(customer.status, 403)
+
+  const deleted = await deleteAdminGiftAddOn(created.item.id, { fetchImpl, getToken: async () => 'admin-token' })
+  assert.equal(deleted.ok, true)
+  assert.equal(deleted.deleted, true)
+  assert.equal(sqlite.prepare('SELECT 1 FROM gift_add_ons WHERE id = ?').get(created.item.id), undefined)
+  const repeated = await deleteAdminGiftAddOn(created.item.id, { fetchImpl, getToken: async () => 'admin-token' })
+  const missing = await deleteAdminGiftAddOn('gift_unknown', { fetchImpl, getToken: async () => 'admin-token' })
+  assert.equal(repeated.status, 404)
+  assert.equal(missing.status, 404)
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM gift_add_ons').get().count, 4)
+  const publicDetail = await testWorker.fetch('/api/v1/catalogue/products/nang-diu')
+  assert.equal((await publicDetail.json()).data.giftAddOns.some((item) => item.id === created.item.id), false)
+})
+
+test('88b. a gift still referenced by a cart is not deleted', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const now = new Date().toISOString()
+  const version = sqlite.prepare('SELECT version FROM catalogue_versions WHERE active = 1').get().version
+  sqlite.prepare('INSERT INTO carts (id, user_id, state, revision, created_at_utc, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?)')
+    .run('cart_gift_delete', 'usr_admin_001', 'active', 0, now, now)
+  sqlite.prepare(`INSERT INTO cart_items (id, cart_id, item_type, bouquet_configuration_json, quantity, unit_price_vnd, line_key, catalogue_version_id, created_at_utc, updated_at_utc)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('cart_item_gift_delete', 'cart_gift_delete', 'custom_bouquet', '{}', 1, 0, 'gift-delete-test', version, now, now)
+  sqlite.prepare('INSERT INTO cart_item_add_ons (id, cart_item_id, gift_add_on_id, price_vnd) VALUES (?, ?, ?, ?)')
+    .run('cart_add_on_gift_delete', 'cart_item_gift_delete', 'mini-scented-candle', 49000)
+
+  const options = { fetchImpl: (url, init) => testWorker.fetch(url, init), getToken: async () => 'admin-token' }
+  const blocked = await deleteAdminGiftAddOn('mini-scented-candle', options)
+  assert.equal(blocked.status, 409)
+  assert.equal(blocked.error.code, 'GIFT_ADD_ON_IN_USE')
+  assert.ok(sqlite.prepare('SELECT 1 FROM gift_add_ons WHERE id = ?').get('mini-scented-candle'))
+  assert.ok(sqlite.prepare('SELECT 1 FROM cart_item_add_ons WHERE id = ?').get('cart_add_on_gift_delete'))
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM gift_add_ons').get().count, 4)
+})
+
+test('88c. historical order gift snapshots survive permanent add-on deletion', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  sqlite.exec('PRAGMA foreign_keys = ON')
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const now = new Date().toISOString()
+  sqlite.prepare(`INSERT INTO orders (id, user_id, order_code, status, subtotal_vnd, total_vnd, delivery_date, delivery_slot_id, payment_method, payment_status, created_at_utc, updated_at_utc)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('order_gift_delete', 'usr_admin_001', 'HF-GIFT-DELETE', 'received', 0, 0, '2026-09-26', 'morning', 'cod_mock', 'mock_pending', now, now)
+  sqlite.prepare(`INSERT INTO order_items (id, order_id, item_type, product_name_snapshot, unit_price_vnd, quantity, line_total_vnd)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`).run('order_item_gift_delete', 'order_gift_delete', 'custom_bouquet', 'Bó hoa thử', 0, 1, 0)
+  sqlite.prepare(`INSERT INTO order_item_add_ons (id, order_item_id, gift_add_on_id, add_on_id_snapshot, add_on_name_snapshot, price_vnd)
+    VALUES (?, ?, ?, ?, ?, ?)`).run('order_add_on_gift_delete', 'order_item_gift_delete', 'mini-scented-candle', 'mini-scented-candle', 'Nến thơm nhỏ', 49000)
+
+  const deleted = await deleteAdminGiftAddOn('mini-scented-candle', {
+    fetchImpl: (url, options) => testWorker.fetch(url, options),
+    getToken: async () => 'admin-token',
+  })
+  assert.equal(deleted.ok, true, JSON.stringify(deleted.error))
+  const snapshot = sqlite.prepare('SELECT gift_add_on_id, add_on_id_snapshot, add_on_name_snapshot, price_vnd FROM order_item_add_ons WHERE id = ?').get('order_add_on_gift_delete')
+  assert.equal(snapshot.gift_add_on_id, null)
+  assert.equal(snapshot.add_on_id_snapshot, 'mini-scented-candle')
+  assert.equal(snapshot.add_on_name_snapshot, 'Nến thơm nhỏ')
+  assert.equal(snapshot.price_vnd, 49000)
+  assert.ok(sqlite.prepare('SELECT 1 FROM orders WHERE id = ?').get('order_gift_delete'))
+})
+
+test('88d. Admin gift delete UI requires explicit confirmation', () => {
+  const page = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
+  assert.match(page, /requestPermanentDelete\('gift', item\)/u)
+  assert.match(page, /Xóa vĩnh viễn món quà này\? Hành động này không thể hoàn tác\./u)
+  assert.match(page, /deleteAdminGiftAddOn\(deleteTarget\.id/u)
 })
 
 test('89. guest content edit request returns 401', async () => {

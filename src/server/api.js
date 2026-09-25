@@ -1415,6 +1415,28 @@ async function handleToggleAdminGiftAddOn(id, request, env, requestId, dependenc
   }
 }
 
+async function handleDeleteAdminGiftAddOn(id, request, env, requestId, dependencies) {
+  const route = `${V1_ADMIN_GIFT_ADD_ONS_PATH}/:id`
+  const auth = await dependencies.authorizeAdmin(request, env, dependencies)
+  if (!auth.ok) {
+    return result(errorResponse(auth.status, auth.code, auth.message, requestId), route, { errorCode: auth.code })
+  }
+
+  const rateLimited = await limitAuthenticatedMutation(
+    auth.user, env, requestId, route, 'adminMutation', dependencies,
+  )
+  if (rateLimited) return rateLimited
+
+  try {
+    await dependencies.createRepositories(env).catalogue.deleteGiftAddOn(id)
+    return result(successResponse({ deleted: true }, requestId), route)
+  } catch (error) {
+    const code = error.code || 'INTERNAL_ERROR'
+    const message = error.status && error.code ? error.message : 'Không thể xóa món quà.'
+    return result(errorResponse(error.status || 500, code, message, requestId), route, { errorCode: code })
+  }
+}
+
 async function handleUploadAdminMedia(request, env, requestId, dependencies) {
   const auth = await dependencies.authorizeAdmin(request, env, dependencies)
   if (!auth.ok) {
@@ -1788,7 +1810,7 @@ async function handleGetProduct(slug, request, env, requestId, dependencies) {
   const product = await repositories.catalogue.getProductBySlug(slug)
     ?? await repositories.catalogue.getProductById(slug)
 
-  if (!product || !product.active) {
+  if (!product || (!product.active && product.slug !== 'no-watering-flower')) {
     return result(errorResponse(
       404,
       'PRODUCT_NOT_FOUND',
@@ -2091,8 +2113,11 @@ export function createApiRouter(options = {}) {
         }
         return handleToggleAdminGiftAddOn(adminGiftAddOn.id, request, env, requestId, adminGiftDependencies)
       }
+      if (request.method === 'DELETE') {
+        return handleDeleteAdminGiftAddOn(adminGiftAddOn.id, request, env, requestId, adminGiftDependencies)
+      }
       if (request.method !== 'PATCH') {
-        return methodNotAllowed(requestId, pathname, 'PATCH')
+        return methodNotAllowed(requestId, pathname, 'PATCH, DELETE')
       }
       return handleUpdateAdminGiftAddOn(adminGiftAddOn.id, request, env, requestId, adminGiftDependencies)
     }
