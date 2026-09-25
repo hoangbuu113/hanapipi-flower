@@ -47,6 +47,8 @@ function createSeededDatabase() {
     '0005_add_order_delivering_status.sql',
     '0006_add_momo_payment_method.sql',
     '0007_tighten_order_payment_methods.sql',
+    '0008_create_user_addresses.sql',
+    '0009_guest_orders.sql',
   ]
   for (const m of migrationFiles) {
     db.exec(fs.readFileSync(path.resolve('drizzle', m), 'utf8'))
@@ -121,6 +123,7 @@ function createTestHarness(d1, options = {}) {
     async fetch(url, fetchOpts = {}) {
       const fullUrl = url.startsWith('http') ? url : `${localOrigin}${url}`
       const headers = new Headers(fetchOpts.headers || {})
+      if (fetchOpts.method === 'POST' && !headers.has('Origin')) headers.set('Origin', localOrigin)
       return worker.fetch(new Request(fullUrl, { ...fetchOpts, headers }), env)
     },
     worker,

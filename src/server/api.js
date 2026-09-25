@@ -44,7 +44,7 @@ const V1_CATALOGUE_PATH = `${API_V1_PREFIX}/catalogue`
 const V1_CATALOGUE_PRODUCTS_PATH = `${API_V1_PREFIX}/catalogue/products`
 const V1_ORDERS_PATH = `${API_V1_PREFIX}/orders`
 const V1_ADDRESSES_PATH = `${API_V1_PREFIX}/addresses`
-const PREFLIGHT_HEADERS = ['authorization', 'content-type', 'idempotency-key', 'if-match']
+const PREFLIGHT_HEADERS = ['authorization', 'content-type', 'idempotency-key', 'if-match', 'x-guest-order-token']
 
 export const isApiPath = (pathname) => pathname === '/api' || pathname.startsWith('/api/')
 export const isApiV1Path = (pathname) => pathname === API_V1_PREFIX
@@ -154,7 +154,7 @@ function handlePreflight(request, env, requestId) {
 
   return result(new Response(null, {
     headers: {
-      'Access-Control-Allow-Headers': 'Authorization, Content-Type, Idempotency-Key, If-Match',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type, Idempotency-Key, If-Match, X-Guest-Order-Token',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Max-Age': '600',
       Allow: 'POST, OPTIONS',
@@ -188,8 +188,14 @@ async function handleCurrentUser(request, env, requestId, dependencies) {
 }
 
 async function handleCreateOrder(request, env, requestId, dependencies) {
-  const auth = await dependencies.authenticateUser(request, env, dependencies)
-  if (!auth.ok) {
+  const origin = validateMutationOrigin(request, env)
+  if (!origin.ok) return originNotAllowed(requestId, V1_ORDERS_PATH)
+
+  const hasBearer = request.headers.has('Authorization')
+  const auth = hasBearer
+    ? await dependencies.authenticateUser(request, env, dependencies)
+    : null
+  if (auth && !auth.ok) {
     return result(errorResponse(
       auth.status,
       auth.code,
@@ -198,10 +204,13 @@ async function handleCreateOrder(request, env, requestId, dependencies) {
     ), V1_ORDERS_PATH, { errorCode: auth.code })
   }
 
-  const rateLimited = await limitAuthenticatedMutation(
-    auth.user, env, requestId, V1_ORDERS_PATH, 'orderCreation', dependencies,
-  )
-  if (rateLimited) return rateLimited
+  const decision = await dependencies.rateLimitRequest({
+    env,
+    identity: auth?.user?.id,
+    policy: 'orderCreation',
+    request,
+  })
+  if (!decision.allowed) return rateLimitError(decision, requestId, V1_ORDERS_PATH, 'orderCreation')
 
   let body = null
   try {
@@ -227,9 +236,11 @@ async function handleCreateOrder(request, env, requestId, dependencies) {
   const repositories = dependencies.createRepositories(env)
 
   try {
-    const created = await repositories.orders.createForUser(auth.user, body)
+    const created = auth
+      ? { order: await repositories.orders.createForUser(auth.user, body) }
+      : await repositories.orders.createForGuest(body)
     return result(
-      successResponse({ order: created }, requestId, { status: 201 }),
+      successResponse(created, requestId, { status: 201 }),
       V1_ORDERS_PATH,
     )
   } catch (err) {
@@ -284,8 +295,11 @@ async function handleListUserOrders(request, env, requestId, dependencies) {
 
 async function handleGetUserOrder(idOrCode, request, env, requestId, dependencies) {
   const route = `${V1_ORDERS_PATH}/:id`
-  const auth = await dependencies.authenticateUser(request, env, dependencies)
-  if (!auth.ok) {
+  const hasBearer = request.headers.has('Authorization')
+  const auth = hasBearer
+    ? await dependencies.authenticateUser(request, env, dependencies)
+    : null
+  if (auth && !auth.ok) {
     return result(errorResponse(
       auth.status,
       auth.code,
@@ -294,10 +308,18 @@ async function handleGetUserOrder(idOrCode, request, env, requestId, dependencie
     ), route, { errorCode: auth.code })
   }
 
+  if (!auth && !request.headers.get('X-Guest-Order-Token')) {
+    return result(errorResponse(401, 'AUTHENTICATION_REQUIRED', 'Bạn cần quyền truy cập để xem đơn hoa.', requestId), route, {
+      errorCode: 'AUTHENTICATION_REQUIRED',
+    })
+  }
+
   const repositories = dependencies.createRepositories(env)
 
   try {
-    const order = await repositories.orders.getForUser(auth.user, idOrCode)
+    const order = auth
+      ? await repositories.orders.getForUser(auth.user, idOrCode)
+      : await repositories.orders.getForGuest(idOrCode, request.headers.get('X-Guest-Order-Token'))
     return result(
       successResponse({ order }, requestId),
       route,

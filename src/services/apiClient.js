@@ -63,7 +63,7 @@ export async function fetchCurrentUser({ getToken, fetchImpl = globalThis.fetch 
   }
 }
 
-export async function createOrder({ getToken, order, fetchImpl = globalThis.fetch } = {}) {
+export async function createOrder({ getToken, order, requireAuth = false, fetchImpl = globalThis.fetch } = {}) {
   if (typeof getToken !== 'function') {
     throw new TypeError('A token getter function is required.')
   }
@@ -79,7 +79,7 @@ export async function createOrder({ getToken, order, fetchImpl = globalThis.fetc
     }
   }
 
-  if (!token) {
+  if (requireAuth && !token) {
     return {
       error: { code: 'AUTHENTICATION_REQUIRED', message: 'Bạn cần đăng nhập để tiếp tục đặt hoa.' },
       ok: false,
@@ -92,7 +92,7 @@ export async function createOrder({ getToken, order, fetchImpl = globalThis.fetc
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(order),
     })
@@ -116,6 +116,7 @@ export async function createOrder({ getToken, order, fetchImpl = globalThis.fetc
       error: null,
       ok: true,
       order: body?.data?.order ?? null,
+      guestAccessToken: body?.data?.guestAccessToken ?? null,
       status: response.status,
     }
   } catch {
@@ -124,6 +125,26 @@ export async function createOrder({ getToken, order, fetchImpl = globalThis.fetc
       ok: false,
       status: 0,
     }
+  }
+}
+
+export async function fetchGuestOrderDetail(idOrCode, { guestToken, fetchImpl = globalThis.fetch } = {}) {
+  if (!idOrCode || typeof idOrCode !== 'string') throw new TypeError('An order ID or code is required.')
+  if (!guestToken) {
+    return { error: { code: 'ORDER_NOT_FOUND', message: 'Không tìm thấy quyền xem đơn hoa này.' }, ok: false, order: null, status: 404 }
+  }
+
+  try {
+    const response = await fetchImpl(`/api/v1/orders/${encodeURIComponent(idOrCode)}`, {
+      headers: { 'X-Guest-Order-Token': guestToken },
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      return { error: body?.error ?? { code: 'API_ERROR', message: 'Không thể tải đơn hoa.' }, ok: false, order: null, status: response.status }
+    }
+    return { error: null, ok: true, order: body?.data?.order ?? null, status: response.status }
+  } catch {
+    return { error: { code: 'NETWORK_ERROR', message: 'Không thể kết nối đến máy chủ.' }, ok: false, order: null, status: 0 }
   }
 }
 

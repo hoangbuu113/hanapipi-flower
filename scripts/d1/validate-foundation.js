@@ -166,6 +166,9 @@ function assertSchema(database) {
   const orderSql = scalar(database, "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'orders'")
   assert(orderSql.includes("payment_method IN ('momo', 'bank_transfer')"), 'Payment method constraint is missing.')
   assert(orderSql.includes('buyer_contact_ciphertext') && orderSql.includes('fulfilment_key_version'), 'Fulfilment ciphertext/key-version fields are missing.')
+  assert(orderSql.includes('guest_access_token_hash') && orderSql.includes('CHECK ((user_id IS NULL) != (guest_access_token_hash IS NULL))'), 'Guest ownership constraint is missing.')
+  const userIdColumn = database.prepare("SELECT \"notnull\" FROM pragma_table_info('orders') WHERE name = 'user_id'").get()
+  assert(userIdColumn?.notnull === 0, 'Guest orders must allow NULL user_id.')
 }
 
 function assertInvariants(database, expectedChecksum) {

@@ -13,6 +13,7 @@ import { cartHasGiftAddOn, cartSubtotal } from '../utils/cart'
 import { isDeliveryDateAvailable } from '../utils/delivery'
 import { validateHcmcDeliveryAddress } from '../utils/hcmcDelivery.js'
 import { getCheckoutSavedAddressFields } from '../utils/savedAddress.js'
+import { saveGuestOrderAccess } from '../utils/guestOrderAccess.js'
 import './CheckoutPage.css'
 
 const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer: false, receiverName: '', receiverPhone: '', city: HCMC_CITY, district: '', ward: '', unitCode: '', address: '', deliveryNote: '', message: '', cardSenderName: '', anonymousSender: false }
@@ -20,7 +21,7 @@ const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer:
 function CheckoutPage() {
   const { addAddress, addOrder, savedAddresses, user } = useAccount()
   const { cartItems, clearCart, deliveryDraft, hasUnavailableItems } = useCommerce()
-  const { getToken, isSignedIn } = useAuth()
+  const { getToken, isLoaded: isAuthLoaded, isSignedIn } = useAuth()
   const [form, setForm] = useState(() => ({ ...initialForm, buyerName: user?.name ?? '', buyerPhone: user?.phone ?? '', email: user?.email ?? '' }))
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [saveForLater, setSaveForLater] = useState(false)
@@ -126,8 +127,8 @@ function CheckoutPage() {
       return
     }
 
-    if (!isSignedIn) {
-      setSubmitError('Vui lòng đăng nhập để hoàn tất đặt hoa.')
+    if (!isAuthLoaded) {
+      setSubmitError('Đang kiểm tra phiên làm việc. Vui lòng thử lại trong giây lát.')
       return
     }
 
@@ -174,7 +175,7 @@ function CheckoutPage() {
 
     setIsSubmitting(true)
     try {
-      const result = await createOrder({ getToken, order: payload })
+      const result = await createOrder({ getToken, order: payload, requireAuth: Boolean(isSignedIn) })
       if (!result.ok) {
         if (result.error?.fieldErrors) {
           setErrors((current) => ({ ...current, ...result.error.fieldErrors, unitCode: result.error.fieldErrors.unitCode || result.error.fieldErrors['address.unitCode'] || current.unitCode, address: result.error.fieldErrors.detail || result.error.fieldErrors['address.detail'] || current.address }))
@@ -183,7 +184,13 @@ function CheckoutPage() {
         return
       }
 
-      addOrder(result.order)
+      if (!isSignedIn && !result.guestAccessToken) {
+        setSubmitError('Đơn hoa đã được ghi nhận nhưng chưa thể mở trang thanh toán. Vui lòng liên hệ Hanapipi Flower và giữ nguyên giỏ hàng.')
+        return
+      }
+
+      if (isSignedIn) addOrder(result.order)
+      else saveGuestOrderAccess(result.order.code || result.order.orderCode, result.guestAccessToken)
       clearCart()
 
       let addressSaveFailed = false
@@ -217,7 +224,7 @@ function CheckoutPage() {
 
   if (!cartItems.length) return <main className="checkout-empty"><Container><p className="eyebrow">Giỏ hoa đang chờ bạn</p><h1>Chưa có bó hoa nào để thanh toán.</h1><p>Hãy quay lại giỏ hàng hoặc chọn một thiết kế thật vừa vặn.</p><Link className="button button--secondary" to="/cart">Quay lại giỏ hàng</Link></Container></main>
 
-  return <main className="checkout-page"><Container><header className="checkout-page__intro"><p className="eyebrow">Gửi hoa thật chỉn chu</p><h1>Thông tin giao hoa và thanh toán</h1></header><div className="checkout-page__layout"><form className="checkout-form" noValidate onSubmit={submit}>
+  return <main className="checkout-page"><Container><header className="checkout-page__intro"><p className="eyebrow">Gửi hoa thật chỉn chu</p><h1>Thông tin giao hoa và thanh toán</h1>{isAuthLoaded && !isSignedIn && <p>Thanh toán không cần tài khoản. Bạn có thể đăng nhập nếu muốn dùng địa chỉ đã lưu.</p>}</header><div className="checkout-page__layout"><form className="checkout-form" noValidate onSubmit={submit}>
     <FormSection title="Thông tin người đặt"><Field error={errors.buyerName} label="Họ và tên" required><input autoComplete="name" value={form.buyerName} onChange={(event) => update('buyerName', event.target.value)} /></Field><div className="checkout-fields"><Field error={errors.buyerPhone} label="Số điện thoại" required><input autoComplete="tel" inputMode="tel" placeholder="090 123 4567" value={form.buyerPhone} onChange={(event) => update('buyerPhone', event.target.value)} /></Field><Field error={errors.email} label="Email"><input autoComplete="email" type="email" value={form.email} onChange={(event) => update('email', event.target.value)} /></Field></div></FormSection>
     <FormSection title="Thông tin người nhận">
       {isSignedIn && savedAddresses && savedAddresses.length > 0 && (
@@ -312,9 +319,6 @@ function CheckoutPage() {
     {submitError && (
       <p className="checkout-error checkout-submit-error" role="alert">
         {submitError}
-        {!isSignedIn && (
-          <> <Link to="/login" style={{ textDecoration: 'underline' }}>Đăng nhập ngay</Link></>
-        )}
       </p>
     )}
     <button className="button button--primary checkout-submit" disabled={isSubmitting} type="submit">

@@ -169,9 +169,9 @@ test('v1 concierge returns the API error envelope, Retry-After, and skips provid
   assert.equal(handlerCalls, 0)
 })
 
-test('order limiter runs after authentication and keys only canonical user identity', async () => {
+test('order limiter uses network context for guests and canonical identity for signed-in customers', async () => {
   let limiterCalls = 0
-  let capturedIdentity = null
+  const captured = []
   const route = createApiRouter({
     authenticateUser: async (request) => {
       if (!request.headers.has('Authorization')) {
@@ -179,18 +179,19 @@ test('order limiter runs after authentication and keys only canonical user ident
       }
       return { ok: true, user: { id: 'usr_canonical_1' } }
     },
-    rateLimitRequest: async ({ identity, policy }) => {
+    rateLimitRequest: async ({ identity, policy, request }) => {
       limiterCalls += 1
-      capturedIdentity = identity
+      captured.push({ identity, ip: request?.headers.get('CF-Connecting-IP') })
       assert.equal(policy, 'orderCreation')
       return { allowed: false, code: 'RATE_LIMITED', retryAfterSeconds: 60, status: 429 }
     },
   })
   const env = createRateEnv()
 
-  const guest = await route(createRequest('/api/v1/orders', { body: '{}' }), env, 'guest')
-  assert.equal(guest.response.status, 401)
-  assert.equal(limiterCalls, 0)
+  const guest = await route(createRequest('/api/v1/orders', { body: '{}', ip: '203.0.113.10' }), env, 'guest')
+  assert.equal(guest.response.status, 429)
+  assert.equal(captured[0].identity, undefined)
+  assert.equal(captured[0].ip, '203.0.113.10')
 
   const customer = await route(createRequest('/api/v1/orders', {
     body: JSON.stringify({ userId: 'forged-user' }),
@@ -204,7 +205,8 @@ test('order limiter runs after authentication and keys only canonical user ident
   assert.equal(customer.response.status, 429)
   assert.equal(customer.response.headers.get('Retry-After'), '60')
   assert.equal(body.error.code, 'RATE_LIMITED')
-  assert.equal(capturedIdentity, 'usr_canonical_1')
+  assert.equal(captured[1].identity, 'usr_canonical_1')
+  assert.equal(limiterCalls, 2)
 })
 
 test('admin authorization precedes limiting and catalogue GET remains unaffected', async () => {

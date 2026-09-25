@@ -6,6 +6,7 @@ import {
 import { generateVietQrPayload } from '../vietqr.js'
 import { HCMC_CITY } from '../../data/hcmcAdministrativeUnits.js'
 import { validateHcmcDeliveryAddress } from '../../utils/hcmcDelivery.js'
+import { createGuestOrderAccess, verifyGuestOrderToken } from '../guestOrderAccess.js'
 
 const MAX_ITEMS = 20
 const MAX_QUANTITY = 20
@@ -260,8 +261,20 @@ export function createOrderRepository(db, options = {}) {
   return {
     async createForUser(user, payload) {
       if (!user?.id) throw new TypeError('Authenticated D1 user is required.')
+      return (await this.createForPrincipal(user, payload)).order
+    },
+
+    async createForGuest(payload) {
+      return this.createForPrincipal(null, payload)
+    },
+
+    async createForPrincipal(user, payload) {
       const orderInput = normalizePayload(payload)
+      if (!user && orderInput.savedAddressId) {
+        throw orderError(400, 'INVALID_DELIVERY_ADDRESS', 'Khách không tài khoản cần nhập địa chỉ giao hoa.')
+      }
       if (!orderInput.address.unitCode) {
+        if (!user) throw orderError(400, 'INVALID_DELIVERY_ADDRESS', 'Vui lòng chọn phường, xã giao hoa hợp lệ.')
         const saved = await db.prepare(`
           SELECT address_ciphertext FROM user_addresses
           WHERE id = ? AND user_id = ? AND deleted_at_utc IS NULL
@@ -345,6 +358,7 @@ export function createOrderRepository(db, options = {}) {
       const timestamp = createdAt.toISOString()
       const orderId = createId('ord')
       const orderCode = createOrderCode(createdAt)
+      const guestAccess = user ? null : await createGuestOrderAccess()
       const subtotalVnd = canonicalItems.reduce((total, item) => total + item.lineTotalVnd, 0)
       const fulfilmentKey = options.fulfilmentKey
       const [buyerCiphertext, recipientCiphertext, addressCiphertext, giftingCiphertext] = await Promise.all([
@@ -358,19 +372,20 @@ export function createOrderRepository(db, options = {}) {
 
       const statements = [db.prepare(`
         INSERT INTO orders (
-          id, user_id, order_code, status, revision, subtotal_vnd, total_vnd, currency,
+          id, user_id, guest_access_token_hash, order_code, status, revision, subtotal_vnd, total_vnd, currency,
           delivery_date, delivery_slot_id, buyer_contact_ciphertext, recipient_ciphertext,
           delivery_address_ciphertext, gift_message_ciphertext, fulfilment_key_version,
           fulfilment_metadata_json, payment_method, payment_status, created_at_utc, updated_at_utc
         ) VALUES (
-          ?, ?, ?, 'received', 0, ?, ?, 'VND',
+          ?, ?, ?, ?, 'received', 0, ?, ?, 'VND',
           ?, ?, ?, ?,
           ?, ?, ?,
           ?, ?, ?, ?, ?
         )
       `).bind(
         orderId,
-        user.id,
+        user?.id ?? null,
+        guestAccess?.hash ?? null,
         orderCode,
         subtotalVnd,
         subtotalVnd,
@@ -457,25 +472,28 @@ export function createOrderRepository(db, options = {}) {
       }, { bankConfig: options.bankConfig, momoConfig: options.momoConfig })
 
       return {
-        address: orderInput.address,
-        buyer: orderInput.buyer,
-        code: orderCode,
-        createdAtUtc: timestamp,
-        currency: 'VND',
-        delivery: orderInput.delivery,
-        gifting: orderInput.gifting,
-        id: orderId,
-        items: responseItems,
-        orderCode,
-        payment,
-        paymentMethod: orderInput.paymentMethod,
-        paymentStatus: initialPaymentStatus,
-        receiver: orderInput.recipient,
-        status: 'received',
-        subtotalVnd,
-        timestamp,
-        total: subtotalVnd,
-        totalVnd: subtotalVnd,
+        guestAccessToken: guestAccess?.token ?? null,
+        order: {
+          address: orderInput.address,
+          buyer: orderInput.buyer,
+          code: orderCode,
+          createdAtUtc: timestamp,
+          currency: 'VND',
+          delivery: orderInput.delivery,
+          gifting: orderInput.gifting,
+          id: orderId,
+          items: responseItems,
+          orderCode,
+          payment,
+          paymentMethod: orderInput.paymentMethod,
+          paymentStatus: initialPaymentStatus,
+          receiver: orderInput.recipient,
+          status: 'received',
+          subtotalVnd,
+          timestamp,
+          total: subtotalVnd,
+          totalVnd: subtotalVnd,
+        },
       }
     },
 
@@ -585,7 +603,20 @@ export function createOrderRepository(db, options = {}) {
 
     async getForUser(user, idOrCode, callOptions = {}) {
       if (!user?.id) throw new TypeError('Authenticated D1 user is required.')
+      return this.getForOrderAccess({ userId: user.id }, idOrCode, callOptions)
+    },
+
+    async getForGuest(idOrCode, token, callOptions = {}) {
+      return this.getForOrderAccess({ guestToken: token }, idOrCode, callOptions)
+    },
+
+    async getForOrderAccess(access, idOrCode, callOptions = {}) {
       if (!idOrCode || typeof idOrCode !== 'string') {
+        throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+
+      const isGuest = !access.userId
+      if (isGuest && (typeof access.guestToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/u.test(access.guestToken))) {
         throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
       }
 
@@ -593,6 +624,7 @@ export function createOrderRepository(db, options = {}) {
         SELECT
           id,
           user_id,
+          guest_access_token_hash,
           order_code,
           status,
           revision,
@@ -612,11 +644,12 @@ export function createOrderRepository(db, options = {}) {
           created_at_utc,
           updated_at_utc
         FROM orders
-        WHERE user_id = ? AND (id = ? OR order_code = ?)
+        WHERE ${isGuest ? 'user_id IS NULL' : 'user_id = ?'} AND (id = ? OR order_code = ?)
         LIMIT 1
       `
-      const order = await db.prepare(query).bind(user.id, idOrCode, idOrCode).first()
-      if (!order) {
+      const order = await db.prepare(query)
+        .bind(...(isGuest ? [] : [access.userId]), idOrCode, idOrCode).first()
+      if (!order || (isGuest && !await verifyGuestOrderToken(access.guestToken, order.guest_access_token_hash))) {
         throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
       }
 
@@ -848,6 +881,7 @@ export function createOrderRepository(db, options = {}) {
           totalVnd: order.total_vnd,
           updatedAtUtc: order.updated_at_utc,
           userId: order.user_id,
+          customerType: order.user_id ? 'registered' : 'guest',
         }
       })
     },
@@ -1054,6 +1088,7 @@ export function createOrderRepository(db, options = {}) {
         totalVnd: order.total_vnd,
         updatedAtUtc: order.updated_at_utc,
         userId: order.user_id,
+        customerType: order.user_id ? 'registered' : 'guest',
       }
     },
 

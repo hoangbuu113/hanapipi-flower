@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
-import { createOrder } from '../src/services/apiClient.js'
+import { createOrder, fetchGuestOrderDetail } from '../src/services/apiClient.js'
 import { decryptFulfilmentValue, encryptFulfilmentValue } from '../src/server/fulfilmentCrypto.js'
 import { createWorker } from '../src/worker.js'
 
@@ -48,6 +48,7 @@ function createSeededDatabase() {
   const m6 = fs.readFileSync(path.resolve('drizzle/0006_add_momo_payment_method.sql'), 'utf8')
   const m7 = fs.readFileSync(path.resolve('drizzle/0007_tighten_order_payment_methods.sql'), 'utf8')
   const m8 = fs.readFileSync(path.resolve('drizzle/0008_create_user_addresses.sql'), 'utf8')
+  const m9 = fs.readFileSync(path.resolve('drizzle/0009_guest_orders.sql'), 'utf8')
   db.exec(m1)
   db.exec(m2)
   db.exec(m3)
@@ -56,6 +57,7 @@ function createSeededDatabase() {
   db.exec(m6)
   db.exec(m7)
   db.exec(m8)
+  db.exec(m9)
   return { d1: new D1Wrapper(db), sqlite: db }
 }
 
@@ -97,6 +99,7 @@ function createTestWorker(d1, options = {}) {
     async fetch(url, fetchOpts = {}) {
       const fullUrl = url.startsWith('http') ? url : `${localOrigin}${url}`
       const headers = new Headers(fetchOpts.headers || {})
+      if (fetchOpts.method === 'POST' && !headers.has('Origin')) headers.set('Origin', localOrigin)
       return worker.fetch(new Request(fullUrl, { ...fetchOpts, headers }), env)
     },
     worker,
@@ -151,9 +154,9 @@ function createValidOrderPayload() {
   }
 }
 
-// 1. Auth 1: Unauthenticated request to POST /api/v1/orders returns 401
-test('1. unauthenticated request to POST /api/v1/orders returns 401', async () => {
-  const { d1 } = createSeededDatabase()
+// 1. A guest may create an order without a Clerk identity.
+test('1. guest request to POST /api/v1/orders creates an unowned order', async () => {
+  const { d1, sqlite } = createSeededDatabase()
   const worker = createTestWorker(d1)
 
   const response = await worker.fetch('/api/v1/orders', {
@@ -162,9 +165,132 @@ test('1. unauthenticated request to POST /api/v1/orders returns 401', async () =
     body: JSON.stringify(createValidOrderPayload()),
   })
 
-  assert.equal(response.status, 401)
+  assert.equal(response.status, 201)
   const body = await response.json()
-  assert.equal(body.error?.code, 'AUTHENTICATION_REQUIRED')
+  assert.ok(body.data?.guestAccessToken)
+  assert.equal(sqlite.prepare('SELECT user_id FROM orders WHERE id = ?').get(body.data.order.id).user_id, null)
+})
+
+test('guest MoMo order uses canonical prices, encrypts PII, and has one-time access credentials', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  const worker = createTestWorker(d1)
+  worker.env.MOMO_ACCOUNT_NAME = 'Tên thử nghiệm'
+  worker.env.MOMO_PHONE_NUMBER = '0900000000'
+  const payload = { ...createValidOrderPayload(), paymentMethod: 'momo', total: 1, userId: 'forged-owner' }
+  payload.items = [{ ...payload.items[0], unitPrice: 1 }]
+
+  const response = await worker.fetch('/api/v1/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  assert.equal(response.status, 201)
+  const { order, guestAccessToken } = (await response.json()).data
+  assert.match(guestAccessToken, /^[A-Za-z0-9_-]{43}$/u)
+  assert.equal(order.totalVnd, 1420000)
+  assert.equal(order.payment.momo.amountVnd, order.totalVnd)
+  assert.equal(order.payment.momo.transferContent, `HANAPIPI ${order.code}`)
+  assert.equal(order.paymentStatus, 'pending')
+  const row = sqlite.prepare('SELECT * FROM orders WHERE id = ?').get(order.id)
+  assert.equal(row.user_id, null)
+  assert.match(row.guest_access_token_hash, /^[0-9a-f]{64}$/u)
+  assert.equal(JSON.stringify(row).includes(guestAccessToken), false)
+  assert.equal(JSON.stringify(row).includes(payload.buyer.name), false)
+  assert.equal(JSON.stringify(row).includes(payload.address.detail), false)
+  assert.ok(sqlite.prepare('SELECT id FROM order_items WHERE order_id = ?').get(order.id))
+
+  const read = await fetchGuestOrderDetail(order.code, {
+    guestToken: guestAccessToken,
+    fetchImpl: worker.fetch,
+  })
+  assert.equal(read.ok, true)
+  assert.equal(read.order.buyer.name, payload.buyer.name)
+  assert.equal(read.order.address.detail, payload.address.detail)
+  assert.equal(JSON.stringify(read.order).includes('ciphertext'), false)
+})
+
+test('guest order access rejects code alone, wrong token, cross-order token, and forged bearer', async () => {
+  const { d1 } = createSeededDatabase()
+  const worker = createTestWorker(d1)
+  const create = async () => {
+    const response = await worker.fetch('/api/v1/orders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(createValidOrderPayload()),
+    })
+    return (await response.json()).data
+  }
+  const first = await create()
+  const second = await create()
+
+  assert.equal((await worker.fetch(`/api/v1/orders/${first.order.code}`)).status, 401)
+  assert.equal((await worker.fetch(`/api/v1/orders/${first.order.code}`, {
+    headers: { 'X-Guest-Order-Token': second.guestAccessToken },
+  })).status, 404)
+  assert.equal((await worker.fetch(`/api/v1/orders/${first.order.code}`, {
+    headers: { 'X-Guest-Order-Token': 'x'.repeat(43) },
+  })).status, 404)
+  assert.equal((await worker.fetch(`/api/v1/orders/${first.order.code}`, {
+    headers: { Authorization: 'Bearer invalid-token-xyz', 'X-Guest-Order-Token': first.guestAccessToken },
+  })).status, 401)
+  const forgedCreation = await worker.fetch('/api/v1/orders', {
+    method: 'POST', headers: { Authorization: 'Bearer invalid-token-xyz', 'Content-Type': 'application/json' },
+    body: JSON.stringify(createValidOrderPayload()),
+  })
+  assert.equal(forgedCreation.status, 401)
+})
+
+test('guest order mutation needs an allowed Origin, and Admin can operate on guest order', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  const worker = createTestWorker(d1)
+  const denied = await worker.fetch('/api/v1/orders', {
+    method: 'POST', headers: { Origin: 'https://unrelated.example', 'Content-Type': 'application/json' },
+    body: JSON.stringify(createValidOrderPayload()),
+  })
+  assert.equal(denied.status, 403)
+
+  const created = await worker.fetch('/api/v1/orders', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(createValidOrderPayload()),
+  })
+  const { order } = (await created.json()).data
+  const now = new Date().toISOString()
+  sqlite.prepare(`INSERT INTO users (id, auth_provider, provider_subject, role, status, locale, created_at_utc, updated_at_utc)
+    VALUES (?, 'clerk', ?, 'admin', 'active', 'vi-VN', ?, ?)`)
+    .run('usr_guest_test_admin', 'user_admin_subject', now, now)
+  const list = await worker.fetch('/api/v1/admin/orders', { headers: { Authorization: 'Bearer admin-token' } })
+  assert.equal(list.status, 200)
+  const listBody = await list.json()
+  assert.equal(listBody.data.orders.find((item) => item.id === order.id).customerType, 'guest')
+  const detail = await worker.fetch(`/api/v1/admin/orders/${order.id}`, { headers: { Authorization: 'Bearer admin-token' } })
+  assert.equal(detail.status, 200)
+  assert.equal((await detail.json()).data.order.customerType, 'guest')
+})
+
+test('guest migration preserves an existing authenticated order and its item snapshots', () => {
+  const db = new DatabaseSync(':memory:')
+  for (const file of [
+    '0001_phase16_foundation.sql', '0002_phase16_catalogue_seed.sql',
+    '0003_add_product_internal_note.sql', '0004_update_order_payment_constraints.sql',
+    '0005_add_order_delivering_status.sql', '0006_add_momo_payment_method.sql',
+    '0007_tighten_order_payment_methods.sql', '0008_create_user_addresses.sql',
+  ]) db.exec(fs.readFileSync(path.resolve('drizzle', file), 'utf8'))
+
+  const timestamp = '2026-09-25T00:00:00.000Z'
+  db.prepare(`INSERT INTO users (id, auth_provider, provider_subject, role, status, locale, created_at_utc, updated_at_utc)
+    VALUES (?, 'clerk', ?, 'customer', 'active', 'vi-VN', ?, ?)`).run('usr_existing', 'sub_existing', timestamp, timestamp)
+  db.prepare(`INSERT INTO orders (id, user_id, order_code, status, subtotal_vnd, total_vnd,
+    delivery_date, delivery_slot_id, payment_method, payment_status, created_at_utc, updated_at_utc)
+    VALUES (?, ?, ?, 'received', 590000, 590000, '2026-09-26', 'morning', 'momo', 'pending', ?, ?)`)
+    .run('ord_existing', 'usr_existing', 'HF-20260925-EXISTING', timestamp, timestamp)
+  db.prepare(`INSERT INTO order_items (id, order_id, item_type, product_name_snapshot, unit_price_vnd, quantity, line_total_vnd)
+    VALUES (?, ?, 'product', ?, 590000, 1, 590000)`).run('ori_existing', 'ord_existing', 'Nắng Dịu')
+
+  db.exec(fs.readFileSync(path.resolve('drizzle/0009_guest_orders.sql'), 'utf8'))
+  const order = db.prepare('SELECT user_id, guest_access_token_hash FROM orders WHERE id = ?').get('ord_existing')
+  assert.equal(order.user_id, 'usr_existing')
+  assert.equal(order.guest_access_token_hash, null)
+  assert.equal(db.prepare('SELECT product_name_snapshot FROM order_items WHERE id = ?').get('ori_existing').product_name_snapshot, 'Nắng Dịu')
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), [])
+  db.close()
 })
 
 // 2. Auth 2: Malformed / invalid bearer token returns 401
@@ -856,7 +982,7 @@ test('31. order_item_add_ons records gift add-on snapshots', async () => {
 
 // 32. UI 32: createOrder client helper handles token error and unauthenticated state
 test('32. createOrder client helper handles token error and unauthenticated state', async () => {
-  const result1 = await createOrder({ getToken: async () => null, order: createValidOrderPayload() })
+  const result1 = await createOrder({ getToken: async () => null, order: createValidOrderPayload(), requireAuth: true })
   assert.equal(result1.ok, false)
   assert.equal(result1.status, 401)
   assert.equal(result1.error?.code, 'AUTHENTICATION_REQUIRED')
@@ -1072,4 +1198,19 @@ test('Checkout renders one recipient/location flow and no obsolete province or d
   assert.ok(source.includes('<AdministrativeUnitSelector'))
   assert.ok(!source.includes('<option>Hà Nội</option>'))
   assert.ok(!source.includes('label="Quận / huyện"'))
+})
+
+test('guest checkout UI keeps saved addresses account-only and reloads MoMo success by token', () => {
+  const checkout = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
+  const success = fs.readFileSync(path.resolve('src/pages/CheckoutSuccessPage.jsx'), 'utf8')
+  const access = fs.readFileSync(path.resolve('src/utils/guestOrderAccess.js'), 'utf8')
+  assert.match(checkout, /Thanh toán không cần tài khoản/u)
+  assert.match(checkout, /isSignedIn && savedAddresses/u)
+  assert.match(checkout, /requireAuth: Boolean\(isSignedIn\)/u)
+  assert.match(checkout, /saveGuestOrderAccess\(result\.order/u)
+  assert.ok(checkout.indexOf('if (!result.ok)') < checkout.indexOf('clearCart()'))
+  assert.match(success, /fetchGuestOrderDetail\(orderCode, \{ guestToken \}\)/u)
+  assert.match(success, /momoQrAsset/u)
+  assert.match(access, /window\.sessionStorage/u)
+  assert.doesNotMatch(access, /buyer|recipient|address/u)
 })

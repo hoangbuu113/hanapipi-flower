@@ -54,6 +54,7 @@ function createSeededDatabase() {
   const m6 = fs.readFileSync(path.resolve('drizzle/0006_add_momo_payment_method.sql'), 'utf8')
   const m7 = fs.readFileSync(path.resolve('drizzle/0007_tighten_order_payment_methods.sql'), 'utf8')
   const m8 = fs.readFileSync(path.resolve('drizzle/0008_create_user_addresses.sql'), 'utf8')
+  const m9 = fs.readFileSync(path.resolve('drizzle/0009_guest_orders.sql'), 'utf8')
   db.exec(m1)
   db.exec(m2)
   db.exec(m3)
@@ -62,6 +63,7 @@ function createSeededDatabase() {
   db.exec(m6)
   db.exec(m7)
   db.exec(m8)
+  db.exec(m9)
   return { d1: new D1Wrapper(db), sqlite: db }
 }
 

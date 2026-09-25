@@ -5,7 +5,8 @@ import qrcode from 'qrcode-generator'
 import Container from '../components/Container'
 import momoQrAsset from '../assets/payment_momo_qr_staging.png'
 import { useAccount } from '../context/accountStore'
-import { fetchUserOrderDetail } from '../services/apiClient'
+import { fetchGuestOrderDetail, fetchUserOrderDetail } from '../services/apiClient'
+import { readGuestOrderAccess } from '../utils/guestOrderAccess'
 import { formatCurrency } from '../utils/formatCurrency'
 import {
   formatDeliveryDate,
@@ -81,6 +82,7 @@ function CheckoutSuccessPage() {
   const { orderCode } = useParams()
   const { getToken, isLoaded: isAuthLoaded, isSignedIn } = useAuth()
   const { orders, user } = useAccount()
+  const guestToken = readGuestOrderAccess(orderCode)
 
   const contextOrder = orders.find((entry) => entry.code === orderCode || entry.orderCode === orderCode)
   const hasCompleteContextOrder = Boolean(contextOrder?.receiver?.name)
@@ -90,12 +92,22 @@ function CheckoutSuccessPage() {
   const [fetchError, setFetchError] = useState(null)
 
   useEffect(() => {
-    if (hasCompleteContextOrder || !isAuthLoaded || !isSignedIn) {
+    if (hasCompleteContextOrder || (!guestToken && !isAuthLoaded)) {
+      return
+    }
+
+    if (!guestToken && !isSignedIn) {
+      setIsLoading(false)
       return
     }
 
     let isCancelled = false
-    fetchUserOrderDetail(orderCode, { getToken })
+    setIsLoading(true)
+    setFetchError(null)
+    const fetchDetail = guestToken
+      ? fetchGuestOrderDetail(orderCode, { guestToken })
+      : fetchUserOrderDetail(orderCode, { getToken })
+    fetchDetail
       .then((result) => {
         if (isCancelled) return
         if (result.ok && result.order) {
@@ -118,9 +130,10 @@ function CheckoutSuccessPage() {
     return () => {
       isCancelled = true
     }
-  }, [orderCode, isAuthLoaded, isSignedIn, getToken, hasCompleteContextOrder])
+  }, [orderCode, isAuthLoaded, isSignedIn, getToken, guestToken, hasCompleteContextOrder])
 
-  const order = detailOrder || (hasCompleteContextOrder ? contextOrder : null)
+  const order = (detailOrder?.code === orderCode ? detailOrder : null)
+    || (hasCompleteContextOrder ? contextOrder : null)
 
   if (isLoading) {
     return (
@@ -142,7 +155,7 @@ function CheckoutSuccessPage() {
           <p className="eyebrow">Chưa tìm thấy đơn hoa</p>
           <h1>{fetchError?.message || 'Đơn hoa này không tồn tại hoặc bạn chưa đăng nhập.'}</h1>
           <div className="success-page__actions">
-            {!isSignedIn && (
+            {!isSignedIn && !guestToken && (
               <Link className="button button--primary" to="/login">
                 Đăng nhập
               </Link>
@@ -371,18 +384,12 @@ function CheckoutSuccessPage() {
           <p className="success-page__note">
             Thời gian giao và phương thức thanh toán sẽ được xác nhận trước khi xử lý thực tế.
           </p>
+          {guestToken && <p className="success-page__note">Bạn có thể tải lại trang này để xem đơn vừa đặt trong phiên trình duyệt hiện tại.</p>}
           <div className="success-page__actions">
-            <Link className="button button--primary" to="/account">
-              Xem đơn hàng
-            </Link>
+            {user && <Link className="button button--primary" to="/account">Xem đơn hàng</Link>}
             <Link className="button button--secondary" to="/shop">
               Tiếp tục chọn hoa
             </Link>
-            {!user && (
-              <Link className="button button--text" to="/register">
-                Tạo tài khoản để lưu thông tin
-              </Link>
-            )}
           </div>
         </div>
       </Container>

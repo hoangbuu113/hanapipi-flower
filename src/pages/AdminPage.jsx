@@ -1107,6 +1107,7 @@ function AdminPage() {
                       <tr key={order.id}>
                         <td>
                           <code className="admin-order-code">{order.orderCode}</code>
+                          {order.customerType === 'guest' && <span className="admin-order-date">Khách không tài khoản</span>}
                         </td>
                         <td>
                           <span className="admin-order-date">
@@ -2544,6 +2545,7 @@ function AdminPage() {
                   <div className="admin-order-grid">
                     <div className="admin-order-card">
                       <h4>Người đặt hàng</h4>
+                      {selectedOrderDetail.customerType === 'guest' && <p>Khách không tài khoản</p>}
                       <p><strong>{selectedOrderDetail.buyer?.name || '—'}</strong></p>
                       <p>Số điện thoại: {selectedOrderDetail.buyer?.phone || '—'}</p>
                       {selectedOrderDetail.buyer?.email && <p>Email: {selectedOrderDetail.buyer.email}</p>}
