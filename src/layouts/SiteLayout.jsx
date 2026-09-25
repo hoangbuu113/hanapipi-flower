@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import Footer from '../components/Footer'
 import CartDrawer from '../components/CartDrawer'
 import ConciergeWidget from '../components/ConciergeWidget'
+import FloatingCartShortcut from '../components/FloatingCartShortcut'
 import Navbar from '../components/Navbar'
 import { DELIVERY_CUTOFF_HOUR } from '../utils/delivery'
 
@@ -29,6 +30,7 @@ function SiteLayout() {
         <Outlet />
       </div>
       <Footer />
+      <FloatingCartShortcut />
       <ConciergeWidget />
       <CartDrawer />
     </div>

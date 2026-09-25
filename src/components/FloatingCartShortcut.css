@@ -1,0 +1,77 @@
+.floating-cart-shortcut {
+  position: fixed;
+  z-index: 49;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: calc(max(24px, env(safe-area-inset-bottom)) + 60px);
+  display: inline-flex;
+  min-width: 112px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid var(--accent-botanical);
+  border-radius: 8px;
+  padding: 0 17px;
+  background: var(--surface);
+  box-shadow: var(--shadow-quiet);
+  color: var(--accent-botanical);
+  font-family: var(--font-family-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  transition: background-color var(--motion-fast) var(--motion-ease-out);
+}
+
+.floating-cart-shortcut > svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.6;
+}
+
+.floating-cart-shortcut__badge {
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  padding-inline: 4px;
+  background: var(--accent-botanical);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+@media (max-width: 719px) {
+  .floating-cart-shortcut {
+    right: max(14px, env(safe-area-inset-right));
+    bottom: calc(max(14px, env(safe-area-inset-bottom)) + 58px);
+    width: 48px;
+    min-width: 48px;
+    padding: 0;
+  }
+
+  .floating-cart-shortcut__label {
+    display: none;
+  }
+
+  .floating-cart-shortcut__badge {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    min-width: 19px;
+    height: 19px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .floating-cart-shortcut:hover {
+    background: var(--background-secondary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-cart-shortcut {
+    transition: none;
+  }
+}

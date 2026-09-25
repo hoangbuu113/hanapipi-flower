@@ -727,3 +727,18 @@ test('26. zero static imports in CartItems.jsx and CommerceContext.jsx', () => {
   const commerceContextContent = fs.readFileSync(path.resolve('src/context/CommerceContext.jsx'), 'utf8')
   assert.equal(commerceContextContent.includes("from '../data/products'"), false)
 })
+
+test('27. floating cart shortcut uses the canonical quantity count and cart route', () => {
+  const shortcut = fs.readFileSync(path.resolve('src/components/FloatingCartShortcut.jsx'), 'utf8')
+  const layout = fs.readFileSync(path.resolve('src/layouts/SiteLayout.jsx'), 'utf8')
+  const commerce = fs.readFileSync(path.resolve('src/context/CommerceContext.jsx'), 'utf8')
+  const styles = fs.readFileSync(path.resolve('src/components/FloatingCartShortcut.css'), 'utf8')
+
+  assert.match(shortcut, /const \{ cartCount \} = useCommerce\(\)/u)
+  assert.match(commerce, /cartCount: storedCartItems\.reduce\(\(total, item\) => total \+ item\.quantity, 0\)/u)
+  assert.match(shortcut, /to="\/cart"/u)
+  assert.match(shortcut, /cartCount > 0 &&/u)
+  assert.match(shortcut, /'\/shop', '\/search', '\/flower-finder', '\/wishlist'/u)
+  assert.match(layout, /<FloatingCartShortcut \/>/u)
+  assert.match(styles, /bottom: calc\(max\(14px, env\(safe-area-inset-bottom\)\) \+ 58px\)/u)
+})
