@@ -10,7 +10,7 @@ export function validateHcmcDeliveryAddress(address) {
   const unit = getHcmcDeliveryUnit(address?.unitCode)
   let rejectionCode = null
   if (!administrativeUnit) {
-    errors.unitCode = 'Vui lòng chọn phường, xã hoặc đặc khu hiện hành tại TP. Hồ Chí Minh.'
+    errors.unitCode = 'Vui lòng chọn phường hoặc xã hiện hành tại TP. Hồ Chí Minh.'
     rejectionCode = 'INVALID_ADMIN_UNIT'
   } else if (!unit) {
     errors.unitCode = 'Hanapipi hiện chưa giao hoa tại khu vực này.'

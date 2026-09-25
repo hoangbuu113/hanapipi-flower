@@ -115,7 +115,7 @@ function normalizePayload(payload) {
   const savedAddressId = cleanString(payload.savedAddressId, { field: 'savedAddressId', max: 100, required: false })
   if (address.city !== HCMC_CITY || (!address.unitCode && !savedAddressId)) {
     throw orderError(400, 'INVALID_DELIVERY_ADDRESS', 'Vui lòng chọn địa chỉ giao hoa tại TP. Hồ Chí Minh.', {
-      'address.unitCode': 'Vui lòng chọn phường, xã hoặc đặc khu hợp lệ.',
+      'address.unitCode': 'Vui lòng chọn phường hoặc xã hợp lệ.',
     })
   }
   if (address.unitCode) {

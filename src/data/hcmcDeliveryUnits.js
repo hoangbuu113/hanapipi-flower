@@ -1,4 +1,5 @@
 import { hcmcAdministrativeUnits } from './hcmcAdministrativeUnits.js'
+import { normalizeSearch } from '../utils/normalizeSearch.js'
 
 export const HCMC_DELIVERY_SCOPE = 'former-ho-chi-minh-city'
 export const HCMC_DELIVERY_SCOPE_SOURCE = 'Resolution 1685/NQ-UBTVQH15, items 1-78 and 113-135, plus retained Xã Thạnh An'
@@ -24,4 +25,9 @@ const deliveryUnitsByCode = new Map(hcmcDeliveryUnits.map((unit) => [unit.code, 
 
 export function getHcmcDeliveryUnit(code) {
   return deliveryUnitsByCode.get(String(code ?? '')) ?? null
+}
+
+export function searchHcmcDeliveryUnits(query) {
+  const term = normalizeSearch(String(query ?? ''))
+  return hcmcDeliveryUnits.filter(({ name }) => normalizeSearch(name).includes(term))
 }

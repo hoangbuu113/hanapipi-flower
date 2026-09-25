@@ -447,7 +447,7 @@ function AddressForm({ initial, isFirst, onCancel, onSubmit }) {
     if (!phonePattern.test(form.recipientPhone.replaceAll(/\s/gu, ''))) {
       next.recipientPhone = 'Vui lòng nhập số điện thoại Việt Nam hợp lệ.'
     }
-    if (!getHcmcDeliveryUnit(form.unitCode)) next.unitCode = 'Vui lòng chọn phường, xã hoặc đặc khu trong khu vực giao hoa.'
+    if (!getHcmcDeliveryUnit(form.unitCode)) next.unitCode = 'Vui lòng chọn phường hoặc xã trong khu vực giao hoa.'
     if (!form.detail.trim()) next.detail = 'Vui lòng nhập địa chỉ cụ thể.'
     setErrors(next)
     return Object.keys(next).length === 0

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
@@ -11,6 +12,7 @@ import {
 import {
   HCMC_DELIVERY_SCOPE_SOURCE_URL,
   hcmcDeliveryUnits,
+  searchHcmcDeliveryUnits,
 } from '../src/data/hcmcDeliveryUnits.js'
 import { getHcmcDeliveryUnit, validateHcmcDeliveryAddress } from '../src/utils/hcmcDelivery.js'
 import { normalizeSearch } from '../src/utils/normalizeSearch.js'
@@ -34,6 +36,23 @@ test('delivery scope contains only the 102 units in former HCMC territory', () =
   assert.equal(new Set(hcmcDeliveryUnits.map(({ code }) => code)).size, 102)
   assert.ok(HCMC_DELIVERY_SCOPE_SOURCE_URL.startsWith('https://xaydungchinhsach.chinhphu.vn/'))
   for (const unit of hcmcDeliveryUnits) assert.equal(getHcmcAdministrativeUnit(unit.code)?.name, unit.name)
+
+  // Cross-checked against clauses 1-78 and 113-135 of Resolution 1685,
+  // plus unchanged Xã Thạnh An. The digest guards the complete name set,
+  // not just its count or a handful of representative wards.
+  const officialNameSet = hcmcDeliveryUnits.map(({ name }) => name.normalize('NFC')).sort()
+  assert.equal(
+    createHash('sha256').update(JSON.stringify(officialNameSet)).digest('hex'),
+    '23e7547606e3ac86b147d4542b3165be5121b303c707eba1e9ab3c080bf00126',
+  )
+  assert.equal(new Set(officialNameSet).size, 102)
+  assert.equal(new Set(hcmcAdministrativeUnits.map(({ name }) => name.normalize('NFC'))).size, 168)
+  assert.ok(hcmcAdministrativeUnits.every(({ code }) => /^\d{5}$/u.test(code)))
+  assert.ok(hcmcDeliveryUnits.every(({ name }) => !/^Phường \d/u.test(name)))
+  for (const unit of hcmcDeliveryUnits) {
+    assert.ok(searchHcmcDeliveryUnits(unit.name).some(({ code }) => code === unit.code), `${unit.name} must be selectable`)
+    assert.equal(validateHcmcDeliveryAddress({ city: HCMC_CITY, detail: '18 Nguyễn Huệ', unitCode: unit.code }).rejectionCode, null)
+  }
 
   const names = new Set(hcmcDeliveryUnits.map(({ name }) => name))
   for (const name of [
@@ -65,11 +84,16 @@ test('delivery scope contains only the 102 units in former HCMC territory', () =
 
 test('search is accent-insensitive and the former-HCMC allowlist rejects the other merged territories', () => {
   assert.equal(normalizeSearch('Phường Sài Gòn').includes(normalizeSearch('sai gon')), true)
+  for (const query of ['Gò Vấp', 'Go Vap', 'go vap', 'gò', 'vap', 'phuong go vap']) {
+    assert.ok(searchHcmcDeliveryUnits(query).some(({ name }) => name === 'Phường Gò Vấp'), `${query} must find Phường Gò Vấp`)
+  }
+  assert.equal(searchHcmcDeliveryUnits('').length, 102)
   for (const unit of hcmcDeliveryUnits) assert.equal(getHcmcDeliveryUnit(unit.code)?.code, unit.code)
-  for (const name of ['Phường Dĩ An', 'Phường Vũng Tàu']) {
+  for (const name of ['Phường Dĩ An', 'Phường Vũng Tàu', 'Đặc khu Côn Đảo']) {
     const unit = hcmcAdministrativeUnits.find((entry) => entry.name === name)
     assert.ok(unit)
     assert.equal(getHcmcDeliveryUnit(unit.code), null)
+    assert.equal(validateHcmcDeliveryAddress({ city: HCMC_CITY, detail: '18 Nguyễn Huệ', unitCode: unit.code }).rejectionCode, 'NOT_SERVICEABLE')
   }
 })
 
@@ -90,7 +114,46 @@ test('Account and both checkout modes use the same serviceable selector', () => 
   const account = fs.readFileSync(path.resolve('src/pages/AccountPage.jsx'), 'utf8')
   const checkout = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
 
-  assert.match(selector, /hcmcDeliveryUnits/)
+  assert.match(selector, /searchHcmcDeliveryUnits\(query\)/u)
+  assert.doesNotMatch(selector, /\.slice\(0,\s*40\)/u)
   assert.match(account, /getHcmcDeliveryUnit\(form\.unitCode\)/)
   assert.equal(checkout.match(/<AdministrativeUnitSelector\b/gu)?.length, 1)
+})
+
+test('mounted selector exposes all units and immediately finds Gò Vấp without accents', async () => {
+  const { register } = await import('node:module')
+  register('./cart-component-loader.js', import.meta.url)
+  const React = await import('react')
+  const { act, create } = await import('react-test-renderer')
+  const AdministrativeUnitSelector = (await import('../src/components/AdministrativeUnitSelector.jsx')).default
+  const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  let selectedCode = null
+  let renderer
+
+  try {
+    await act(async () => {
+      renderer = create(React.createElement(AdministrativeUnitSelector, {
+        error: null,
+        onChange: (code) => { selectedCode = code },
+        value: '',
+      }))
+    })
+    await act(async () => { renderer.root.findByProps({ role: 'combobox' }).props.onFocus() })
+    assert.equal(renderer.root.findAllByProps({ role: 'option' }).length, 102)
+
+    for (const query of ['Gò Vấp', 'Go Vap', 'go vap', 'gò', 'vap']) {
+      await act(async () => {
+        renderer.root.findByProps({ role: 'combobox' }).props.onChange({ target: { value: query } })
+      })
+      assert.ok(renderer.root.findAllByProps({ role: 'option' }).some(({ props }) => props.children === 'Phường Gò Vấp'))
+    }
+
+    const goVap = renderer.root.findAllByProps({ role: 'option' }).find(({ props }) => props.children === 'Phường Gò Vấp')
+    await act(async () => { goVap.props.onClick() })
+    assert.equal(selectedCode, '26884')
+  } finally {
+    if (renderer) await act(async () => { renderer.unmount() })
+    globalThis.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment
+  }
 })
