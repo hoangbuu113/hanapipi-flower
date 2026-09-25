@@ -1,4 +1,5 @@
 import { isManagedMediaKey } from '../mediaStorage.js'
+import { MAX_PRODUCT_GALLERY_IMAGES, resolveMediaSrc } from '../../utils/media.js'
 
 const DEFAULT_PAGE_SIZE = 24
 
@@ -51,6 +52,49 @@ function normalizeAdminMedia(imageUrl, productName) {
     src: trimmed,
     type: 'image',
   }]
+}
+
+function normalizeAdminGallery(media, currentMedia, productName) {
+  if (!Array.isArray(media) || media.length > MAX_PRODUCT_GALLERY_IMAGES) {
+    throw catalogueError(400, 'INVALID_MEDIA_GALLERY', `Tối đa ${MAX_PRODUCT_GALLERY_IMAGES} ảnh cho mỗi sản phẩm.`)
+  }
+
+  const currentBySrc = new Map()
+  for (const item of currentMedia) {
+    currentBySrc.set(item.src, item)
+    currentBySrc.set(resolveMediaSrc(item.src), item)
+  }
+  const seen = new Set()
+  return media.map((item) => {
+    const src = item?.src
+    const existing = currentBySrc.get(src)
+    const identity = existing?.src ?? src
+    if (typeof src !== 'string' || !src || seen.has(identity)) {
+      throw catalogueError(400, 'INVALID_MEDIA_GALLERY', 'Danh sách ảnh chứa ảnh trùng hoặc không hợp lệ.')
+    }
+    seen.add(identity)
+
+    // Existing seeded media can be reordered without converting or replacing its metadata.
+    if (existing) return existing
+
+    if (item.type !== 'image') {
+      throw catalogueError(400, 'INVALID_MEDIA_GALLERY', 'Chỉ có thể tải thêm ảnh sản phẩm.')
+    }
+
+    const match = /^\/api\/v1\/media\/([^/?#]+)$/u.exec(src)
+    if (!match || !isManagedMediaKey(match[1])) {
+      throw catalogueError(400, 'INVALID_MEDIA_URL', 'Ảnh mới phải được tải lên kho ảnh quản trị.')
+    }
+    return {
+      alt: productName,
+      caption: null,
+      fit: 'cover',
+      position: 'center',
+      poster: null,
+      src,
+      type: 'image',
+    }
+  })
 }
 
 function catalogueError(status, code, message) {
@@ -344,7 +388,7 @@ export function createCatalogueRepository(db) {
 
       // Enforce priceless invariant
       if (isPriceless) {
-        if (fields.imageUrl !== undefined) {
+        if (fields.imageUrl !== undefined || fields.media !== undefined) {
           const err = new Error('Sáº£n pháº©m Ä‘Æ°á»£c báº£o vá»‡ khÃ´ng thá»ƒ thay Ä‘á»•i áº£nh.')
           err.code = 'PROTECTED_PRODUCT'
           err.status = 400
@@ -369,6 +413,13 @@ export function createCatalogueRepository(db) {
 
       // Media metadata is updated only from a canonical R2-backed URL. The
       // binary upload is completed by the authenticated media endpoint first.
+      if (fields.media !== undefined && fields.imageUrl !== undefined) {
+        throw catalogueError(400, 'INVALID_MEDIA_GALLERY', 'Chỉ gửi một kiểu cập nhật ảnh.')
+      }
+      if (fields.media !== undefined) {
+        updates.push('media_json = ?')
+        bindings.push(JSON.stringify(normalizeAdminGallery(fields.media, product.media, fields.name ?? product.name)))
+      }
       if (fields.imageUrl !== undefined) {
         updates.push('media_json = ?')
         bindings.push(JSON.stringify(normalizeAdminMedia(fields.imageUrl, product.name)))

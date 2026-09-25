@@ -17,6 +17,7 @@ import {
   validateMutationOrigin,
 } from './request.js'
 import { enforceRateLimit } from './rateLimit.js'
+import { MAX_PRODUCT_GALLERY_IMAGES, resolveMediaSrc } from '../utils/media.js'
 
 import {
   ALLOWED_MEDIA_TYPES,
@@ -889,6 +890,45 @@ async function handleUpdateAdminProduct(idOrSlug, request, env, requestId, depen
   if (body.colors !== undefined) payload.colors = body.colors
   if (body.colorPalette !== undefined) payload.colorPalette = body.colorPalette
   if (body.imageUrl !== undefined) payload.imageUrl = body.imageUrl
+  if (body.media !== undefined) payload.media = body.media
+
+  const repositories = dependencies.createRepositories(env)
+  if (payload.media !== undefined) {
+    if (!Array.isArray(payload.media) || payload.media.length > MAX_PRODUCT_GALLERY_IMAGES) {
+      return result(errorResponse(400, 'INVALID_MEDIA_GALLERY', `Tối đa ${MAX_PRODUCT_GALLERY_IMAGES} ảnh cho mỗi sản phẩm.`, requestId), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'INVALID_MEDIA_GALLERY' })
+    }
+    const currentProduct = await repositories.catalogue.getProductById(idOrSlug)
+      ?? await repositories.catalogue.getProductBySlug(idOrSlug)
+    if (!currentProduct) {
+      return result(errorResponse(404, 'PRODUCT_NOT_FOUND', 'Không tìm thấy sản phẩm.', requestId), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'PRODUCT_NOT_FOUND' })
+    }
+    if (currentProduct.slug === 'no-watering-flower' || currentProduct.purchaseType === 'priceless') {
+      return result(errorResponse(400, 'PROTECTED_PRODUCT', 'Không thể thay đổi ảnh của sản phẩm được bảo vệ.', requestId), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'PROTECTED_PRODUCT' })
+    }
+    const currentSources = new Set(currentProduct.media.flatMap((item) => [item.src, resolveMediaSrc(item.src)]))
+    const mediaStorage = dependencies.createMediaStorage
+      ? dependencies.createMediaStorage(env)
+      : createMediaStorage(env)
+    for (const item of payload.media) {
+      if (currentSources.has(item?.src)) continue
+      const mediaMatch = /^\/api\/v1\/media\/([^/?#]+)$/u.exec(item?.src ?? '')
+      const mediaKey = mediaMatch?.[1]
+      if (!mediaKey || !isManagedMediaKey(mediaKey)) {
+        return result(errorResponse(400, 'INVALID_MEDIA_URL', 'Ảnh mới phải được tải lên kho ảnh quản trị.', requestId), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'INVALID_MEDIA_URL' })
+      }
+      try {
+        if (await repositories.catalogue.isProductMediaReferenced(mediaKey)) {
+          return result(errorResponse(409, 'MEDIA_IN_USE', 'Ảnh này đã được gắn với sản phẩm khác.', requestId), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'MEDIA_IN_USE' })
+        }
+        if (!await mediaStorage.get(mediaKey)) {
+          return result(errorResponse(400, 'MEDIA_NOT_FOUND', 'Không tìm thấy ảnh đã tải lên.', requestId), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: 'MEDIA_NOT_FOUND' })
+        }
+      } catch (error) {
+        const code = error.code || 'STORAGE_ERROR'
+        return result(errorResponse(error.status || 500, code, error.message || 'Không thể kiểm tra kho ảnh.', requestId), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: code })
+      }
+    }
+  }
 
   if (typeof payload.imageUrl === 'string' && payload.imageUrl.trim()) {
     const mediaMatch = /^\/api\/v1\/media\/([^/?#]+)$/u.exec(payload.imageUrl.trim())
@@ -922,8 +962,6 @@ async function handleUpdateAdminProduct(idOrSlug, request, env, requestId, depen
       return result(errorResponse(status, code, message, requestId), `${V1_ADMIN_PRODUCTS_PATH}/:id`, { errorCode: code })
     }
   }
-
-  const repositories = dependencies.createRepositories(env)
 
   try {
     const updated = await repositories.catalogue.updateProductCommerceFields(idOrSlug, payload)
@@ -1507,6 +1545,11 @@ async function handleDeleteAdminMedia(key, request, env, requestId, dependencies
     ), `${V1_ADMIN_MEDIA_PATH}/${key}`, { errorCode: 'INVALID_MEDIA_KEY' })
   }
 
+  const repositories = dependencies.createRepositories(env)
+  if (await repositories.catalogue.isProductMediaReferenced(key)) {
+    return result(errorResponse(409, 'MEDIA_IN_USE', 'Ảnh vẫn đang được một sản phẩm sử dụng.', requestId), `${V1_ADMIN_MEDIA_PATH}/${key}`, { errorCode: 'MEDIA_IN_USE' })
+  }
+
   const mediaStorage = dependencies.createMediaStorage ? dependencies.createMediaStorage(env) : createMediaStorage(env)
   try {
     await mediaStorage.delete(key)
@@ -1985,6 +2028,7 @@ export function createApiRouter(options = {}) {
       return handleDeleteAdminMedia(adminMediaKey, request, env, requestId, {
         authorizeAdmin,
         createMediaStorage: options.mediaStorageFactory ?? createMediaStorage,
+        createRepositories,
         rateLimitRequest,
         verifyIdentity,
       })

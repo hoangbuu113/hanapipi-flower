@@ -22,6 +22,7 @@ import {
 } from '../src/services/adminClient.js'
 import { MemoryMediaBucket } from '../src/server/mediaStorage.js'
 import { createWorker } from '../src/worker.js'
+import { resolveMediaSrc } from '../src/utils/media.js'
 
 class D1Wrapper {
   constructor(db) {
@@ -1362,7 +1363,7 @@ test('70. admin can delete uploaded media', async () => {
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
     getToken: async () => 'admin-token',
   })
-  assert.equal(deleteResult.ok, true)
+  assert.equal(deleteResult.ok, true, JSON.stringify(deleteResult.error))
   assert.equal(deleteResult.data.deleted, true)
 
   // After deletion, public GET should return 404
@@ -2385,16 +2386,16 @@ test('116. media edit endpoint remains Admin-only', async () => {
   assert.equal(customer.status, 403)
 })
 
-test('117. Admin edit UI stages media and claims success only after product PATCH', () => {
+test('117. Admin gallery stages media and claims success only after product PATCH', () => {
   const pageCode = fs.readFileSync(path.resolve('src/pages/AdminPage.jsx'), 'utf8')
-  const uploaderCode = fs.readFileSync(path.resolve('src/components/admin/ProductImageUploader.jsx'), 'utf8')
+  const galleryCode = fs.readFileSync(path.resolve('src/components/admin/ProductGalleryEditor.jsx'), 'utf8')
 
-  assert.match(pageCode, /deferDelete/u)
-  assert.match(pageCode, /payload\.imageUrl = editForm\.imageUrl/u)
-  assert.match(pageCode, /cleanupAdminMediaKeys\(editForm\.mediaCleanupKeys\)/u)
+  assert.match(pageCode, /payload\.media = editForm\.media/u)
+  assert.match(pageCode, /if \(result\.ok && result\.product\)/u)
   assert.match(pageCode, /cleanupAdminMediaKeys\(editForm\.stagedMediaKeys\)/u)
-  assert.match(uploaderCode, /previousKey/u)
-  assert.match(uploaderCode, /if \(!deferDelete && previousKey/u)
+  assert.match(galleryCode, /uploadAdminMedia\(file, \{ getToken \}\)/u)
+  assert.match(galleryCode, /onChange\(nextMedia, result\.data\.key\)/u)
+  assert.match(galleryCode, /Đặt làm ảnh chính/u)
 })
 
 test('118. protected no-watering-flower media cannot be replaced through Admin API', async () => {
@@ -2411,6 +2412,75 @@ test('118. protected no-watering-flower media cannot be replaced through Admin A
   assert.equal(result.status, 400)
   assert.equal(result.error.code, 'PROTECTED_PRODUCT')
   assert.equal(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('no-watering-flower').media_json, before)
+})
+
+test('118a. Admin gallery appends, reorders and removes individual images without losing seeded media', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const fetchImpl = (url, options) => testWorker.fetch(url, options)
+  const getToken = async () => 'admin-token'
+  const initial = JSON.parse(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('nang-diu').media_json)
+  assert.equal(initial.length, 1)
+
+  const second = await uploadAdminMedia(new Blob(['second-image'], { type: 'image/png' }), { fetchImpl, getToken })
+  const third = await uploadAdminMedia(new Blob(['third-image'], { type: 'image/webp' }), { fetchImpl, getToken })
+  assert.equal(second.ok, true)
+  assert.equal(third.ok, true)
+
+  const media = [{ ...initial[0], src: resolveMediaSrc(initial[0].src) }, { src: second.data.url, type: 'image' }, { src: third.data.url, type: 'image' }]
+  const appended = await updateAdminProduct('nang-diu', { media }, { fetchImpl, getToken })
+  assert.equal(appended.ok, true, JSON.stringify(appended.error))
+  assert.equal(appended.product.media[0].src, resolveMediaSrc(initial[0].src))
+  assert.deepEqual(appended.product.media.map((item) => item.src), media.map((item) => item.src))
+  const persisted = JSON.parse(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('nang-diu').media_json)
+  assert.equal(persisted.length, 3)
+  assert.deepEqual(persisted[0], initial[0])
+
+  const detail = await testWorker.fetch('/api/v1/catalogue/products/nang-diu')
+  assert.equal(detail.status, 200)
+  assert.deepEqual((await detail.json()).data.product.media.map((item) => item.src), [initial[0].src, second.data.url, third.data.url])
+
+  const reordered = await updateAdminProduct('nang-diu', { media: [media[2], media[0], media[1]] }, { fetchImpl, getToken })
+  assert.equal(reordered.ok, true)
+  assert.equal(reordered.product.media[0].src, third.data.url)
+  const listing = await testWorker.fetch('/api/v1/catalogue/products?limit=50')
+  assert.equal((await listing.json()).data.items.find((item) => item.slug === 'nang-diu').media[0].src, third.data.url)
+
+  const inUseDelete = await deleteAdminMedia(second.data.key, { fetchImpl, getToken })
+  assert.equal(inUseDelete.status, 409)
+  assert.equal(inUseDelete.error.code, 'MEDIA_IN_USE')
+
+  const removed = await updateAdminProduct('nang-diu', { media: [media[2], media[0]] }, { fetchImpl, getToken })
+  assert.equal(removed.ok, true)
+  assert.deepEqual(removed.product.media.map((item) => item.src), [third.data.url, resolveMediaSrc(initial[0].src)])
+  assert.equal((await deleteAdminMedia(second.data.key, { fetchImpl, getToken })).ok, true)
+  assert.equal((await testWorker.fetch(third.data.url)).status, 200)
+})
+
+test('118b. gallery rejects duplicate, missing and forged media; protected gallery is unchanged', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  seedAdminUser(sqlite)
+  const testWorker = createTestWorker(d1)
+  const fetchImpl = (url, options) => testWorker.fetch(url, options)
+  const getToken = async () => 'admin-token'
+  const initial = JSON.parse(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('nang-diu').media_json)
+  const protectedBefore = sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('no-watering-flower').media_json
+
+  for (const media of [
+    [initial[0], initial[0]],
+    [...Array(9)].map((_, index) => ({ src: `/api/v1/media/prod_media_${index}.jpg`, type: 'image' })),
+    [initial[0], { src: '/api/v1/media/prod_media_missing.jpg', type: 'image' }],
+    [initial[0], { src: 'src/assets/hanapipi-photos/other-product.jpg', type: 'image' }],
+  ]) {
+    const result = await updateAdminProduct('nang-diu', { media }, { fetchImpl, getToken })
+    assert.equal(result.ok, false)
+  }
+  assert.deepEqual(JSON.parse(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('nang-diu').media_json), initial)
+
+  const protectedResult = await updateAdminProduct('no-watering-flower', { media: [] }, { fetchImpl, getToken })
+  assert.equal(protectedResult.error.code, 'PROTECTED_PRODUCT')
+  assert.equal(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('no-watering-flower').media_json, protectedBefore)
 })
 
 test('119. Admin order detail localizes canonical values and wraps long fulfilment text', () => {

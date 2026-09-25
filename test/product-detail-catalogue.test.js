@@ -400,3 +400,12 @@ test('16. Product Detail visual structure is not unnecessarily rewritten', () =>
   assert.ok(content.includes('className="product-related"'))
   assert.ok(content.includes('className="product-not-found"'))
 })
+
+test('17. catalogue cards use the primary image while Product Detail exposes the ordered gallery', () => {
+  const card = fs.readFileSync(path.resolve('src/components/ProductCard.jsx'), 'utf8')
+  const detail = fs.readFileSync(path.resolve('src/pages/ProductDetailPage.jsx'), 'utf8')
+  assert.match(card, /getPrimaryMediaSrc\(product\)/u)
+  assert.match(detail, /galleryMedia\[activeImageIndex\] \?\? galleryMedia\[0\]/u)
+  assert.match(detail, /galleryMedia\.map\(\(mediaItem, index\) =>/u)
+  assert.match(detail, /setActiveImageIndex\(index\)/u)
+})

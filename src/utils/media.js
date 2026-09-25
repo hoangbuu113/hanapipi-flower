@@ -10,6 +10,8 @@
  * @param {string|null|undefined} src — raw media source from D1 / API
  * @returns {string} renderable URL or empty string
  */
+export const MAX_PRODUCT_GALLERY_IMAGES = 8
+
 export function resolveMediaSrc(src) {
   if (!src || typeof src !== 'string') return ''
 

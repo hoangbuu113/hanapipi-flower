@@ -588,6 +588,76 @@
 }
 
 /* Reusable Product Image Uploader */
+.admin-gallery-editor__hint {
+  margin: 0 0 16px;
+  color: var(--color-ink-muted, #767676);
+  font-size: 13px;
+}
+
+.admin-gallery-editor__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.admin-gallery-editor__tile,
+.admin-gallery-editor__add {
+  border: 1px solid var(--color-border, #d8d5ce);
+  background: var(--color-surface, #fff);
+}
+
+.admin-gallery-editor__tile img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+.admin-gallery-editor__tile-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 10px;
+}
+
+.admin-gallery-editor__tile-actions span {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-gallery-editor__tile-actions button,
+.admin-gallery-editor__add {
+  min-height: 44px;
+  padding: 8px;
+  color: var(--color-ink, #212121);
+  background: transparent;
+  cursor: pointer;
+}
+
+.admin-gallery-editor__order {
+  display: flex;
+}
+
+.admin-gallery-editor__order button {
+  flex: 1;
+}
+
+.admin-gallery-editor__tile-actions button:disabled,
+.admin-gallery-editor__add:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.admin-gallery-editor__remove {
+  color: var(--error, #b83232) !important;
+}
+
+.admin-gallery-editor__add {
+  min-height: 180px;
+  border-style: dashed;
+}
+
 .admin-image-uploader {
   display: flex;
   flex-direction: column;

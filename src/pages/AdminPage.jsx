@@ -32,7 +32,8 @@ import {
 } from '../utils/order'
 import { formatCurrency } from '../utils/formatCurrency'
 import ProductImageUploader from '../components/admin/ProductImageUploader'
-import { getPrimaryMediaSrc, resolveMediaSrc } from '../utils/media'
+import ProductGalleryEditor from '../components/admin/ProductGalleryEditor'
+import { getPrimaryMediaSrc } from '../utils/media'
 import './AdminPage.css'
 
 const STATUS_LABELS = {
@@ -258,8 +259,7 @@ function AdminPage() {
   }
 
   const handleStartEdit = (product) => {
-    const originalImageUrl = product.media?.[0]?.src ?? ''
-    const originalImageKey = getManagedMediaKey(originalImageUrl)
+    const originalMedia = Array.isArray(product.media) ? product.media : []
     setEditingProduct(product)
     setIsEditMediaBusy(false)
     setEditForm({
@@ -269,17 +269,14 @@ function AdminPage() {
       composition: Array.isArray(product.composition) ? product.composition.join(', ') : '',
       deliveryNote: product.deliveryNote ?? '',
       description: product.description ?? '',
-      imageChanged: false,
-      imageKey: originalImageKey,
-      imageUrl: resolveMediaSrc(originalImageUrl),
+      mediaChanged: false,
+      media: [...originalMedia],
       internalNote: product.internalNote ?? '',
       isPurchasable: Boolean(product.isPurchasable),
       moods: Array.isArray(product.moods) ? product.moods.join(', ') : '',
       name: product.name ?? '',
       occasions: Array.isArray(product.occasions) ? product.occasions.join(', ') : '',
-      mediaCleanupKeys: [],
-      originalImageKey,
-      originalImageUrl: resolveMediaSrc(originalImageUrl),
+      originalMedia,
       priceVnd: product.priceVnd ?? '',
       shortDescription: product.shortDescription ?? '',
       stagedMediaKeys: [],
@@ -290,6 +287,7 @@ function AdminPage() {
   }
 
   const handleCancelEdit = () => {
+    if (isSaving || isEditMediaBusy) return
     if (editForm?.stagedMediaKeys?.length) {
       void cleanupAdminMediaKeys(editForm.stagedMediaKeys)
     }
@@ -378,28 +376,31 @@ function AdminPage() {
       payload.isPurchasable = editingProduct.active ? editForm.isPurchasable : (editForm.isPurchasable && editingProduct.active)
     }
 
-    if (editForm.imageChanged) {
-      payload.imageUrl = editForm.imageUrl
+    if (editForm.mediaChanged) {
+      payload.media = editForm.media
     }
 
     const productId = editingProduct.id
     const result = await updateAdminProduct(productId, payload, { getToken })
-    setIsSaving(false)
 
     if (!result.ok || !result.product) {
       await cleanupAdminMediaKeys(editForm.stagedMediaKeys)
       setEditForm((prev) => ({
         ...prev,
-        imageChanged: false,
-        imageKey: prev.originalImageKey,
-        imageUrl: prev.originalImageUrl,
-        mediaCleanupKeys: [],
+        mediaChanged: false,
+        media: [...prev.originalMedia],
         stagedMediaKeys: [],
       }))
     }
 
     if (result.ok && result.product) {
-      await cleanupAdminMediaKeys(editForm.mediaCleanupKeys)
+      const retained = new Set(result.product.media.map((item) => item.src))
+      const removedKeys = editForm.originalMedia
+        .filter((item) => !retained.has(item.src))
+        .map((item) => getManagedMediaKey(item.src))
+      const abandonedKeys = editForm.stagedMediaKeys
+        .filter((key) => !retained.has(`/api/v1/media/${key}`))
+      await cleanupAdminMediaKeys([...removedKeys, ...abandonedKeys])
       setProducts((prev) => prev.map((p) => (p.id === result.product.id ? result.product : p)))
       setEditingProduct(null)
       setIsEditMediaBusy(false)
@@ -408,6 +409,7 @@ function AdminPage() {
     } else {
       setSaveError(result.error?.message || 'Không thể cập nhật sản phẩm.')
     }
+    setIsSaving(false)
   }
 
   const requestPermanentDelete = (kind, record) => {
@@ -1641,26 +1643,20 @@ function AdminPage() {
                 {editingProduct.slug !== 'no-watering-flower' && (
                   <fieldset className="admin-edit-fieldset">
                     <legend>Ảnh sản phẩm</legend>
-                    <ProductImageUploader
-                      deferDelete
+                    <ProductGalleryEditor
                       disabled={isSaving || isEditMediaBusy}
                       getToken={getToken}
-                      mediaKey={editForm.imageKey}
+                      media={editForm.media}
                       onBusyChange={setIsEditMediaBusy}
-                      value={editForm.imageUrl}
-                      onChange={({ key, previousKey, url }) => setEditForm((prev) => {
-                        const mediaCleanupKeys = previousKey && previousKey !== key
-                          ? [...new Set([...prev.mediaCleanupKeys, previousKey])]
-                          : prev.mediaCleanupKeys
-                        const stagedMediaKeys = key && key !== prev.originalImageKey
+                      productName={editForm.name}
+                      onChange={(media, key) => setEditForm((prev) => {
+                        const stagedMediaKeys = key
                           ? [...new Set([...prev.stagedMediaKeys, key])]
                           : prev.stagedMediaKeys
                         return {
                           ...prev,
-                          imageChanged: true,
-                          imageKey: key,
-                          imageUrl: url,
-                          mediaCleanupKeys,
+                          mediaChanged: true,
+                          media,
                           stagedMediaKeys,
                         }
                       })}
