@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useAuth } from '@clerk/clerk-react'
 import { CommerceContext } from './commerceStore'
-import { isDeliveryDateAvailable } from '../utils/delivery'
-import { buildCartItemKey, normalizeGiftAddOns, normalizeStoredCartItems, normalizeStoredGiftAddOns } from '../utils/cart'
+import { buildCartItemKey, normalizeGiftAddOns, normalizeStoredGiftAddOns } from '../utils/cart'
+import { getCartScope, readScopedCart, writeScopedCart } from '../utils/cartIdentity'
 import { normalizeStoredWishlistIds } from '../utils/wishlist'
 import { resolveCartItems } from '../services/cartResolver'
 
-const cartStorageKey = 'hanapipi-flower:cart'
 const wishlistStorageKey = 'hanapipi-flower:wishlist'
 
 const emptyCart = {
@@ -26,22 +26,19 @@ function readStorage(key, fallback) {
   }
 }
 
-function readCartStorage() {
-  const stored = readStorage(cartStorageKey, [])
-  const items = normalizeStoredCartItems(Array.isArray(stored) ? stored : stored?.items)
-  const storedDelivery = stored?.delivery ?? { date: null, slot: null }
-  const delivery = isDeliveryDateAvailable(storedDelivery.date)
-    ? storedDelivery
-    : { date: null, slot: null }
+export function CommerceProvider({ children }) {
+  const { isLoaded, isSignedIn, userId } = useAuth()
+  const cartScope = getCartScope({ isLoaded, isSignedIn, userId })
 
-  return {
-    delivery,
-    items,
-  }
+  // Never mount a guest cart while Clerk is still resolving the session.
+  // The key remounts all in-memory cart state on every identity transition.
+  if (!cartScope) return null
+
+  return <ScopedCommerceProvider key={cartScope} cartScope={cartScope}>{children}</ScopedCommerceProvider>
 }
 
-export function CommerceProvider({ children }) {
-  const [cartState] = useState(readCartStorage)
+function ScopedCommerceProvider({ cartScope, children }) {
+  const [cartState] = useState(() => readScopedCart(window.localStorage, cartScope))
   const [storedCartItems, setStoredCartItems] = useState(cartState.items)
   const [deliveryDraft, setDeliveryDraft] = useState(cartState.delivery)
   const [wishlistIds, setWishlistIds] = useState(() => {
@@ -57,8 +54,8 @@ export function CommerceProvider({ children }) {
   const [resolvedCart, setResolvedCart] = useState(emptyCart)
 
   useEffect(() => {
-    window.localStorage.setItem(cartStorageKey, JSON.stringify({ delivery: deliveryDraft, items: storedCartItems }))
-  }, [storedCartItems, deliveryDraft])
+    writeScopedCart(window.localStorage, cartScope, { delivery: deliveryDraft, items: storedCartItems })
+  }, [cartScope, storedCartItems, deliveryDraft])
 
   useEffect(() => {
     window.localStorage.setItem(wishlistStorageKey, JSON.stringify(wishlistIds))
@@ -169,12 +166,13 @@ export function CommerceProvider({ children }) {
     },
     setDeliveryDraft: (draft) => setDeliveryDraft(draft),
     clearCart: () => {
+      writeScopedCart(window.localStorage, cartScope, { delivery: { date: null, slot: null }, items: [] })
       setStoredCartItems([])
       setDeliveryDraft({ date: null, slot: null })
     },
     openCart: () => setIsCartOpen(true),
     closeCart: () => setIsCartOpen(false),
-  }), [cartError, currentResolvedCart.hasUnavailableItems, currentResolvedCart.subtotal, deliveryDraft, effectiveCartItems, isCartLoading, isCartOpen, storedCartItems, wishlistIds])
+  }), [cartError, cartScope, currentResolvedCart.hasUnavailableItems, currentResolvedCart.subtotal, deliveryDraft, effectiveCartItems, isCartLoading, isCartOpen, storedCartItems, wishlistIds])
 
   return <CommerceContext.Provider value={value}>{children}</CommerceContext.Provider>
 }

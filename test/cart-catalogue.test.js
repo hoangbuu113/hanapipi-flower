@@ -13,6 +13,7 @@ import {
   normalizeStoredCartItems,
 } from '../src/utils/cart.js'
 import { normalizeStoredWishlistIds } from '../src/utils/wishlist.js'
+import { getCartScope, getCartStorageKey, readScopedCart, writeScopedCart } from '../src/utils/cartIdentity.js'
 import { resolveCartItems } from '../src/services/cartResolver.js'
 import { fetchProductDetail } from '../src/services/catalogueClient.js'
 import { createWorker } from '../src/worker.js'
@@ -741,4 +742,215 @@ test('27. floating cart shortcut uses the canonical quantity count and cart rout
   assert.match(shortcut, /'\/shop', '\/search', '\/flower-finder', '\/wishlist'/u)
   assert.match(layout, /<FloatingCartShortcut \/>/u)
   assert.match(styles, /bottom: calc\(max\(14px, env\(safe-area-inset-bottom\)\) \+ 58px\)/u)
+})
+
+function createCartStorage() {
+  const values = new Map()
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    removeItem: (key) => values.delete(key),
+    setItem: (key, value) => values.set(key, String(value)),
+  }
+}
+
+function scopedItem(productId, quantity = 1) {
+  return { productId, quantity, sizeId: 'standard', wrappingId: null, giftAddOns: [] }
+}
+
+function saveScope(storage, scope, items) {
+  writeScopedCart(storage, scope, { delivery: { date: null, slot: null }, items })
+}
+
+function readScope(storage, scope) {
+  return readScopedCart(storage, scope).items.map(({ productId, quantity }) => ({ productId, quantity }))
+}
+
+test('28. same-browser Guest, Admin, and User B carts remain independent through login/logout/reload (A-D)', () => {
+  const storage = createCartStorage()
+  const guest = getCartScope({ isLoaded: true, isSignedIn: false })
+  const admin = getCartScope({ isLoaded: true, isSignedIn: true, userId: 'clerk_admin' })
+  const userB = getCartScope({ isLoaded: true, isSignedIn: true, userId: 'clerk_user_b' })
+
+  saveScope(storage, guest, [scopedItem('product-a')])
+  assert.deepEqual(readScope(storage, admin), []) // A: Guest cart does not merge on login.
+  saveScope(storage, admin, [scopedItem('product-b')])
+  assert.deepEqual(readScope(storage, guest), [{ productId: 'product-a', quantity: 1 }]) // B
+  assert.deepEqual(readScope(storage, admin), [{ productId: 'product-b', quantity: 1 }]) // C
+  assert.deepEqual(readScope(storage, userB), []) // D
+
+  // Repeated transitions and reloads read only the currently selected scope.
+  for (const scope of [guest, admin, userB, guest, admin]) {
+    const products = readScope(storage, scope).map((item) => item.productId)
+    assert.deepEqual(products, scope === guest ? ['product-a'] : scope === admin ? ['product-b'] : [])
+  }
+})
+
+test('29. successful checkout clears only the active identity cart (E-F)', () => {
+  const storage = createCartStorage()
+  const guest = 'guest'
+  const admin = getCartScope({ isLoaded: true, isSignedIn: true, userId: 'clerk_admin' })
+  saveScope(storage, guest, [scopedItem('product-a')])
+  saveScope(storage, admin, [scopedItem('product-b')])
+
+  saveScope(storage, guest, [])
+  assert.deepEqual(readScope(storage, guest), [])
+  assert.deepEqual(readScope(storage, admin), [{ productId: 'product-b', quantity: 1 }])
+
+  saveScope(storage, guest, [scopedItem('product-a')])
+  saveScope(storage, admin, [])
+  assert.deepEqual(readScope(storage, admin), [])
+  assert.deepEqual(readScope(storage, guest), [{ productId: 'product-a', quantity: 1 }])
+
+  const context = fs.readFileSync(path.resolve('src/context/CommerceContext.jsx'), 'utf8')
+  const checkout = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
+  assert.match(context, /clearCart: \(\) => \{\s*writeScopedCart\(window\.localStorage, cartScope/u)
+  assert.ok(checkout.indexOf('if (!result.ok)') < checkout.indexOf('clearCart()'))
+})
+
+test('30. unresolved Clerk identity cannot hydrate or render a previous cart (G)', () => {
+  assert.equal(getCartScope({ isLoaded: false, isSignedIn: false }), null)
+  assert.equal(getCartScope({ isLoaded: false, isSignedIn: true, userId: 'clerk_admin' }), null)
+  assert.equal(getCartScope({ isLoaded: true, isSignedIn: true }), null)
+
+  const context = fs.readFileSync(path.resolve('src/context/CommerceContext.jsx'), 'utf8')
+  assert.match(context, /if \(!cartScope\) return null/u)
+  assert.match(context, /<ScopedCommerceProvider key=\{cartScope\} cartScope=\{cartScope\}>/u)
+})
+
+test('31. floating badge reads only the mounted identity scope (H)', () => {
+  const storage = createCartStorage()
+  const guest = 'guest'
+  const admin = getCartScope({ isLoaded: true, isSignedIn: true, userId: 'clerk_admin' })
+  saveScope(storage, guest, [scopedItem('product-a', 2)])
+  saveScope(storage, admin, [scopedItem('product-b', 3)])
+  const count = (scope) => readScopedCart(storage, scope).items.reduce((total, item) => total + item.quantity, 0)
+  assert.equal(count(guest), 2)
+  assert.equal(count(admin), 3)
+  assert.equal(count(guest), 2)
+  assert.notEqual(getCartStorageKey(guest), getCartStorageKey(admin))
+})
+
+test('32. ambiguous legacy shared cart is never assigned to Guest or a different account', () => {
+  const storage = createCartStorage()
+  const legacyKey = 'hanapipi-flower:cart'
+  const oldCart = JSON.stringify({ items: [scopedItem('private-product')] })
+  storage.setItem(legacyKey, oldCart)
+  assert.deepEqual(readScope(storage, 'guest'), [])
+  assert.equal(storage.getItem(legacyKey), null)
+
+  storage.setItem(legacyKey, oldCart)
+  const admin = getCartScope({ isLoaded: true, isSignedIn: true, userId: 'clerk_admin' })
+  assert.deepEqual(readScope(storage, admin), [])
+  assert.equal(storage.getItem(legacyKey), null)
+})
+
+test('33. mounted CommerceProvider, CartDrawer, Navbar, and floating badge isolate same-browser auth transitions', async () => {
+  const { register } = await import('node:module')
+  register('./cart-component-loader.js', import.meta.url)
+
+  const React = await import('react')
+  const { act, create } = await import('react-test-renderer')
+  const { MemoryRouter } = await import('react-router-dom')
+  const { CommerceProvider } = await import('../src/context/CommerceContext.jsx')
+  const { useCommerce } = await import('../src/context/commerceStore.js')
+  const { AccountContext } = await import('../src/context/accountStore.js')
+  const { setClerkAuth } = await import('./mocks/clerkReact.js')
+  const CartDrawer = (await import('../src/components/CartDrawer.jsx')).default
+  const Navbar = (await import('../src/components/Navbar.jsx')).default
+  const FloatingCartShortcut = (await import('../src/components/FloatingCartShortcut.jsx')).default
+
+  const originalWindow = globalThis.window
+  const originalDocument = globalThis.document
+  const originalFetch = globalThis.fetch
+  const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT
+  const storage = createCartStorage()
+  const noop = () => {}
+  globalThis.window = {
+    addEventListener: noop,
+    cancelAnimationFrame: noop,
+    clearTimeout,
+    localStorage: storage,
+    matchMedia: () => ({ matches: false, addEventListener: noop, removeEventListener: noop }),
+    removeEventListener: noop,
+    requestAnimationFrame: () => 1,
+    setTimeout,
+  }
+  globalThis.document = { activeElement: null, body: { style: { overflow: '' } } }
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: 'API_NOT_FOUND' } }), {
+    headers: { 'Content-Type': 'application/json' },
+    status: 404,
+  })
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+
+  let commerce
+  let renderer
+  function Controls() {
+    const current = useCommerce()
+    React.useEffect(() => { commerce = current }, [current])
+    return null
+  }
+  const element = React.createElement(MemoryRouter, null,
+    React.createElement(AccountContext.Provider, { value: { user: null } },
+      React.createElement(CommerceProvider, null,
+        React.createElement(Navbar),
+        React.createElement(FloatingCartShortcut),
+        React.createElement(CartDrawer),
+        React.createElement(Controls),
+      ),
+    ),
+  )
+
+  const visibleText = () => JSON.stringify(renderer.toJSON())
+  const badgeCounts = () => ({
+    floating: renderer.root.findAll((node) => node.props.className === 'floating-cart-shortcut__badge').map((node) => node.children.join('')),
+    navbar: renderer.root.findAll((node) => node.type === 'em' && /^\d+$/u.test(node.children.join(''))).map((node) => node.children.join('')),
+  })
+  const openDrawer = async () => act(async () => { commerce.openCart() })
+  const add = async (productId) => act(async () => {
+    commerce.addToCart({ productId, quantity: 1, sizeId: 'standard', wrappingId: null })
+  })
+
+  try {
+    setClerkAuth({ isLoaded: false, isSignedIn: undefined, userId: null })
+    await act(async () => { renderer = create(element) })
+    assert.equal(renderer.toJSON(), null, 'auth initialization must not render any cart consumer')
+
+    await act(async () => { setClerkAuth({ isLoaded: true, isSignedIn: false, userId: null }) })
+    await add('sac-apricot')
+    await openDrawer()
+    assert.match(visibleText(), /Ngày Hồng/u)
+    assert.deepEqual(badgeCounts(), { floating: ['1'], navbar: ['1', '1'] })
+
+    await act(async () => { setClerkAuth({ isLoaded: true, isSignedIn: true, userId: 'clerk_admin' }) })
+    assert.doesNotMatch(visibleText(), /Ngày Hồng/u, 'Guest item must vanish without page reload')
+    assert.deepEqual(badgeCounts(), { floating: [], navbar: [] })
+    await openDrawer()
+    assert.match(visibleText(), /Giỏ hàng của bạn đang trống/u)
+
+    await add('nang-diu')
+    assert.match(visibleText(), /Nắng Dịu/u)
+    assert.doesNotMatch(visibleText(), /Ngày Hồng/u)
+    assert.deepEqual(badgeCounts(), { floating: ['1'], navbar: ['1', '1'] })
+
+    await act(async () => { setClerkAuth({ isLoaded: true, isSignedIn: false, userId: null }) })
+    assert.doesNotMatch(visibleText(), /Nắng Dịu/u)
+    assert.deepEqual(badgeCounts(), { floating: ['1'], navbar: ['1', '1'] })
+    await openDrawer()
+    assert.match(visibleText(), /Ngày Hồng/u)
+
+    await act(async () => { setClerkAuth({ isLoaded: true, isSignedIn: true, userId: 'clerk_admin' }) })
+    await openDrawer()
+    assert.match(visibleText(), /Nắng Dịu/u)
+    assert.doesNotMatch(visibleText(), /Ngày Hồng/u)
+    assert.deepEqual(badgeCounts(), { floating: ['1'], navbar: ['1', '1'] })
+    assert.equal(readScope(storage, 'guest')[0].productId, 'sac-apricot')
+    assert.equal(readScope(storage, 'user:clerk_admin')[0].productId, 'nang-diu')
+  } finally {
+    if (renderer) await act(async () => { renderer.unmount() })
+    setClerkAuth({ isLoaded: false, isSignedIn: undefined, userId: null })
+    globalThis.window = originalWindow
+    globalThis.document = originalDocument
+    globalThis.fetch = originalFetch
+    globalThis.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment
+  }
 })

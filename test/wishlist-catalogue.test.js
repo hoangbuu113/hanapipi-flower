@@ -368,7 +368,7 @@ test('17. Shop wishlist toggle remains functional if applicable', () => {
 
 test('18. Cart methods exist in CommerceContext', () => {
   const contextCode = fs.readFileSync(path.resolve('src/context/CommerceContext.jsx'), 'utf8')
-  assert.match(contextCode, /readCartStorage/u)
+  assert.match(contextCode, /readScopedCart/u)
   assert.match(contextCode, /addToCart/u)
 })
 
