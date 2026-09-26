@@ -23,6 +23,8 @@ const EXPECTED_TABLES = new Set([
   'cart_items',
   'carts',
   'catalogue_versions',
+  'consultation_requests',
+  'consultation_request_items',
   'delivery_drafts',
   'gift_add_ons',
   'idempotency_keys',

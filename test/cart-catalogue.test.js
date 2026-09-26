@@ -804,7 +804,7 @@ test('29. successful checkout clears only the active identity cart (E-F)', () =>
   const context = fs.readFileSync(path.resolve('src/context/CommerceContext.jsx'), 'utf8')
   const checkout = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
   assert.match(context, /clearCart: \(\) => \{\s*writeScopedCart\(window\.localStorage, cartScope/u)
-  assert.ok(checkout.indexOf('if (!result.ok)') < checkout.indexOf('clearCart()'))
+  assert.doesNotMatch(checkout, /clearCart\(|createOrder\(/u, 'Contact summary must never clear an identity-scoped cart or create orders')
 })
 
 test('30. unresolved Clerk identity cannot hydrate or render a previous cart (G)', () => {

@@ -18,7 +18,7 @@
     "test:auth": "node --import ./test/register-assets.js --test test/auth-api.test.js",
     "test:catalogue": "node --import ./test/register-assets.js --test test/catalogue-api.test.js",
     "test:flower-finder": "node --import ./test/register-assets.js --test test/flower-finder-catalogue.test.js",
-    "test:frontend": "node --import ./test/register-assets.js --test test/frontend-auth.test.js test/admin-dashboard.test.js test/admin-orders.test.js test/shop-catalogue.test.js test/product-detail-catalogue.test.js test/search-catalogue.test.js test/home-catalogue.test.js test/flower-finder-catalogue.test.js test/wishlist-catalogue.test.js test/cart-catalogue.test.js test/order-checkout.test.js test/orders-read.test.js test/order-payment.test.js test/secondary-catalogue.test.js test/user-addresses.test.js test/order-idempotency.test.js test/admin-media-upload.test.js test/csp-headers.test.js",
+    "test:frontend": "node --import ./test/register-assets.js --test test/frontend-auth.test.js test/admin-dashboard.test.js test/admin-orders.test.js test/shop-catalogue.test.js test/product-detail-catalogue.test.js test/search-catalogue.test.js test/home-catalogue.test.js test/flower-finder-catalogue.test.js test/wishlist-catalogue.test.js test/cart-catalogue.test.js test/order-checkout.test.js test/orders-read.test.js test/order-payment.test.js test/secondary-catalogue.test.js test/user-addresses.test.js test/order-idempotency.test.js test/admin-media-upload.test.js test/csp-headers.test.js test/consultation-ui.test.js",
     "test:home": "node --import ./test/register-assets.js --test test/home-catalogue.test.js",
     "test:media": "node --import ./test/register-assets.js --test test/media-utils.test.js",
     "test:product-detail": "node --import ./test/register-assets.js --test test/product-detail-catalogue.test.js",
@@ -29,7 +29,7 @@
     "test:cart": "node --import ./test/register-assets.js --test test/cart-catalogue.test.js",
     "test:order": "node --import ./test/register-assets.js --test test/order-checkout.test.js test/orders-read.test.js test/order-payment.test.js test/admin-orders.test.js test/order-momo.test.js test/order-idempotency.test.js",
     "lint": "oxlint",
-    "test:worker": "node --import ./test/register-assets.js --test test/worker-api.test.js test/rate-limit.test.js test/csp-headers.test.js",
+    "test:worker": "node --import ./test/register-assets.js --test test/worker-api.test.js test/rate-limit.test.js test/csp-headers.test.js test/consultations.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

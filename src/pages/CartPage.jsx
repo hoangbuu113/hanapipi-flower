@@ -57,7 +57,7 @@ function CartPage() {
               </div>
               {hasUnavailableItems && (
                 <p className="cart-page__unavailable-warning" role="alert">
-                  Giỏ hàng có sản phẩm không còn mở bán hoặc không khả dụng. Vui lòng xóa trước khi thanh toán.
+                  Giỏ hàng có sản phẩm không còn mở bán hoặc không khả dụng. Vui lòng cập nhật trước khi xem tóm tắt.
                 </p>
               )}
               <div className="cart-page__summary-actions">
@@ -72,7 +72,7 @@ function CartPage() {
                   </button>
                 ) : (
                   <Link className="button button--primary" to="/checkout">
-                    Tiếp tục thanh toán
+                    Xem tóm tắt lựa chọn
                   </Link>
                 )}
                 <Link className="button button--secondary" to="/shop">

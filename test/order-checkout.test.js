@@ -1087,18 +1087,11 @@ test('36. crypto helper encrypts/decrypts correctly and rejects tampered ciphert
   )
 })
 
-// 37. Checkout UI: Exactly one payment section with MoMo notice and no mock options
-test('37. CheckoutPage contains exactly one payment section with MoMo notice and no mock options', () => {
+test('37. Public CheckoutPage is a contact summary without payment or order submission', () => {
   const checkoutSource = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
-  const paymentSectionMatches = checkoutSource.match(/title="Phương thức thanh toán"/g)
-  assert.equal(paymentSectionMatches?.length, 1, 'CheckoutPage must have exactly one "Phương thức thanh toán" section')
-  assert.ok(checkoutSource.includes('Ví MoMo'), 'CheckoutPage must render Ví MoMo')
-  assert.ok(checkoutSource.includes('Mã QR và thông tin chuyển tiền MoMo sẽ hiển thị ngay sau khi bạn đặt hoa.'))
-  assert.ok(!checkoutSource.includes('cod_mock'), 'CheckoutPage must not reference cod_mock')
-  assert.ok(!checkoutSource.includes('bank_transfer_mock'), 'CheckoutPage must not reference bank_transfer_mock')
-  assert.ok(!checkoutSource.includes('Thanh toán khi nhận hoa'), 'CheckoutPage must not render COD option')
-  assert.ok(!checkoutSource.includes('Đây là bản demo'), 'CheckoutPage must not contain demo wording')
-  assert.ok(checkoutSource.includes("paymentMethod: 'momo'"), 'CheckoutPage submit payload must send momo')
+  assert.match(checkoutSource, /Tóm tắt lựa chọn/u)
+  assert.match(checkoutSource, /STORE_CONTACT/u)
+  assert.doesNotMatch(checkoutSource, /Ví MoMo|paymentMethod|createOrder|onSubmit|clearCart/u)
 })
 
 test('38. Checkout preserves a rate-limit error for non-destructive retry', async () => {
@@ -1119,10 +1112,7 @@ test('38. Checkout preserves a rate-limit error for non-destructive retry', asyn
   assert.equal(result.status, 429)
   assert.equal(result.error.code, 'RATE_LIMITED')
   assert.match(result.error.message, /thử lại/u)
-  assert.ok(
-    checkoutSource.indexOf('if (!result.ok)') < checkoutSource.indexOf('clearCart()'),
-    'Cart must only clear after a successful server response.',
-  )
+  assert.doesNotMatch(checkoutSource, /clearCart\(/u, 'Public summary never clears Cart')
 })
 
 test('new checkout distinguishes invalid administrative codes from unsupported delivery territories', async () => {
@@ -1206,24 +1196,19 @@ test('verified legacy saved HCMC address remains selectable and order snapshot i
   assert.deepEqual((await detail.json()).data.order.address, payload.address)
 })
 
-test('Checkout renders one recipient/location flow and no obsolete province or district selectors', () => {
+test('Public contact summary does not require recipient/location submission', () => {
   const source = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
-  assert.equal(source.match(/title="Thông tin người nhận"/gu)?.length, 1)
-  assert.equal(source.match(/title="Địa chỉ giao hoa"/gu)?.length, 1)
-  assert.ok(source.includes('<AdministrativeUnitSelector'))
-  assert.ok(!source.includes('<option>Hà Nội</option>'))
-  assert.ok(!source.includes('label="Quận / huyện"'))
+  assert.doesNotMatch(source, /AdministrativeUnitSelector|savedAddressId|recipient|<form/u)
+  assert.match(source, /<CheckoutSummary cartItems=\{cartItems\}/u)
 })
 
-test('guest checkout UI keeps saved addresses account-only and reloads MoMo success by HttpOnly cookie', () => {
+test('public summary is auth-independent; legacy MoMo success still reloads by HttpOnly cookie', () => {
   const checkout = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
   const success = fs.readFileSync(path.resolve('src/pages/CheckoutSuccessPage.jsx'), 'utf8')
   const access = fs.readFileSync(path.resolve('src/utils/guestOrderAccess.js'), 'utf8')
-  assert.match(checkout, /Thanh toán không cần tài khoản/u)
-  assert.match(checkout, /isSignedIn && savedAddresses/u)
-  assert.match(checkout, /requireAuth: Boolean\(isSignedIn\)/u)
+  assert.doesNotMatch(checkout, /useAuth|useAccount|savedAddresses/u)
   assert.doesNotMatch(checkout, /saveGuestOrderAccess|guestAccessToken/u)
-  assert.ok(checkout.indexOf('if (!result.ok)') < checkout.indexOf('clearCart()'))
+  assert.doesNotMatch(checkout, /clearCart\(|createOrder\(/u)
   assert.match(success, /fetchGuestOrderDetail\(orderCode, \{ guestToken \}\)/u)
   assert.match(success, /momoQrAsset/u)
   assert.match(access, /window\.sessionStorage/u)

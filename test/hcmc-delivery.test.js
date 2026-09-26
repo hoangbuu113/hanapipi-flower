@@ -109,7 +109,7 @@ test('shared validation rejects other cities, forged codes/names and missing det
   assert.ok(validateHcmcDeliveryAddress({ ...valid, detail: '  ' }).errors.detail)
 })
 
-test('Account and both checkout modes use the same serviceable selector', () => {
+test('Account retains the serviceable selector; public contact summary requires no delivery address', () => {
   const selector = fs.readFileSync(path.resolve('src/components/AdministrativeUnitSelector.jsx'), 'utf8')
   const account = fs.readFileSync(path.resolve('src/pages/AccountPage.jsx'), 'utf8')
   const checkout = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
@@ -117,7 +117,7 @@ test('Account and both checkout modes use the same serviceable selector', () => 
   assert.match(selector, /searchHcmcDeliveryUnits\(query\)/u)
   assert.doesNotMatch(selector, /\.slice\(0,\s*40\)/u)
   assert.match(account, /getHcmcDeliveryUnit\(form\.unitCode\)/)
-  assert.equal(checkout.match(/<AdministrativeUnitSelector\b/gu)?.length, 1)
+  assert.doesNotMatch(checkout, /<AdministrativeUnitSelector\b/u)
 })
 
 test('mounted selector exposes all units and immediately finds Gò Vấp without accents', async () => {

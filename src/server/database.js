@@ -1,5 +1,6 @@
 import { createAddressRepository } from './repositories/addressRepository.js'
 import { createCatalogueRepository } from './repositories/catalogueRepository.js'
+import { createConsultationRepository } from './repositories/consultationRepository.js'
 import { createOrderRepository } from './repositories/orderRepository.js'
 import { createUserRepository } from './repositories/userRepository.js'
 
@@ -19,6 +20,7 @@ export function createDatabaseRepositories(env) {
       fulfilmentKey: env?.ORDER_FULFILMENT_KEY,
     }),
     catalogue,
+    consultations: createConsultationRepository(db, { catalogue }),
     orders: createOrderRepository(db, {
       bankConfig: {
         accountName: env?.BANK_TRANSFER_ACCOUNT_NAME,

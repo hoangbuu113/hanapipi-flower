@@ -3,6 +3,62 @@ import fs from 'node:fs'
 import test from 'node:test'
 import { activateModalFocus, trapDialogFocus } from '../src/utils/focus.js'
 
+test('portfolio summary renders current Guest selections and contacts without orders, payments or cart mutations', async () => {
+  const { register } = await import('node:module')
+  register('./cart-component-loader.js', import.meta.url)
+  const React = await import('react')
+  const { act, create } = await import('react-test-renderer')
+  const { MemoryRouter } = await import('react-router-dom')
+  const { CommerceContext } = await import('../src/context/commerceStore.js')
+  const { STORE_CONTACT } = await import('../src/config/storeContact.js')
+  const CheckoutPage = (await import('../src/pages/CheckoutPage.jsx')).default
+  const cartItems = [
+    { key: 'a', name: 'Hoa A', slug: 'flower-a', quantity: 2, unitPrice: 300000, size: { label: 'Nhỏ' }, wrapping: { label: 'Giấy ivory' }, image: { src: '/flower-a.jpg', alt: 'Hoa A' }, giftAddOns: [{ id: 'card', name: 'Thiệp', price: 30000, active: true }] },
+    { key: 'b', custom: true, name: 'Bó hoa theo ý bạn', quantity: 1, unitPrice: 500000, style: 'Tự nhiên', palette: 'Hồng', size: 'Vừa', flowers: ['Hoa theo mùa'], wrapping: 'Giấy mờ', message: 'Một lời chúc', giftAddOns: [] },
+  ]
+  const originalItems = structuredClone(cartItems)
+  const originalFetch = globalThis.fetch
+  const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  let requests = 0
+  let mutations = 0
+  let renderer
+  globalThis.fetch = async () => { requests++; throw new Error('Summary must not request an order') }
+  const value = { cartItems, cartError: null, isCartLoading: false, retryCart() {}, clearCart() { mutations++ }, addOrder() { mutations++ } }
+  try {
+    await act(async () => { renderer = create(React.createElement(MemoryRouter, { initialEntries: ['/checkout'] }, React.createElement(CommerceContext.Provider, { value }, React.createElement(CheckoutPage)))) })
+    const treeText = JSON.stringify(renderer.toJSON())
+    assert.match(treeText, /Hoa A/u)
+    assert.match(treeText, /Bó hoa theo ý bạn/u)
+    assert.match(treeText, /Một lời chúc/u)
+    assert.match(treeText, /1\.160\.000/u)
+    assert.match(treeText, /660\.000/u)
+    assert.match(treeText, /Tổng giá tham khảo/u)
+    assert.equal(renderer.root.findAllByType('article').length, 2)
+    assert.equal(renderer.root.findAllByType('form').length, 0)
+    assert.equal(renderer.root.findAllByType('input').length, 0)
+    assert.doesNotMatch(treeText, /Ví MoMo|Mã QR Ví MoMo|Đặt hoa|Tổng thanh toán/u)
+    const anchors = renderer.root.findAllByType('a')
+    const zalo = anchors.find(a => a.props.href === STORE_CONTACT.zaloUrl)
+    assert.equal(zalo.props.children, 'Liên hệ qua Zalo')
+    assert.equal(zalo.props.rel, 'noopener noreferrer')
+    assert.equal(zalo.props.target, '_blank')
+    assert.equal(anchors.find(a => a.props.href === STORE_CONTACT.phoneTel).props.children, 'Gọi tư vấn')
+    assert.match(STORE_CONTACT.phoneTel, /^tel:/u)
+    assert.ok(anchors.every(a => !String(a.props.href).includes('/checkout/success/')))
+    assert.equal(requests, 0)
+    assert.equal(mutations, 0)
+    assert.deepEqual(cartItems, originalItems)
+    const source = fs.readFileSync('src/pages/CheckoutPage.jsx', 'utf8')
+    assert.match(source, /import \{ STORE_CONTACT \} from/u)
+    assert.doesNotMatch(source, /useAuth|useAccount|createOrder|clearCart|paymentMethod/u)
+  } finally {
+    if (renderer) await act(async () => renderer.unmount())
+    globalThis.fetch = originalFetch
+    globalThis.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment
+  }
+})
+
 test('Auth submit handlers do not log Clerk factors, session state or credentials', () => {
   const source = fs.readFileSync('src/pages/AuthPage.jsx', 'utf8')
   assert.doesNotMatch(source, /console\.(?:log|debug|info|warn|error)\s*\(/u)

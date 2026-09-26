@@ -510,9 +510,7 @@ test('L. clearing active cart/attempt cannot clear other identity; ambiguous fai
   clearCheckoutAttempt(user, key, store)
   assert.equal(JSON.parse(store.getItem(getCartStorageKey(guest))).items.length, 1)
   const source = fs.readFileSync('src/pages/CheckoutPage.jsx', 'utf8')
-  assert.ok(source.indexOf('if (!result.ok)') < source.indexOf('clearCart()'))
-  assert.ok(source.indexOf('activeScopeRef.current !== checkoutScope') < source.indexOf('clearCart()'))
-  assert.match(source, /if \(submittingRef\.current\) return/u)
+  assert.doesNotMatch(source, /clearCart\(|createOrder\(|getCheckoutAttempt\(/u, 'Public summary must leave carts and backend replay attempts untouched')
 })
 
 test('migration preserves existing user-scoped keys without inventing guest users', (t) => {

@@ -36,11 +36,12 @@ export function createWorker(options = {}) {
     databaseRepositoriesFactory: options.databaseRepositoriesFactory,
     identityVerifier: options.identityVerifier,
     rateLimitRequest: options.rateLimitRequest,
+    telegramFetch: options.telegramFetch,
   })
   const logger = options.logger ?? console
 
   return {
-    async fetch(request, env = {}) {
+    async fetch(request, env = {}, context) {
       const url = new URL(request.url)
       if (!isApiPath(url.pathname)) {
         try {
@@ -57,7 +58,7 @@ export function createWorker(options = {}) {
       let apiResult
 
       try {
-        apiResult = await routeApiRequest(request, env, requestId)
+        apiResult = await routeApiRequest(request, env, requestId, context)
       } catch {
         const versioned = isApiV1Path(url.pathname)
         apiResult = {

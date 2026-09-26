@@ -36,6 +36,7 @@ import { formatCurrency } from '../utils/formatCurrency'
 import ProductImageUploader from '../components/admin/ProductImageUploader'
 import ProductGalleryEditor from '../components/admin/ProductGalleryEditor'
 import AdminModal from '../components/admin/AdminModal'
+import AdminConsultations from '../components/admin/AdminConsultations.jsx'
 import { getPrimaryMediaSrc } from '../utils/media'
 import './AdminPage.css'
 
@@ -1037,6 +1038,8 @@ function AdminPage() {
             </div>
           )}
         </section>
+
+        <AdminConsultations getToken={getToken} />
 
         {/* Orders Fulfilment Section */}
         <section aria-labelledby="orders-mgmt-title" className="admin-orders-section">

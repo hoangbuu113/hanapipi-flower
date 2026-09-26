@@ -18,6 +18,7 @@ import {
   validateMutationOrigin,
 } from './request.js'
 import { enforceRateLimit } from './rateLimit.js'
+import { routeConsultations } from './consultationApi.js'
 import { MAX_PRODUCT_GALLERY_IMAGES, resolveMediaSrc } from '../utils/media.js'
 
 import {
@@ -1841,7 +1842,7 @@ export function createApiRouter(options = {}) {
   const authorizeAdmin = options.requireAdmin
     ?? ((req, env, deps) => requireAdmin(req, env, deps))
 
-  return async function routeApiRequest(request, env, requestId) {
+  return async function routeApiRequest(request, env, requestId, context) {
     const { pathname } = new URL(request.url)
 
     if (pathname === LEGACY_CONCIERGE_PATH) {
@@ -1875,6 +1876,12 @@ export function createApiRouter(options = {}) {
       if (request.method !== 'GET') return methodNotAllowed(requestId, V1_HEALTH_PATH, 'GET')
       return result(successResponse({ status: 'ok', version: API_VERSION }, requestId), V1_HEALTH_PATH)
     }
+
+    const consultation = await routeConsultations(request, env, requestId, {
+      authorizeAdmin, createRepositories, rateLimitRequest, verifyIdentity,
+      telegramFetch: options.telegramFetch,
+    }, context)
+    if (consultation) return consultation
 
     if (pathname === V1_ME_PATH) {
       if (request.method !== 'GET') return methodNotAllowed(requestId, V1_ME_PATH, 'GET')

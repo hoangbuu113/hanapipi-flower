@@ -1451,3 +1451,6 @@
     white-space: normal;
   }
 }
+.consultation-detail article{display:flex;gap:20px;padding-block:20px;border-bottom:1px solid var(--border)}
+.consultation-detail article>div{min-width:0;overflow-wrap:anywhere}.consultation-detail img{width:100px;height:125px;object-fit:cover;flex:none}
+@media(max-width:479px){.consultation-detail article{gap:12px}.consultation-detail img{width:76px;height:95px}}
