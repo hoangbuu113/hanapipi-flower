@@ -1,4 +1,4 @@
-import { REPORT_ONLY_POLICY } from './csp.js'
+import { CONTENT_SECURITY_POLICY } from './csp.js'
 
 const BASELINE_HEADERS = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
@@ -104,7 +104,8 @@ export function withBaselineSecurityHeaders(response, request) {
   // A document policy belongs on pages, not image/video binaries or API JSON.
   const contentType = headers.get('Content-Type') ?? ''
   if (/^(?:text\/(?:html|css|javascript)|application\/javascript)(?:;|$)/iu.test(contentType)) {
-    headers.set('Content-Security-Policy-Report-Only', REPORT_ONLY_POLICY)
+    headers.delete('Content-Security-Policy-Report-Only')
+    headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY)
   }
   if (isProductionHttps(request)) {
     headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')

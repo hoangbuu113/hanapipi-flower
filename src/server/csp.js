@@ -16,7 +16,7 @@ export function getClerkFrontendOrigin(publishableKey) {
   }
 }
 
-export function createReportOnlyPolicy(publishableKey = buildPublishableKey) {
+export function createContentSecurityPolicy(publishableKey = buildPublishableKey) {
   const clerk = getClerkFrontendOrigin(publishableKey)
   const clerkSource = clerk ? [clerk] : []
   const directives = {
@@ -40,4 +40,4 @@ export function createReportOnlyPolicy(publishableKey = buildPublishableKey) {
   return Object.entries(directives).map(([name, sources]) => `${name} ${sources.join(' ')}`).join('; ')
 }
 
-export const REPORT_ONLY_POLICY = createReportOnlyPolicy()
+export const CONTENT_SECURITY_POLICY = createContentSecurityPolicy()

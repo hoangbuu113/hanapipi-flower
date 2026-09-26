@@ -1,9 +1,11 @@
-# CSP report-only baseline
+# CSP baseline — promoted from report-only
 
-This is observation only, not an enforced CSP. No report collector is added:
+The owner verified the report-only baseline manually without CSP violations.
+The identical policy is now emitted as enforced `Content-Security-Policy`, with
+no report-only header alongside it. No report collector is added:
 inspect browser console violations without persisting URLs, bodies, or user data.
 Existing nosniff, frame protection, referrer/permissions policies and HTTPS HSTS
-are preserved. HTML, JavaScript and CSS receive the report-only header; API JSON,
+are preserved. HTML, JavaScript and CSS receive the enforced header; API JSON,
 images, fonts and videos keep their existing serving behavior without a CSP.
 
 `assets.run_worker_first=true` makes static navigation pass through the existing
@@ -37,10 +39,13 @@ protection hosts. Do not copy its wildcard defaults blindly: the current SDK
 inspection did not find those hosts. If authenticated signup/CAPTCHA produces
 such violations, classify the exact resources before changing allowances.
 
-Before future enforcement, verify login/signup/second factor/logout/Admin and
-checkout success/QR with a safe authenticated session, and classify every observed
-violation as legitimate, obsolete or unexpected. An unauthenticated smoke alone
-does NOT establish enforcement readiness. Keep this header report-only.
+After staging deployment, the owner must verify login/signup/second factor,
+logout/Admin/image uploads, storefront/Concierge, guest/authenticated checkout and
+checkout success/QR with the browser console open. Any legitimate CSP block is
+a release blocker: investigate the exact source, never broaden the policy blindly.
+Do not commit the promotion until this enforced-mode manual QA passes. An
+unauthenticated smoke alone does NOT satisfy that gate. Style nonce/hash migration
+remains a separate task.
 
 References:
 - https://clerk.com/docs/guides/secure/best-practices/csp-headers
