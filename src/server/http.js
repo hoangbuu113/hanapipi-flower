@@ -103,6 +103,9 @@ export function withBaselineSecurityHeaders(response, request) {
   Object.entries(BASELINE_HEADERS).forEach(([name, value]) => headers.set(name, value))
   // A document policy belongs on pages, not image/video binaries or API JSON.
   const contentType = headers.get('Content-Type') ?? ''
+  if (/^text\/html(?:;|$)/iu.test(contentType)) {
+    headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive')
+  }
   if (/^(?:text\/(?:html|css|javascript)|application\/javascript)(?:;|$)/iu.test(contentType)) {
     headers.delete('Content-Security-Policy-Report-Only')
     headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY)

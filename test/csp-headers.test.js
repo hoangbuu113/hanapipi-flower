@@ -31,6 +31,30 @@ function policyDirectives(policy) {
   }))
 }
 
+test('initial HTML prevents indexing without adding a sitemap', () => {
+  const html = fs.readFileSync('index.html', 'utf8')
+  assert.match(html, /<meta name="robots" content="noindex, nofollow, noarchive"\s*\/>/u)
+  assert.equal(fs.existsSync('public/sitemap.xml'), false)
+  assert.doesNotMatch(html, /sitemap|application\/ld\+json/iu)
+})
+
+test('document-only noindex preserves public deep links and enforced CSP', async () => {
+  const worker = createWorker({ logger: silentLogger })
+  for (const path of ['/', '/shop', '/product/nang-diu', '/search', '/admin', '/login', '/account', '/checkout', '/checkout/success/HF-TEST', '/flower-finder', '/build-your-bouquet']) {
+    const response = await worker.fetch(new Request(origin + path, { headers: { Accept: 'text/html' } }), env)
+    assert.equal(response.status, 200, path)
+    assert.equal(response.headers.get('X-Robots-Tag'), 'noindex, nofollow, noarchive', path)
+    assert.ok(response.headers.get('Content-Security-Policy'), path)
+    assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff', path)
+    assert.match(await response.text(), /Hanapipi Flower/u)
+  }
+  for (const path of ['/assets/site.js', '/assets/site.css', '/api/v1/health']) {
+    const response = await worker.fetch(new Request(origin + path), env)
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('X-Robots-Tag'), null, path)
+  }
+})
+
 test('HTML, SPA routes and JS/CSS receive only enforced CSP and retain existing security/cache headers', async () => {
   const worker = createWorker({ logger: silentLogger })
   for (const path of ['/index.html', '/shop', '/assets/site.js', '/assets/site.css']) {
@@ -100,6 +124,7 @@ test('API envelopes, binary media and local HSTS behavior are unchanged', async 
   assert.equal(media.headers.get('X-Content-Type-Options'), 'nosniff')
   assert.equal(media.headers.get('Content-Security-Policy-Report-Only'), null)
   assert.equal(media.headers.get('Content-Security-Policy'), null)
+  assert.equal(media.headers.get('X-Robots-Tag'), null)
   assert.deepEqual(new Uint8Array(await media.arrayBuffer()), bytes)
   const local = await worker.fetch(new Request('http://127.0.0.1:5173/index.html'), env)
   assert.equal(local.headers.get('Strict-Transport-Security'), null)
