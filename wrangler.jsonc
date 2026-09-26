@@ -54,7 +54,7 @@
     "staging": {
       "name": "hanapipi-flower",
       "secrets": {
-        "required": ["CLERK_JWT_KEY", "GROQ_API_KEY", "ORDER_FULFILMENT_KEY"]
+        "required": ["CLERK_JWT_KEY", "GROQ_API_KEY", "ORDER_FULFILMENT_KEY", "RATE_LIMIT_KEY_SECRET"]
       },
       "vars": {
         "API_V1_ENABLED": "true",
@@ -62,8 +62,16 @@
         "CLERK_AUTHORIZED_PARTIES": "https://hanapipi-flower.hutstudio.workers.dev",
         "MOMO_ACCOUNT_NAME": "Trần Huỳnh Bảo Hân",
         "MOMO_PHONE_NUMBER": "0335618019",
-        "RATE_LIMITING_ENABLED": "false"
+        "RATE_LIMITING_ENABLED": "false",
+        "CONCIERGE_RATE_LIMITING_ENABLED": "true"
       },
+      "ratelimits": [
+        {
+          "name": "CONCIERGE_RATE_LIMITER",
+          "namespace_id": "1281655825",
+          "simple": { "limit": 6, "period": 60 }
+        }
+      ],
       "d1_databases": [
         {
           "binding": "DB",

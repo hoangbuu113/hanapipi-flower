@@ -48,7 +48,68 @@ test('production config defines isolated limits and keeps the API gate closed', 
   assert.deepEqual(limits.ORDER_RATE_LIMITER, { limit: 5, period: 60 })
   assert.deepEqual(limits.ADMIN_MUTATION_RATE_LIMITER, { limit: 60, period: 60 })
   assert.equal(config.env.staging.vars.RATE_LIMITING_ENABLED, 'false')
-  assert.equal(config.env.staging.ratelimits, undefined)
+  assert.equal(config.env.staging.vars.CONCIERGE_RATE_LIMITING_ENABLED, 'true')
+  assert.equal(config.vars.CONCIERGE_RATE_LIMITING_ENABLED, undefined)
+  assert.equal(config.env.staging.ratelimits.length, 1)
+  const stagingLimit = config.env.staging.ratelimits[0]
+  assert.equal(stagingLimit.name, 'CONCIERGE_RATE_LIMITER')
+  assert.deepEqual(stagingLimit.simple, { limit: 6, period: 60 })
+  assert.ok(!config.ratelimits.some(entry => entry.namespace_id === stagingLimit.namespace_id))
+  assert.ok(config.env.staging.secrets.required.includes('RATE_LIMIT_KEY_SECRET'))
+})
+
+test('staging Concierge-only switch leaves order/Admin policies disabled', async () => {
+  const env = {
+    RATE_LIMITING_ENABLED: 'false', CONCIERGE_RATE_LIMITING_ENABLED: 'true',
+    RATE_LIMIT_KEY_SECRET: testSecret,
+    CONCIERGE_RATE_LIMITER: limiterBinding(async () => ({ success: true })),
+  }
+  const request = createRequest('/api/v1/concierge', { ip: '203.0.113.10' })
+  assert.deepEqual(await enforceRateLimit({ env, policy: 'concierge', request }), { allowed: true, enabled: true })
+  for (const policy of ['orderCreation', 'adminMutation']) {
+    assert.deepEqual(await enforceRateLimit({ env, policy, request }), { allowed: true, enabled: false })
+  }
+})
+
+test('staging Concierge routes share six-request quota and preserve 429/Retry-After', async () => {
+  const quotas = new Map()
+  let providerCalls = 0
+  const route = createApiRouter({ conciergeHandler: async () => {
+    providerCalls += 1
+    return Response.json({ message: 'Safe demo reply' })
+  } })
+  const env = createRateEnv({
+    RATE_LIMITING_ENABLED: 'false', CONCIERGE_RATE_LIMITING_ENABLED: 'true',
+    ADMIN_MUTATION_RATE_LIMITER: undefined, ORDER_RATE_LIMITER: undefined,
+    CONCIERGE_RATE_LIMITER: limiterBinding(async ({ key }) => {
+      const count = (quotas.get(key) ?? 0) + 1
+      quotas.set(key, count)
+      return { success: count <= 6 }
+    }),
+  })
+  for (let i = 0; i < 8; i += 1) {
+    const path = i % 2 ? '/api/concierge' : '/api/v1/concierge'
+    const { response } = await route(createRequest(path, { body: '{}', ip: '203.0.113.10' }), env, `staging-${i}`)
+    assert.equal(response.status, i < 6 ? 200 : 429)
+    if (i >= 6) {
+      assert.equal(response.headers.get('Retry-After'), '60')
+      const body = await response.json()
+      assert.equal(body.error?.code ?? body.code, 'RATE_LIMITED')
+    }
+  }
+  assert.equal(providerCalls, 6)
+  assert.equal(quotas.size, 1)
+})
+
+test('enabled staging Concierge fails closed without binding or HMAC secret', async () => {
+  const route = createApiRouter({ conciergeHandler: async () => { assert.fail('Must not invoke AI') } })
+  for (const missing of ['CONCIERGE_RATE_LIMITER', 'RATE_LIMIT_KEY_SECRET']) {
+    const env = createRateEnv({ RATE_LIMITING_ENABLED: 'false', CONCIERGE_RATE_LIMITING_ENABLED: 'true', [missing]: undefined })
+    const { response } = await route(createRequest('/api/v1/concierge', { body: '{}', ip: '203.0.113.10' }), env, 'missing')
+    assert.equal(response.status, 503)
+    assert.equal(response.headers.get('Retry-After'), '60')
+    assert.equal((await response.json()).error.code, 'RATE_LIMIT_UNAVAILABLE')
+  }
 })
 
 test('requests under quota pass and exhausted quota is reported', async () => {

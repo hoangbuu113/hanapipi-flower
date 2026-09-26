@@ -15,8 +15,10 @@ export const RATE_LIMIT_POLICIES = Object.freeze({
   }),
 })
 
-function isRateLimitingEnabled(env) {
-  return ENABLED_VALUES.has(String(env?.RATE_LIMITING_ENABLED ?? '').trim().toLowerCase())
+function isRateLimitingEnabled(env, policy) {
+  const enabled = (value) => ENABLED_VALUES.has(String(value ?? '').trim().toLowerCase())
+  return enabled(env?.RATE_LIMITING_ENABLED)
+    || (policy === 'concierge' && enabled(env?.CONCIERGE_RATE_LIMITING_ENABLED))
 }
 
 function decodeBase64Secret(value) {
@@ -66,7 +68,7 @@ function unavailable(policy) {
  * provider subjects, user IDs, or bearer tokens in limiter keys.
  */
 export async function enforceRateLimit({ env, identity, policy: policyName, request }) {
-  if (!isRateLimitingEnabled(env)) {
+  if (!isRateLimitingEnabled(env, policyName)) {
     return { allowed: true, enabled: false }
   }
 
