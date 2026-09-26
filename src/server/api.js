@@ -20,12 +20,11 @@ import { enforceRateLimit } from './rateLimit.js'
 import { MAX_PRODUCT_GALLERY_IMAGES, resolveMediaSrc } from '../utils/media.js'
 
 import {
-  ALLOWED_MEDIA_TYPES,
-  MAX_MEDIA_SIZE_BYTES,
   createMediaStorage,
   generateMediaKey,
   isManagedMediaKey,
   isValidMediaKey,
+  readValidatedImageUpload,
 } from './mediaStorage.js'
 
 export const API_VERSION = 'v1'
@@ -1475,66 +1474,14 @@ async function handleUploadAdminMedia(request, env, requestId, dependencies) {
   )
   if (rateLimited) return rateLimited
 
-  let mimeType = ''
-  let buffer = null
-
-  const contentTypeHeader = request.headers.get('content-type') || ''
-  if (contentTypeHeader.includes('multipart/form-data')) {
-    let formData
-    try {
-      formData = await request.formData()
-    } catch {
-      return result(errorResponse(
-        400,
-        'INVALID_MULTIPART_PAYLOAD',
-        'Dữ liệu tải lên không hợp lệ.',
-        requestId,
-      ), V1_ADMIN_MEDIA_PATH, { errorCode: 'INVALID_MULTIPART_PAYLOAD' })
-    }
-
-    const file = formData.get('file') || formData.get('image')
-    if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') {
-      return result(errorResponse(
-        400,
-        'INVALID_PAYLOAD',
-        'Vui lòng chọn tệp hình ảnh để tải lên.',
-        requestId,
-      ), V1_ADMIN_MEDIA_PATH, { errorCode: 'INVALID_PAYLOAD' })
-    }
-
-    mimeType = file.type?.toLowerCase() || ''
-    buffer = new Uint8Array(await file.arrayBuffer())
-  } else {
-    mimeType = contentTypeHeader.split(';')[0]?.trim()?.toLowerCase() || ''
-    buffer = new Uint8Array(await request.arrayBuffer())
+  let upload
+  try {
+    upload = await readValidatedImageUpload(request)
+  } catch (error) {
+    return result(errorResponse(error.status || 400, error.code || 'INVALID_MEDIA_FILE',
+      error.message || 'Tệp ảnh không hợp lệ.', requestId), V1_ADMIN_MEDIA_PATH, { errorCode: error.code || 'INVALID_MEDIA_FILE' })
   }
-
-  if (!ALLOWED_MEDIA_TYPES.has(mimeType)) {
-    return result(errorResponse(
-      400,
-      'INVALID_MEDIA_TYPE',
-      'Định dạng tệp không được hỗ trợ. Vui lòng chọn ảnh JPG, PNG hoặc WebP.',
-      requestId,
-    ), V1_ADMIN_MEDIA_PATH, { errorCode: 'INVALID_MEDIA_TYPE' })
-  }
-
-  if (buffer.byteLength === 0) {
-    return result(errorResponse(
-      400,
-      'EMPTY_FILE',
-      'Tệp ảnh không được để trống.',
-      requestId,
-    ), V1_ADMIN_MEDIA_PATH, { errorCode: 'EMPTY_FILE' })
-  }
-
-  if (buffer.byteLength > MAX_MEDIA_SIZE_BYTES) {
-    return result(errorResponse(
-      400,
-      'FILE_TOO_LARGE',
-      'Dung lượng ảnh vượt quá giới hạn tối đa (10 MB).',
-      requestId,
-    ), V1_ADMIN_MEDIA_PATH, { errorCode: 'FILE_TOO_LARGE' })
-  }
+  const { bytes: buffer, contentType: mimeType } = upload
 
   const key = generateMediaKey(mimeType)
   const mediaStorage = dependencies.createMediaStorage ? dependencies.createMediaStorage(env) : createMediaStorage(env)

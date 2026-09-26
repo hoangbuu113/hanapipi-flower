@@ -24,6 +24,7 @@ import {
 import { MemoryMediaBucket } from '../src/server/mediaStorage.js'
 import { createWorker } from '../src/worker.js'
 import { resolveMediaSrc } from '../src/utils/media.js'
+import { imageFixture } from './fixtures/images.js'
 
 class D1Wrapper {
   constructor(db) {
@@ -1292,7 +1293,7 @@ test('66. admin upload succeeds and generates safe storage key and url', async (
   seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
 
-  const fakeFile = new Blob(['fake-jpeg-content-12345'], { type: 'image/jpeg' })
+  const fakeFile = new Blob([imageFixture('image/jpeg')], { type: 'image/jpeg' })
   const result = await uploadAdminMedia(fakeFile, {
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
     getToken: async () => 'admin-token',
@@ -1328,8 +1329,9 @@ test('68. oversized file (>10 MB) is rejected with 400', async () => {
   seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
 
-  // 11 MB oversized blob
-  const bigBuffer = new Uint8Array(11 * 1024 * 1024)
+  // Smallest oversized file, still within the bounded multipart envelope.
+  // Larger streamed bodies and early cancellation are covered by media tests.
+  const bigBuffer = new Uint8Array(10 * 1024 * 1024 + 1)
   const bigFile = new Blob([bigBuffer], { type: 'image/png' })
 
   const result = await uploadAdminMedia(bigFile, {
@@ -1347,7 +1349,7 @@ test('69. public endpoint serves uploaded media with proper headers', async () =
   seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
 
-  const testImageBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]) // PNG magic bytes
+  const testImageBytes = imageFixture('image/png')
   const fakePng = new Blob([testImageBytes], { type: 'image/png' })
   const uploadResult = await uploadAdminMedia(fakePng, {
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
@@ -1370,7 +1372,7 @@ test('70. admin can delete uploaded media', async () => {
   seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
 
-  const fakeFile = new Blob(['image-to-delete'], { type: 'image/webp' })
+  const fakeFile = new Blob([imageFixture('image/webp')], { type: 'image/webp' })
   const uploadResult = await uploadAdminMedia(fakeFile, {
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
     getToken: async () => 'admin-token',
@@ -1425,7 +1427,7 @@ test('73. product creation works with uploaded media URL stored in D1 media_json
   seedAdminUser(sqlite)
   const testWorker = createTestWorker(d1)
 
-  const fakeFile = new Blob(['uploaded-flower-image'], { type: 'image/jpeg' })
+  const fakeFile = new Blob([imageFixture('image/jpeg')], { type: 'image/jpeg' })
   const uploadResult = await uploadAdminMedia(fakeFile, {
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
     getToken: async () => 'admin-token',
@@ -1498,7 +1500,7 @@ test('76. normal runtime missing MEDIA_BUCKET fails safely and does NOT use vola
   // Create worker with mediaBucket: null (simulating missing R2 binding in production/runtime)
   const testWorker = createTestWorker(d1, { mediaBucket: null })
 
-  const fakeFile = new Blob(['sample-image-content'], { type: 'image/jpeg' })
+  const fakeFile = new Blob([imageFixture('image/jpeg')], { type: 'image/jpeg' })
   const result = await uploadAdminMedia(fakeFile, {
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
     getToken: async () => 'admin-token',
@@ -2396,7 +2398,7 @@ test('114. admin media edit persists through D1 and all fresh catalogue reads', 
   })
   assert.equal(createResult.ok, true)
 
-  const uploadResult = await uploadAdminMedia(new Blob(['fresh-image'], { type: 'image/png' }), {
+  const uploadResult = await uploadAdminMedia(new Blob([imageFixture('image/png')], { type: 'image/png' }), {
     fetchImpl: (url, opts) => testWorker.fetch(url, opts),
     getToken: async () => 'admin-token',
   })
@@ -2523,8 +2525,8 @@ test('118a. Admin gallery appends, reorders and removes individual images withou
   const initial = JSON.parse(sqlite.prepare('SELECT media_json FROM products WHERE id = ?').get('nang-diu').media_json)
   assert.equal(initial.length, 1)
 
-  const second = await uploadAdminMedia(new Blob(['second-image'], { type: 'image/png' }), { fetchImpl, getToken })
-  const third = await uploadAdminMedia(new Blob(['third-image'], { type: 'image/webp' }), { fetchImpl, getToken })
+  const second = await uploadAdminMedia(new Blob([imageFixture('image/png')], { type: 'image/png' }), { fetchImpl, getToken })
+  const third = await uploadAdminMedia(new Blob([imageFixture('image/webp')], { type: 'image/webp' }), { fetchImpl, getToken })
   assert.equal(second.ok, true)
   assert.equal(third.ok, true)
 
