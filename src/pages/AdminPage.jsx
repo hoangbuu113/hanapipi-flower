@@ -35,6 +35,7 @@ import {
 import { formatCurrency } from '../utils/formatCurrency'
 import ProductImageUploader from '../components/admin/ProductImageUploader'
 import ProductGalleryEditor from '../components/admin/ProductGalleryEditor'
+import AdminModal from '../components/admin/AdminModal'
 import { getPrimaryMediaSrc } from '../utils/media'
 import './AdminPage.css'
 
@@ -1550,11 +1551,10 @@ function AdminPage() {
         {/* Product Full Content Edit Modal */}
         {editingProduct && editForm && (
           <div className="admin-modal-backdrop" onClick={handleCancelEdit} role="presentation">
-            <div
+            <AdminModal
               aria-labelledby="edit-product-modal-title"
               className="admin-modal admin-modal--edit-product"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
+              onClose={handleCancelEdit}
             >
               <div className="admin-modal__header">
                 <div>
@@ -1862,18 +1862,17 @@ function AdminPage() {
                   </button>
                 </div>
               </form>
-            </div>
+            </AdminModal>
           </div>
         )}
 
         {/* Product Options Modal (Sizes & Wrapping) */}
         {configuringProduct && (
           <div className="admin-modal-backdrop" onClick={handleCloseVariants} role="presentation">
-            <div
+            <AdminModal
               aria-labelledby="variants-modal-title"
               className="admin-modal"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
+              onClose={handleCloseVariants}
             >
               <div className="admin-modal__header">
                 <div>
@@ -2075,7 +2074,7 @@ function AdminPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </AdminModal>
           </div>
         )}
 
@@ -2367,13 +2366,11 @@ function AdminPage() {
 
         {deleteTarget && (
           <div className="admin-modal-backdrop" onClick={cancelPermanentDelete} role="presentation">
-            <section
+            <AdminModal
               aria-describedby="permanent-delete-description"
               aria-labelledby="permanent-delete-title"
-              aria-modal="true"
               className="admin-modal admin-modal--delete-confirmation"
-              onClick={(event) => event.stopPropagation()}
-              role="dialog"
+              onClose={cancelPermanentDelete}
             >
               <div className="admin-modal__header">
                 <div>
@@ -2419,18 +2416,17 @@ function AdminPage() {
                   {isDeleting ? 'Đang xóa...' : 'Xóa vĩnh viễn'}
                 </button>
               </div>
-            </section>
+            </AdminModal>
           </div>
         )}
 
         {/* Order Detail & Fulfilment Modal */}
         {selectedOrderDetail && (
           <div className="admin-modal-backdrop" onClick={handleCloseOrderDetail} role="presentation">
-            <div
+            <AdminModal
               aria-labelledby="order-detail-modal-title"
               className="admin-modal admin-modal--order-detail"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
+              onClose={handleCloseOrderDetail}
             >
               <div className="admin-modal__header">
                 <div>
@@ -2714,7 +2710,7 @@ function AdminPage() {
                   Đóng
                 </button>
               </div>
-            </div>
+            </AdminModal>
           </div>
         )}
       </Container>

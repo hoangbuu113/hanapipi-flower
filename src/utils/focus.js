@@ -7,6 +7,44 @@ const focusableSelector = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
+const modalScopes = []
+
+// Scope listeners to the topmost modal, including nested delete confirmations.
+export function activateModalFocus(container, onClose) {
+  const trigger = document.activeElement
+  const scope = { container }
+  modalScopes.push(scope)
+  const isTop = () => modalScopes.at(-1) === scope
+  const focusInside = () => {
+    const first = Array.from(container.querySelectorAll(focusableSelector))
+      .find((element) => element.getClientRects().length > 0)
+    ;(first ?? container).focus()
+  }
+  const keyDown = (event) => {
+    if (!isTop()) return
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      onClose()
+    } else {
+      trapDialogFocus(event, container)
+    }
+  }
+  const focusIn = () => {
+    if (isTop() && !container.contains(document.activeElement)) focusInside()
+  }
+  document.addEventListener('keydown', keyDown)
+  document.addEventListener('focusin', focusIn)
+  focusInside()
+  return () => {
+    const wasTop = isTop()
+    modalScopes.splice(modalScopes.indexOf(scope), 1)
+    document.removeEventListener('keydown', keyDown)
+    document.removeEventListener('focusin', focusIn)
+    if (wasTop && trigger?.isConnected) trigger.focus()
+  }
+}
+
 export function trapDialogFocus(event, container) {
   if (event.key !== 'Tab' || !container) return
 

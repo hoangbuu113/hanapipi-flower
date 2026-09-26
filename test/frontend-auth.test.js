@@ -1,6 +1,140 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
+import { activateModalFocus, trapDialogFocus } from '../src/utils/focus.js'
+
+test('Admin shared modal focuses inside, traps both Tab directions, closes by Escape and restores trigger', () => {
+  const previousDocument = globalThis.document
+  const listeners = new Map()
+  const documentMock = {
+    activeElement: null,
+    addEventListener(name, fn) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(fn) },
+    removeEventListener(name, fn) { listeners.get(name)?.delete(fn) },
+  }
+  globalThis.document = documentMock
+  const node = () => ({ isConnected: true, getClientRects: () => [1], focus() { documentMock.activeElement = this } })
+  const trigger = node(), close = node(), last = node()
+  const modal = { querySelectorAll: () => [close, last], contains: (element) => [close, last].includes(element), focus() { documentMock.activeElement = this } }
+  const event = (key, shiftKey = false) => ({ key, shiftKey, prevented: false, preventDefault() { this.prevented = true }, stopPropagation() {} })
+  let cleanup
+  try {
+    trigger.focus()
+    let closed = 0
+    cleanup = activateModalFocus(modal, () => { closed += 1 })
+    assert.equal(documentMock.activeElement, close)
+    last.focus()
+    const tab = event('Tab')
+    for (const fn of listeners.get('keydown')) fn(tab)
+    assert.equal(tab.prevented, true)
+    assert.equal(documentMock.activeElement, close)
+    for (const fn of listeners.get('keydown')) fn(event('Tab', true))
+    assert.equal(documentMock.activeElement, last)
+    trigger.focus()
+    for (const fn of listeners.get('focusin')) fn()
+    assert.equal(documentMock.activeElement, close)
+    for (const fn of listeners.get('keydown')) fn(event('Escape'))
+    assert.equal(closed, 1)
+    cleanup(); cleanup = null
+    assert.equal(documentMock.activeElement, trigger)
+    assert.equal(listeners.get('keydown').size, 0)
+    // Cart Drawer still uses the unchanged trap helper, including empty dialogs.
+    const emptyTab = event('Tab')
+    trapDialogFocus(emptyTab, { querySelectorAll: () => [] })
+    assert.equal(emptyTab.prevented, true)
+    const source = fs.readFileSync('src/components/admin/AdminModal.jsx', 'utf8')
+    assert.match(source, /role="dialog" aria-modal="true"/u)
+    const admin = fs.readFileSync('src/pages/AdminPage.jsx', 'utf8')
+    assert.equal(admin.match(/<AdminModal\b/gu).length, 4)
+    assert.equal(admin.match(/aria-labelledby="[^"]*modal-title"|aria-labelledby="permanent-delete-title"/gu).length, 4)
+  } finally {
+    cleanup?.()
+    globalThis.document = previousDocument
+  }
+})
+
+test('nested Admin confirmation only handles topmost Escape and restores parent focus', () => {
+  const original = globalThis.document
+  const listeners = new Set()
+  const doc = { activeElement: null, addEventListener(name, handler) { if (name === 'keydown') listeners.add(handler) }, removeEventListener(name, handler) { if (name === 'keydown') listeners.delete(handler) } }
+  globalThis.document = doc
+  const makeButton = () => ({ isConnected: true, getClientRects: () => [1], focus() { doc.activeElement = this } })
+  const trigger = makeButton(), parentButton = makeButton(), childButton = makeButton()
+  const container = (button) => ({ querySelectorAll: () => [button], contains: (node) => node === button })
+  let parentCleanup, childCleanup, parentClosed = 0, childClosed = 0
+  try {
+    trigger.focus()
+    parentCleanup = activateModalFocus(container(parentButton), () => { parentClosed += 1 })
+    childCleanup = activateModalFocus(container(childButton), () => { childClosed += 1 })
+    for (const handler of listeners) handler({ key: 'Escape', preventDefault() {}, stopPropagation() {} })
+    assert.equal(childClosed, 1)
+    assert.equal(parentClosed, 0)
+    childCleanup(); childCleanup = null
+    assert.equal(doc.activeElement, parentButton)
+    parentCleanup(); parentCleanup = null
+    assert.equal(doc.activeElement, trigger)
+  } finally { childCleanup?.(); parentCleanup?.(); globalThis.document = original }
+})
+
+test('floating controls retain accessible names, sufficient targets and global focus indication', () => {
+  const cart = fs.readFileSync('src/components/FloatingCartShortcut.jsx', 'utf8')
+  const concierge = fs.readFileSync('src/components/ConciergeWidget.jsx', 'utf8')
+  assert.match(cart, /aria-label=/u)
+  assert.match(concierge, /aria-label="Mở Hanapipi tư vấn"/u)
+  assert.match(fs.readFileSync('src/components/FloatingCartShortcut.css', 'utf8'), /min-height: 48px/u)
+  assert.match(fs.readFileSync('src/components/ConciergeWidget.css', 'utf8'), /min-height: 46px/u)
+  assert.match(fs.readFileSync('src/index.css', 'utf8'), /:focus-visible\s*\{\s*outline: 2px/u)
+  assert.doesNotMatch(cart, /visibleRoutes[^\n]*['"]\/checkout['"]/u)
+})
+
+test('HCMC combobox keyboard navigation scrolls active options, selects with Enter and closes with Escape', async () => {
+  const { register } = await import('node:module')
+  register('./cart-component-loader.js', import.meta.url)
+  const React = await import('react')
+  const { act, create } = await import('react-test-renderer')
+  const Selector = (await import('../src/components/AdministrativeUnitSelector.jsx')).default
+  const oldAct = globalThis.IS_REACT_ACT_ENVIRONMENT
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  const scrolls = []
+  let selected, renderer
+  try {
+    await act(async () => {
+      renderer = create(React.createElement(Selector, { value: '', error: 'Vui lòng chọn phường / xã.', onChange: (code) => { selected = code } }), {
+        createNodeMock: ({ props }) => ({ scrollIntoView: (options) => scrolls.push({ id: props.id, options }) }),
+      })
+    })
+    const input = () => renderer.root.findByProps({ role: 'combobox' })
+    const key = async (value) => act(async () => { input().props.onKeyDown({ key: value, preventDefault() {}, stopPropagation() {} }) })
+    await key('ArrowDown')
+    const options = renderer.root.findAllByProps({ role: 'option' })
+    assert.equal(options.length, 102)
+    assert.equal(input().props['aria-expanded'], true)
+    assert.equal(input().props['aria-activedescendant'], options[0].props.id)
+    assert.equal(renderer.root.findByProps({ role: 'listbox' }).props.id, input().props['aria-controls'])
+    assert.ok(input().props['aria-describedby'])
+    assert.equal(options.every((option) => option.props.tabIndex === -1), true)
+    await key('ArrowDown')
+    assert.equal(input().props['aria-activedescendant'], options[1].props.id)
+    assert.deepEqual(scrolls.at(-1), { id: options[1].props.id, options: { block: 'nearest' } })
+    await key('ArrowUp')
+    assert.equal(input().props['aria-activedescendant'], options[0].props.id)
+    const firstCode = options[0].props.id.split('-').at(-1)
+    await key('Enter')
+    assert.equal(selected, firstCode)
+    assert.equal(input().props['aria-expanded'], false)
+    assert.equal(input().props['aria-activedescendant'], undefined)
+    await act(async () => renderer.update(React.createElement(Selector, { value: selected, onChange: (code) => { selected = code } })))
+    await act(async () => input().props.onFocus())
+    assert.equal(renderer.root.findAllByProps({ role: 'option' }).filter((option) => option.props['aria-selected']).length, 1)
+    await act(async () => input().props.onChange({ target: { value: 'go vap' } }))
+    assert.ok(renderer.root.findAllByProps({ role: 'option' }).some((option) => option.props.children === 'Phường Gò Vấp'))
+    await key('Escape')
+    assert.equal(input().props['aria-expanded'], false)
+    assert.equal(renderer.root.findAllByProps({ role: 'listbox' }).length, 0)
+  } finally {
+    if (renderer) await act(async () => renderer.unmount())
+    globalThis.IS_REACT_ACT_ENVIRONMENT = oldAct
+  }
+})
 import { fetchCurrentUser, fetchUserAddresses } from '../src/services/apiClient.js'
 import { validateStagingClientBundle } from '../scripts/verify-staging-build.js'
 import {

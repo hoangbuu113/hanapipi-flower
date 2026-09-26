@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { getHcmcAdministrativeUnit } from '../data/hcmcAdministrativeUnits.js'
 import { searchHcmcDeliveryUnits } from '../data/hcmcDeliveryUnits.js'
 import './AdministrativeUnitSelector.css'
@@ -6,11 +6,17 @@ import './AdministrativeUnitSelector.css'
 export default function AdministrativeUnitSelector({ value, onChange, error }) {
   const inputId = useId()
   const listId = `${inputId}-list`
+  const errorId = `${inputId}-error`
+  const activeOptionRef = useRef(null)
   const selected = getHcmcAdministrativeUnit(value)
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const matches = searchHcmcDeliveryUnits(query)
+  const activeCode = isOpen ? matches[activeIndex]?.code : null
+  useEffect(() => {
+    if (activeCode) activeOptionRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [activeCode])
 
   function select(unit) {
     onChange(unit.code)
@@ -20,13 +26,16 @@ export default function AdministrativeUnitSelector({ value, onChange, error }) {
 
   function handleKeyDown(event) {
     if (event.key === 'Escape') {
+      if (isOpen) { event.preventDefault(); event.stopPropagation() }
       setIsOpen(false)
       return
     }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       setIsOpen(true)
-      setActiveIndex((current) => Math.max(0, Math.min(matches.length - 1, current + (event.key === 'ArrowDown' ? 1 : -1))))
+      setActiveIndex((current) => !isOpen
+        ? (event.key === 'ArrowDown' ? 0 : Math.max(0, matches.length - 1))
+        : Math.max(0, Math.min(matches.length - 1, current + (event.key === 'ArrowDown' ? 1 : -1))))
     }
     if (event.key === 'Enter' && isOpen && matches[activeIndex]) {
       event.preventDefault()
@@ -43,6 +52,7 @@ export default function AdministrativeUnitSelector({ value, onChange, error }) {
         aria-controls={listId}
         aria-expanded={isOpen}
         aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
         autoComplete="off"
         id={inputId}
         onChange={(event) => { setQuery(event.target.value); setIsOpen(true); setActiveIndex(0); if (value) onChange('') }}
@@ -53,13 +63,15 @@ export default function AdministrativeUnitSelector({ value, onChange, error }) {
         value={isOpen ? query : (selected?.name || '')}
       />
       {isOpen && (
-        <div className="administrative-unit-selector__results" id={listId} role="listbox">
+        <div aria-label="Phường / Xã giao hoa" className="administrative-unit-selector__results" id={listId} role="listbox">
           {matches.length ? matches.map((unit, index) => (
             <button
-              aria-selected={index === activeIndex}
+              aria-selected={unit.code === value}
               className={index === activeIndex ? 'is-active' : ''}
               id={`${listId}-${unit.code}`}
               key={unit.code}
+              ref={index === activeIndex ? activeOptionRef : null}
+              tabIndex={-1}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => select(unit)}
               role="option"
@@ -68,7 +80,7 @@ export default function AdministrativeUnitSelector({ value, onChange, error }) {
           )) : <p>Không tìm thấy phường hoặc xã phù hợp.</p>}
         </div>
       )}
-      {error && <em className="administrative-unit-selector__error">{error}</em>}
+      {error && <em id={errorId} className="administrative-unit-selector__error">{error}</em>}
     </div>
   )
 }
