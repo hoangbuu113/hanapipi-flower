@@ -7,8 +7,10 @@ import FloatingCartShortcut from '../components/FloatingCartShortcut'
 import Navbar from '../components/Navbar'
 import Container from '../components/Container'
 import { DELIVERY_CUTOFF_HOUR } from '../utils/delivery'
+import { usePublicCommerce } from '../context/publicCommerceStore.js'
 
 function SiteLayout() {
+  const { mode } = usePublicCommerce()
   const location = useLocation()
 
   useEffect(() => {
@@ -25,7 +27,7 @@ function SiteLayout() {
 
   return (
     <div className="site-shell">
-      <div className="announcement">Giao hoa trong ngày cho đơn đặt trước {DELIVERY_CUTOFF_HOUR}:00.</div>
+      <div className="announcement">{mode === 'checkout' ? `Giao hoa trong ngày cho đơn đặt trước ${DELIVERY_CUTOFF_HOUR}:00.` : 'Chọn hoa theo ý bạn, gửi lựa chọn để được tư vấn.'}</div>
       <Navbar />
       <div className="site-main">
         <Suspense fallback={<main className="route-placeholder" aria-busy="true"><Container><p role="status" aria-live="polite">Đang tải nội dung…</p></Container></main>}>

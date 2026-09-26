@@ -33,6 +33,7 @@ function harness(t) {
   const d1 = new LocalD1Database(sqlite)
   const logs = []
   const env = {
+    PUBLIC_COMMERCE_MODE: 'checkout',
     API_ALLOWED_ORIGINS: origin, API_V1_ENABLED: 'true',
     CLERK_AUTHORIZED_PARTIES: origin, CLERK_JWT_KEY: 'test-public-key',
     DB: d1, ORDER_FULFILMENT_KEY: fulfilmentKey,
@@ -510,7 +511,8 @@ test('L. clearing active cart/attempt cannot clear other identity; ambiguous fai
   clearCheckoutAttempt(user, key, store)
   assert.equal(JSON.parse(store.getItem(getCartStorageKey(guest))).items.length, 1)
   const source = fs.readFileSync('src/pages/CheckoutPage.jsx', 'utf8')
-  assert.doesNotMatch(source, /clearCart\(|createOrder\(|getCheckoutAttempt\(/u, 'Public summary must leave carts and backend replay attempts untouched')
+  assert.doesNotMatch(source, /createOrder\(|getCheckoutAttempt\(/u, 'Public summary must leave commerce replay attempts untouched')
+  assert.match(source, /if \(result.ok\) \{[\s\S]*?clearCart\(\)/u)
 })
 
 test('migration preserves existing user-scoped keys without inventing guest users', (t) => {

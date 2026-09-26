@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth, useUser } from '@clerk/clerk-react'
 import { AccountContext } from './accountStore'
+import { usePublicCommerce } from './publicCommerceStore.js'
 import { getAuthenticatedAddressOwner, getVisibleSavedAddresses } from '../utils/accountAddressLifecycle.js'
 import {
   createUserAddress,
@@ -13,6 +14,7 @@ import {
 } from '../services/apiClient'
 
 export function AccountProvider({ children }) {
+  const { mode } = usePublicCommerce()
   const [orders, setOrders] = useState([])
   const [isOrdersLoading, setIsOrdersLoading] = useState(false)
   const [ordersError, setOrdersError] = useState(null)
@@ -99,7 +101,7 @@ export function AccountProvider({ children }) {
   )
 
   const refreshOrders = useCallback(async () => {
-    if (!isSignedIn) {
+    if (!isSignedIn || mode !== 'checkout') {
       setOrdersError(null)
       setIsOrdersLoading(false)
       return
@@ -122,12 +124,12 @@ export function AccountProvider({ children }) {
     } finally {
       setIsOrdersLoading(false)
     }
-  }, [isSignedIn, getToken])
+  }, [isSignedIn, getToken, mode])
 
   useEffect(() => {
     let isCancelled = false
 
-    if (!isAuthLoaded || !isSignedIn) {
+    if (!isAuthLoaded || !isSignedIn || mode !== 'checkout') {
       return undefined
     }
 
@@ -156,7 +158,7 @@ export function AccountProvider({ children }) {
     return () => {
       isCancelled = true
     }
-  }, [isAuthLoaded, isSignedIn, getToken])
+  }, [isAuthLoaded, isSignedIn, getToken, mode])
 
   const refreshAddresses = useCallback(async () => {
     if (!isAuthLoaded || !isUserLoaded || !isSignedIn || !canonicalUser?.id) {

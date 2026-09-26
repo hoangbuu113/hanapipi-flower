@@ -19,6 +19,7 @@ import {
 } from './request.js'
 import { enforceRateLimit } from './rateLimit.js'
 import { routeConsultations } from './consultationApi.js'
+import { resolvePublicCommerceMode } from '../utils/publicCommerceMode.js'
 import { MAX_PRODUCT_GALLERY_IMAGES, resolveMediaSrc } from '../utils/media.js'
 
 import {
@@ -1870,6 +1871,20 @@ export function createApiRouter(options = {}) {
         'Không tìm thấy API được yêu cầu.',
         requestId,
       ), `${API_V1_PREFIX}/*`, { errorCode: 'API_NOT_FOUND' })
+    }
+
+    if (pathname === '/api/v1/public-commerce') {
+      if (request.method !== 'GET') return methodNotAllowed(requestId, pathname, 'GET')
+      return result(successResponse({ mode: resolvePublicCommerceMode(env?.PUBLIC_COMMERCE_MODE) }, requestId), pathname)
+    }
+
+    // Before identity mapping, body parsing, limiter, idempotency claims or repositories.
+    // Public order reads include payment presentation; Admin routes remain separate.
+    if (resolvePublicCommerceMode(env?.PUBLIC_COMMERCE_MODE) !== 'checkout'
+      && (pathname === V1_ORDERS_PATH || pathname.startsWith(`${V1_ORDERS_PATH}/`))) {
+      return result(errorResponse(403, 'COMMERCE_DISABLED',
+        'Thanh toán trực tuyến hiện không được sử dụng trên bản demo này.', requestId),
+      pathname === V1_ORDERS_PATH ? V1_ORDERS_PATH : `${V1_ORDERS_PATH}/:id`, { errorCode: 'COMMERCE_DISABLED' })
     }
 
     if (pathname === V1_HEALTH_PATH) {

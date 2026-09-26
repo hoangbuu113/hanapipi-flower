@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import qrcode from 'qrcode-generator'
 import Container from '../components/Container'
+import { usePublicCommerce } from '../context/publicCommerceStore.js'
 import momoQrAsset from '../assets/payment_momo_qr_staging.png'
 import { useAccount } from '../context/accountStore'
 import { fetchGuestOrderDetail, fetchUserOrderDetail } from '../services/apiClient'
@@ -78,6 +79,18 @@ function CopyButton({ label = 'Sao chép', text }) {
 }
 
 function CheckoutSuccessPage() {
+  const { mode, isLoading } = usePublicCommerce()
+  if (mode !== 'checkout' || isLoading) return (
+    <main className="success-page"><Container>
+      <h1>Liên hệ tư vấn</h1>
+      <p className="success-page__note">Thanh toán trực tuyến hiện không được sử dụng trên bản demo này.</p>
+      <div className="success-page__actions"><Link className="button button--secondary" to="/checkout">Xem tóm tắt lựa chọn</Link></div>
+    </Container></main>
+  )
+  return <CheckoutSuccessContent />
+}
+
+function CheckoutSuccessContent() {
   const location = useLocation()
   const { orderCode } = useParams()
   const { getToken, isLoaded: isAuthLoaded, isSignedIn } = useAuth()

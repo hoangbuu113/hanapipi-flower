@@ -2,12 +2,14 @@ import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useCommerce } from '../context/commerceStore'
+import { usePublicCommerce } from '../context/publicCommerceStore.js'
 import CartItems, { DeliveryProgress } from './CartItems'
 import { formatCurrency } from '../utils/formatCurrency'
 import { trapDialogFocus } from '../utils/focus'
 import './CartDrawer.css'
 
 function CartDrawer() {
+  const { mode } = usePublicCommerce()
   const {
     cartError,
     cartItems,
@@ -117,7 +119,7 @@ function CartDrawer() {
               <CartItems />
             </div>
             <footer>
-              <p className="cart-drawer__delivery-note">Chọn thời gian giao trong giỏ hàng</p>
+              <p className="cart-drawer__delivery-note">{mode === 'checkout' ? 'Chọn thời gian giao trong giỏ hàng' : 'Xem lại lựa chọn và gửi yêu cầu tư vấn'}</p>
               <DeliveryProgress subtotal={subtotal} />
               <div className="cart-drawer__subtotal">
                 <span>Tạm tính</span>

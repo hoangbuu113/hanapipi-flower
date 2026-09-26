@@ -65,6 +65,7 @@ function createAssetsBinding() {
 function createEnv(overrides = {}) {
   return {
     API_ALLOWED_ORIGINS: localOrigin,
+    PUBLIC_COMMERCE_MODE: 'checkout',
     API_V1_ENABLED: 'true',
     ASSETS: createAssetsBinding(),
     ...overrides,

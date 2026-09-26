@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import Container from '../components/Container'
 import { useAccount } from '../context/accountStore'
+import { usePublicCommerce } from '../context/publicCommerceStore.js'
 import {
   checkAdminAccess,
   confirmAdminOrderPayment,
@@ -58,6 +59,7 @@ const generateSlug = (text) => {
 }
 
 function AdminPage() {
+  const { mode } = usePublicCommerce()
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const { user: contextUser } = useAccount()
 
@@ -606,7 +608,7 @@ function AdminPage() {
   // 4. Fetch Orders strictly after Admin Authorization
   useEffect(() => {
     let isCancelled = false
-    if (authStatus !== 'authorized') return undefined
+    if (authStatus !== 'authorized' || mode !== 'checkout') return undefined
 
     const controller = new AbortController()
 
@@ -634,7 +636,7 @@ function AdminPage() {
       isCancelled = true
       controller.abort()
     }
-  }, [authStatus, ordersReloadKey, getToken])
+  }, [authStatus, ordersReloadKey, getToken, mode])
 
   const handleRetryOrders = useCallback(() => {
     setIsLoadingOrders(true)
@@ -1042,7 +1044,7 @@ function AdminPage() {
         <AdminConsultations getToken={getToken} />
 
         {/* Orders Fulfilment Section */}
-        <section aria-labelledby="orders-mgmt-title" className="admin-orders-section">
+        {mode === 'checkout' && <section aria-labelledby="orders-mgmt-title" className="admin-orders-section">
           <div className="admin-catalogue-header">
             <div>
               <h2 id="orders-mgmt-title">Quản lý đơn hàng (Fulfilment)</h2>
@@ -1173,6 +1175,8 @@ function AdminPage() {
             </div>
           )}
         </section>
+
+        }
 
         {/* Catalogue Management Section */}
         <section aria-labelledby="catalogue-mgmt-title" className="admin-catalogue-section">
@@ -2367,7 +2371,7 @@ function AdminPage() {
           )}
         </section>
 
-        {deleteTarget && (
+        {deleteTarget && (deleteTarget.kind !== 'order' || mode === 'checkout') && (
           <div className="admin-modal-backdrop" onClick={cancelPermanentDelete} role="presentation">
             <AdminModal
               aria-describedby="permanent-delete-description"
@@ -2424,7 +2428,7 @@ function AdminPage() {
         )}
 
         {/* Order Detail & Fulfilment Modal */}
-        {selectedOrderDetail && (
+        {mode === 'checkout' && selectedOrderDetail && (
           <div className="admin-modal-backdrop" onClick={handleCloseOrderDetail} role="presentation">
             <AdminModal
               aria-labelledby="order-detail-modal-title"

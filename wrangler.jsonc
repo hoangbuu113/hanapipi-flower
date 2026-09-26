@@ -8,6 +8,7 @@
   },
   "vars": {
     "API_V1_ENABLED": "false",
+    "PUBLIC_COMMERCE_MODE": "consultation",
     "API_ALLOWED_ORIGINS": "https://hanapipi-flower-prod.hutstudio.workers.dev",
     "CLERK_AUTHORIZED_PARTIES": "https://hanapipi-flower-prod.hutstudio.workers.dev",
     "MOMO_ACCOUNT_NAME": "Trần Huỳnh Bảo Hân",
@@ -68,6 +69,7 @@
       },
       "vars": {
         "API_V1_ENABLED": "true",
+        "PUBLIC_COMMERCE_MODE": "consultation",
         "API_ALLOWED_ORIGINS": "https://hanapipi-flower.hutstudio.workers.dev",
         "CLERK_AUTHORIZED_PARTIES": "https://hanapipi-flower.hutstudio.workers.dev",
         "MOMO_ACCOUNT_NAME": "Trần Huỳnh Bảo Hân",

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import BrandMark from './BrandMark'
 import Container from './Container'
+import { usePublicCommerce } from '../context/publicCommerceStore.js'
 
 const footerGroups = [
   {
@@ -28,6 +29,7 @@ const footerGroups = [
 ]
 
 function Footer() {
+  const { mode } = usePublicCommerce()
   return (
     <footer className="site-footer">
       <Container className="site-footer__upper">
@@ -67,7 +69,7 @@ function Footer() {
         <div className="site-footer__group">
           <h2 className="site-footer__title">Thông tin cửa hàng</h2>
           <ul className="site-footer__list">
-            <li className="site-footer__detail">Giao trong ngày cho đơn đặt trước 14:00.</li>
+            <li className="site-footer__detail">{mode === 'checkout' ? 'Giao trong ngày cho đơn đặt trước 14:00.' : 'Thời gian gửi hoa được trao đổi khi tư vấn.'}</li>
             <li className="site-footer__detail">Thứ Hai–Chủ Nhật, 8:00–19:00.</li>
             <li>
               <a

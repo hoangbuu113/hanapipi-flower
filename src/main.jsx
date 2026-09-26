@@ -7,6 +7,7 @@ import App from './App.jsx'
 import './typography.css'
 import { CommerceProvider } from './context/CommerceContext.jsx'
 import { AccountProvider } from './context/AccountContext.jsx'
+import { PublicCommerceProvider } from './context/PublicCommerceProvider.jsx'
 
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
@@ -18,11 +19,13 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ClerkProvider publishableKey={clerkPublishableKey}>
       <BrowserRouter>
-        <AccountProvider>
-          <CommerceProvider>
-            <App />
-          </CommerceProvider>
-        </AccountProvider>
+        <PublicCommerceProvider>
+          <AccountProvider>
+            <CommerceProvider>
+              <App />
+            </CommerceProvider>
+          </AccountProvider>
+        </PublicCommerceProvider>
       </BrowserRouter>
     </ClerkProvider>
   </StrictMode>,

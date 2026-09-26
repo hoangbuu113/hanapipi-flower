@@ -41,7 +41,9 @@ function mapRequest(row) {
     notificationStatus: row.notification_status, createdAt: row.created_at_utc, updatedAt: row.updated_at_utc }
 }
 export function publicConsultation(request) {
-  return { referenceCode: request.referenceCode, createdAt: request.createdAt, referenceTotal: request.referenceTotal, status: 'new' }
+  return { referenceCode: request.referenceCode, createdAt: request.createdAt, referenceTotal: request.referenceTotal, status: 'new',
+    items: request.items.map(({ name, image, quantity, unitReferencePrice, lineReferenceTotal, selections }) =>
+      ({ name, image, quantity, unitReferencePrice, lineReferenceTotal, selections })) }
 }
 function safeImage(product) {
   const src = resolveMediaSrc(product?.media?.find((item) => !item.type || item.type === 'image')?.src)
@@ -62,7 +64,12 @@ export function createConsultationRepository(db, { catalogue }) {
     const row = await db.prepare('SELECT * FROM consultation_requests WHERE idempotency_key_hash = ?').bind(keyHash).first()
     if (!row) return null
     if (row.request_hash !== requestHash) throw consultationError(409, 'IDEMPOTENCY_CONFLICT', 'Lựa chọn đã thay đổi. Vui lòng gửi một yêu cầu mới.')
-    return { created: false, request: mapRequest(row) }
+    const items = await db.prepare('SELECT * FROM consultation_request_items WHERE consultation_request_id = ? ORDER BY sort_order').bind(row.id).all()
+    return { created: false, request: { ...mapRequest(row), items: (items.results ?? []).map((item) => ({
+      name: item.product_name_snapshot, image: item.image_url_snapshot, quantity: item.quantity,
+      unitReferencePrice: item.unit_reference_price, lineReferenceTotal: item.line_reference_total,
+      selections: JSON.parse(item.selections_json),
+    })) } }
   }
   return {
     async create(payload, key) {

@@ -1,12 +1,15 @@
 import { Minus, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useCommerce } from '../context/commerceStore'
+import { usePublicCommerce } from '../context/publicCommerceStore.js'
 import { bouquetPreviewImage } from '../data/bouquetOptions'
 import { cartItemLineTotal, normalizeGiftAddOns } from '../utils/cart'
 import { formatCurrency } from '../utils/formatCurrency'
 import './CartItems.css'
 
 export function DeliveryProgress({ subtotal }) {
+  const { mode } = usePublicCommerce()
+  if (mode !== 'checkout') return null
   const threshold = 1000000
   const remaining = Math.max(0, threshold - subtotal)
   const progress = Math.min(100, (subtotal / threshold) * 100)

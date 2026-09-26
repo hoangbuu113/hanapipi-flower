@@ -17,6 +17,7 @@ function createRateEnv(overrides = {}) {
   return {
     ADMIN_MUTATION_RATE_LIMITER: limiterBinding(async () => ({ success: true })),
     API_ALLOWED_ORIGINS: origin,
+    PUBLIC_COMMERCE_MODE: 'checkout',
     API_V1_ENABLED: 'true',
     CONCIERGE_RATE_LIMITER: limiterBinding(async () => ({ success: true })),
     ORDER_RATE_LIMITER: limiterBinding(async () => ({ success: true })),

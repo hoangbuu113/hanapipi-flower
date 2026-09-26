@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import test from 'node:test'
 import { activateModalFocus, trapDialogFocus } from '../src/utils/focus.js'
 
-test('portfolio summary renders current Guest selections and contacts without orders, payments or cart mutations', async () => {
+test('portfolio summary renders Guest selections but no contact bypass before submission', async () => {
   const { register } = await import('node:module')
   register('./cart-component-loader.js', import.meta.url)
   const React = await import('react')
@@ -39,11 +39,10 @@ test('portfolio summary renders current Guest selections and contacts without or
     assert.equal(renderer.root.findAllByType('input').length, 0)
     assert.doesNotMatch(treeText, /Ví MoMo|Mã QR Ví MoMo|Đặt hoa|Tổng thanh toán/u)
     const anchors = renderer.root.findAllByType('a')
-    const zalo = anchors.find(a => a.props.href === STORE_CONTACT.zaloUrl)
-    assert.equal(zalo.props.children, 'Liên hệ qua Zalo')
-    assert.equal(zalo.props.rel, 'noopener noreferrer')
-    assert.equal(zalo.props.target, '_blank')
-    assert.equal(anchors.find(a => a.props.href === STORE_CONTACT.phoneTel).props.children, 'Gọi tư vấn')
+    assert.equal(anchors.find(a => a.props.href === STORE_CONTACT.zaloUrl), undefined)
+    assert.equal(anchors.find(a => a.props.href === STORE_CONTACT.phoneTel), undefined)
+    assert.doesNotMatch(treeText, /Zalo|Gọi tư vấn|Mã QR|Quét mã/u)
+    assert.ok(!treeText.includes(STORE_CONTACT.phoneDisplay))
     assert.match(STORE_CONTACT.phoneTel, /^tel:/u)
     assert.ok(anchors.every(a => !String(a.props.href).includes('/checkout/success/')))
     assert.equal(requests, 0)
@@ -51,7 +50,7 @@ test('portfolio summary renders current Guest selections and contacts without or
     assert.deepEqual(cartItems, originalItems)
     const source = fs.readFileSync('src/pages/CheckoutPage.jsx', 'utf8')
     assert.match(source, /import \{ STORE_CONTACT \} from/u)
-    assert.doesNotMatch(source, /useAuth|useAccount|createOrder|clearCart|paymentMethod/u)
+    assert.doesNotMatch(source, /useAuth|useAccount|createOrder|paymentMethod/u)
   } finally {
     if (renderer) await act(async () => renderer.unmount())
     globalThis.fetch = originalFetch
@@ -72,7 +71,8 @@ test('route splitting keeps Home/providers eager and scopes accessible Suspense 
   const layout = fs.readFileSync('src/layouts/SiteLayout.jsx', 'utf8')
   assert.match(app, /import HomePage from/u)
   for (const page of ['AdminPage', 'CheckoutPage', 'CheckoutSuccessPage', 'AccountPage', 'SearchPage', 'ProductDetailPage', 'FlowerFinderPage', 'BuildBouquetPage']) {
-    assert.ok(app.includes(`const ${page} = lazy(() => import('./pages/${page}'))`))
+    const routeModule = page === 'CheckoutPage' ? 'PublicCheckoutRoute' : page
+    assert.ok(app.includes(`const ${page} = lazy(() => import('./pages/${routeModule}'))`))
     assert.ok(!app.includes(`import ${page} from`))
   }
   assert.match(layout, /<Suspense fallback=/u)
@@ -159,7 +159,7 @@ test('floating controls retain accessible names, sufficient targets and global f
   const cart = fs.readFileSync('src/components/FloatingCartShortcut.jsx', 'utf8')
   const concierge = fs.readFileSync('src/components/ConciergeWidget.jsx', 'utf8')
   assert.match(cart, /aria-label=/u)
-  assert.match(concierge, /aria-label="Mở Hanapipi tư vấn"/u)
+  assert.match(concierge, /aria-label="Mở Hut Flower tư vấn"/u)
   assert.match(fs.readFileSync('src/components/FloatingCartShortcut.css', 'utf8'), /min-height: 48px/u)
   assert.match(fs.readFileSync('src/components/ConciergeWidget.css', 'utf8'), /min-height: 46px/u)
   assert.match(fs.readFileSync('src/index.css', 'utf8'), /:focus-visible\s*\{\s*outline: 2px/u)

@@ -103,6 +103,7 @@ function createEnv(d1, {
 } = {}) {
   const env = {
     API_ALLOWED_ORIGINS: localOrigin,
+    PUBLIC_COMMERCE_MODE: 'checkout',
     API_V1_ENABLED: apiV1Enabled,
     ASSETS: { async fetch() { return new Response('Not found', { status: 404 }) } },
     CLERK_AUTHORIZED_PARTIES: localOrigin,

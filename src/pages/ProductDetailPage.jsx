@@ -8,9 +8,11 @@ import { fetchProductDetail } from '../services/catalogueClient'
 import { formatCurrency } from '../utils/formatCurrency'
 import { getProductPriceLabel, isPurchasableProduct } from '../utils/productCommerce'
 import { useCommerce } from '../context/commerceStore'
+import { usePublicCommerce } from '../context/publicCommerceStore.js'
 import './ProductDetailPage.css'
 
 function ProductDetailPage() {
+  const { mode } = usePublicCommerce()
   const { slug } = useParams()
   const [product, setProduct] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -342,8 +344,8 @@ function ProductDetailPage() {
             <p className="eyebrow">Gửi đi thật chỉn chu</p>
             <h2>Giao hoa</h2>
             <p>{product.deliveryNote}</p>
-            <p>Đặt trước 14:00 để được ưu tiên giao trong ngày.</p>
-            <p>Bạn có thể chọn ngày và khung giờ giao trong giỏ hàng.</p>
+            <p>{mode === 'checkout' ? 'Đặt trước 14:00 để được ưu tiên giao trong ngày.' : 'Thời gian gửi hoa được trao đổi và xác nhận khi tư vấn.'}</p>
+            <p>{mode === 'checkout' ? 'Bạn có thể chọn ngày và khung giờ giao trong giỏ hàng.' : 'Bạn có thể cân nhắc ngày và khung giờ mong muốn trong giỏ hoa.'}</p>
             <Link className="product-information__link" to="/delivery-information">Xem thông tin giao hoa</Link>
           </div>}
         </section>

@@ -78,6 +78,7 @@ const testFulfilmentKey = Buffer.from('01234567890123456789012345678901').toStri
 function createEnv(d1, { apiV1Enabled = 'true', fulfilmentKey = testFulfilmentKey } = {}) {
   const env = {
     API_ALLOWED_ORIGINS: localOrigin,
+    PUBLIC_COMMERCE_MODE: 'checkout',
     API_V1_ENABLED: apiV1Enabled,
     ASSETS: { async fetch() { return new Response('Not found', { status: 404 }) } },
     CLERK_AUTHORIZED_PARTIES: localOrigin,
@@ -1091,7 +1092,7 @@ test('37. Public CheckoutPage is a contact summary without payment or order subm
   const checkoutSource = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
   assert.match(checkoutSource, /Tóm tắt lựa chọn/u)
   assert.match(checkoutSource, /STORE_CONTACT/u)
-  assert.doesNotMatch(checkoutSource, /Ví MoMo|paymentMethod|createOrder|onSubmit|clearCart/u)
+  assert.doesNotMatch(checkoutSource, /Ví MoMo|paymentMethod|createOrder|onSubmit/u)
 })
 
 test('38. Checkout preserves a rate-limit error for non-destructive retry', async () => {
@@ -1112,7 +1113,7 @@ test('38. Checkout preserves a rate-limit error for non-destructive retry', asyn
   assert.equal(result.status, 429)
   assert.equal(result.error.code, 'RATE_LIMITED')
   assert.match(result.error.message, /thử lại/u)
-  assert.doesNotMatch(checkoutSource, /clearCart\(/u, 'Public summary never clears Cart')
+  assert.match(checkoutSource, /if \(result.ok\) \{[\s\S]*?clearCart\(\)/u, 'Public summary clears Cart only on confirmed consultation success')
 })
 
 test('new checkout distinguishes invalid administrative codes from unsupported delivery territories', async () => {
@@ -1199,7 +1200,7 @@ test('verified legacy saved HCMC address remains selectable and order snapshot i
 test('Public contact summary does not require recipient/location submission', () => {
   const source = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
   assert.doesNotMatch(source, /AdministrativeUnitSelector|savedAddressId|recipient|<form/u)
-  assert.match(source, /<CheckoutSummary cartItems=\{cartItems\}/u)
+  assert.match(source, /<CheckoutSummary cartItems=\{summaryItems\}/u)
 })
 
 test('public summary is auth-independent; legacy MoMo success still reloads by HttpOnly cookie', () => {
@@ -1208,7 +1209,7 @@ test('public summary is auth-independent; legacy MoMo success still reloads by H
   const access = fs.readFileSync(path.resolve('src/utils/guestOrderAccess.js'), 'utf8')
   assert.doesNotMatch(checkout, /useAuth|useAccount|savedAddresses/u)
   assert.doesNotMatch(checkout, /saveGuestOrderAccess|guestAccessToken/u)
-  assert.doesNotMatch(checkout, /clearCart\(|createOrder\(/u)
+  assert.doesNotMatch(checkout, /createOrder\(/u)
   assert.match(success, /fetchGuestOrderDetail\(orderCode, \{ guestToken \}\)/u)
   assert.match(success, /momoQrAsset/u)
   assert.match(access, /window\.sessionStorage/u)

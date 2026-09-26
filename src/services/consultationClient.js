@@ -28,7 +28,7 @@ export async function createConsultation(payload, { idempotencyKey, fetchImpl = 
     const body = await response.json().catch(() => null)
     if (!response.ok) return { ok: false, error: response.status === 429
       ? 'Bạn đang gửi yêu cầu quá nhanh. Vui lòng thử lại sau một phút.'
-      : 'Chưa thể gửi yêu cầu. Giỏ hoa vẫn được giữ lại; bạn có thể thử lại hoặc liên hệ trực tiếp.' }
+      : 'Chưa thể gửi yêu cầu. Giỏ hoa vẫn được giữ lại. Vui lòng thử lại.' }
     const consultation = body?.data?.consultation
     if (!/^HP-[A-Z0-9]{6,16}$/u.test(consultation?.referenceCode ?? '') || !Number.isSafeInteger(consultation?.referenceTotal)) throw new Error('INVALID_RESPONSE')
     return { ok: true, consultation }

@@ -56,7 +56,10 @@ test('Guest consultation stores authoritative immutable snapshots, no orders/pay
   Object.assign(input.items[0], { name: 'forged', image: 'https://attacker.invalid/image', unitPrice: 1 })
   const result = await created(await h.send(input))
   assert.match(result.referenceCode, /^HP-[A-F0-9]{10}$/u)
-  assert.deepEqual(Object.keys(result).sort(), ['createdAt', 'referenceCode', 'referenceTotal', 'status'])
+  assert.deepEqual(Object.keys(result).sort(), ['createdAt', 'items', 'referenceCode', 'referenceTotal', 'status'])
+  assert.equal(result.items[0].name, 'Nắng Dịu')
+  assert.equal(result.items[0].lineReferenceTotal, result.referenceTotal)
+  assert.equal(result.items[0].productId, undefined)
   assert.equal(result.status, 'new')
   const variant = h.sqlite.prepare("SELECT price_vnd FROM product_variants WHERE product_id='nang-diu' AND option_type='size' AND code='standard'").get()
   const gift = h.sqlite.prepare("SELECT price_vnd FROM gift_add_ons WHERE id='mini-scented-candle'").get()
@@ -94,7 +97,9 @@ test('same key, concurrency and lost-response replay create one request/notifica
   assert.equal(conflict.status, 409); assert.equal((await conflict.json()).error.code, 'IDEMPOTENCY_CONFLICT')
   // Catalogue changes after commit never invalidate a successful replay.
   h.sqlite.prepare("UPDATE products SET active=0 WHERE id='nang-diu'").run()
-  assert.equal((await created(await h.send(payload(), key))).referenceCode, references[0].referenceCode)
+  const replay = await created(await h.send(payload(), key))
+  assert.equal(replay.referenceCode, references[0].referenceCode)
+  assert.deepEqual(replay.items, references[0].items)
 })
 
 test('two different products generate distinct references and a unique-image Telegram album', async (t) => {

@@ -5,15 +5,24 @@ import { getCartItemPresentation } from '../utils/order'
 import { cartItemLineTotal, cartItemUnitTotal, cartSubtotal } from '../utils/cart'
 import './CheckoutSummary.css'
 
-function CheckoutSummary({ cartItems, pricesReady = true }) {
+function CheckoutSummary({ cartItems, pricesReady = true, snapshotItems }) {
+  const items = snapshotItems ? snapshotItems.map((item, index) => ({
+    key: `snapshot:${index}`, name: item.name, quantity: item.quantity,
+    image: { src: item.image, alt: item.name },
+    snapshotDetails: [item.selections.style?.label, item.selections.palette?.label, item.selections.size?.label,
+      ...(item.selections.flowers ?? []).map((flower) => flower.label), item.selections.wrapping?.label].filter(Boolean).join(' · '),
+    message: item.selections.message,
+    giftAddOns: item.selections.gifts.map((gift) => ({ id: gift.id, name: gift.label, price: gift.price })),
+    unitPrice: item.unitReferencePrice - item.selections.gifts.reduce((sum, gift) => sum + gift.price, 0),
+  })) : cartItems
   return (
     <div className="selection-summary">
       <h2>Giỏ hoa đã chọn</h2>
       <div className="selection-summary__items">
-        {cartItems.map((item) => {
+        {items.map((item) => {
           const presentation = item.custom
             ? { name: item.name, details: [item.style, item.palette, item.size, ...(item.flowers || []), item.wrapping].filter(Boolean).join(' · '), giftAddOns: item.giftAddOns || [] }
-            : { ...getCartItemPresentation(item), giftAddOns: item.giftAddOns || [] }
+            : { ...getCartItemPresentation(item), ...(snapshotItems ? { details: item.snapshotDetails } : {}), giftAddOns: item.giftAddOns || [] }
           const image = item.custom ? { src: bouquetPreviewImage, alt: 'Hình ảnh gợi ý cho bó hoa theo ý bạn' } : item.image
           const available = pricesReady && item.isAvailable !== false
           return (
@@ -35,8 +44,8 @@ function CheckoutSummary({ cartItems, pricesReady = true }) {
           )
         })}
       </div>
-      <div className="selection-summary__total"><span>Tổng giá tham khảo</span><strong>{pricesReady ? formatCurrency(cartSubtotal(cartItems)) : 'Đang cập nhật'}</strong></div>
-      <p className="selection-summary__note">Giá mang tính tham khảo cho các lựa chọn hiện khả dụng. Giỏ hoa được giữ lại khi bạn xem tóm tắt hoặc liên hệ.</p>
+      <div className="selection-summary__total"><span>Tổng giá tham khảo</span><strong>{pricesReady ? formatCurrency(cartSubtotal(items)) : 'Đang cập nhật'}</strong></div>
+      <p className="selection-summary__note">Giá mang tính tham khảo cho các lựa chọn hiện khả dụng. Giỏ hoa chỉ được làm trống sau khi yêu cầu tư vấn được xác nhận.</p>
     </div>
   )
 }

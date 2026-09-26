@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useSignIn, useSignUp } from '@clerk/clerk-react'
 import Container from '../components/Container'
 import { useAccount } from '../context/accountStore'
+import { usePublicCommerce } from '../context/publicCommerceStore.js'
 import {
   attemptAuthVerification,
   AUTH_VERIFICATION_FLOWS,
@@ -14,6 +15,7 @@ import {
 import './AccountPages.css'
 
 function AuthPage({ mode }) {
+  const { mode: commerceMode } = usePublicCommerce()
   const isRegister = mode === 'register'
   const [form, setForm] = useState({ email: '', name: '', password: '', phone: '' })
   const [code, setCode] = useState('')
@@ -230,8 +232,8 @@ function AuthPage({ mode }) {
           <h1>{isRegister ? 'Tạo một tài khoản thật gọn gàng.' : 'Chào mừng bạn trở lại.'}</h1>
           <p className="auth-panel__intro">
             {isRegister
-              ? 'Lưu thông tin và xem lại những đơn hoa đã được ghi nhận.'
-              : 'Đăng nhập để xem thông tin cá nhân và những đơn hoa của bạn.'}
+              ? (commerceMode === 'checkout' ? 'Lưu thông tin và xem lại những đơn hoa đã được ghi nhận.' : 'Lưu thông tin cá nhân và địa chỉ của bạn.')
+              : (commerceMode === 'checkout' ? 'Đăng nhập để xem thông tin cá nhân và những đơn hoa của bạn.' : 'Đăng nhập để quản lý thông tin cá nhân và địa chỉ đã lưu.')}
           </p>
           <form noValidate onSubmit={isRegister ? handleRegister : handleLogin}>
             {isRegister && (

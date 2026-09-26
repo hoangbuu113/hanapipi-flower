@@ -2,11 +2,13 @@ import { Link } from 'react-router-dom'
 import Container from '../components/Container'
 import CartItems, { DeliveryProgress } from '../components/CartItems'
 import { useCommerce } from '../context/commerceStore'
+import { usePublicCommerce } from '../context/publicCommerceStore.js'
 import { formatCurrency } from '../utils/formatCurrency'
 import DeliverySelector from '../components/DeliverySelector'
 import './CartPage.css'
 
 function CartPage() {
+  const { mode } = usePublicCommerce()
   const {
     cartError,
     cartItems,
@@ -49,10 +51,10 @@ function CartPage() {
               <DeliverySelector />
             </section>
             <aside className="cart-page__summary">
-              <h2>Tóm tắt đơn hoa</h2>
+              <h2>{mode === 'checkout' ? 'Tóm tắt đơn hoa' : 'Tóm tắt lựa chọn'}</h2>
               <DeliveryProgress subtotal={subtotal} />
               <div>
-                <span>Tạm tính</span>
+                <span>{mode === 'checkout' ? 'Tạm tính' : 'Tổng giá tham khảo'}</span>
                 <strong>{formatCurrency(subtotal)}</strong>
               </div>
               {hasUnavailableItems && (
@@ -72,7 +74,7 @@ function CartPage() {
                   </button>
                 ) : (
                   <Link className="button button--primary" to="/checkout">
-                    Xem tóm tắt lựa chọn
+                    {mode === 'checkout' ? 'Tiếp tục thanh toán' : 'Xem tóm tắt lựa chọn'}
                   </Link>
                 )}
                 <Link className="button button--secondary" to="/shop">

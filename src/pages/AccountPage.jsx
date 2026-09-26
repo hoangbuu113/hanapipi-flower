@@ -5,6 +5,7 @@ import AdministrativeUnitSelector from '../components/AdministrativeUnitSelector
 import { HCMC_CITY } from '../data/hcmcAdministrativeUnits.js'
 import { getHcmcDeliveryUnit } from '../data/hcmcDeliveryUnits.js'
 import { useAccount } from '../context/accountStore'
+import { usePublicCommerce } from '../context/publicCommerceStore.js'
 import { formatCurrency } from '../utils/formatCurrency'
 import {
   formatDeliveryDate,
@@ -17,6 +18,7 @@ import {
 import './AccountPages.css'
 
 function AccountPage() {
+  const { mode } = usePublicCommerce()
   const {
     isAuthLoading,
     isOrdersLoading,
@@ -54,7 +56,7 @@ function AccountPage() {
         ) : (
           <section className="account-signin">
             <h2>Đăng nhập để lưu thông tin cá nhân.</h2>
-            <p>Bạn vẫn có thể xem những đơn hoa đã đặt trên trình duyệt này.</p>
+            <p>{mode === 'checkout' ? 'Bạn vẫn có thể xem những đơn hoa đã đặt trên trình duyệt này.' : 'Bạn vẫn có thể chọn hoa và gửi yêu cầu tư vấn mà không cần đăng nhập.'}</p>
             <div>
               <Link className="button button--primary" to="/login">
                 Đăng nhập
@@ -66,7 +68,7 @@ function AccountPage() {
           </section>
         )}
 
-        <section className="account-orders" aria-labelledby="orders-title">
+        {mode === 'checkout' && <section className="account-orders" aria-labelledby="orders-title">
           <p className="eyebrow">Đơn hoa của tôi</p>
           <h2 id="orders-title">Những đơn hoa đã ghi nhận</h2>
           {isOrdersLoading && !orders.length ? (
@@ -166,7 +168,7 @@ function AccountPage() {
               </Link>
             </div>
           )}
-        </section>
+        </section>}
       </Container>
     </main>
   )

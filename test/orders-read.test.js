@@ -73,6 +73,7 @@ const testFulfilmentKey = Buffer.from('01234567890123456789012345678901').toStri
 function createEnv(d1, { apiV1Enabled = 'true', fulfilmentKey = testFulfilmentKey } = {}) {
   const env = {
     API_ALLOWED_ORIGINS: localOrigin,
+    PUBLIC_COMMERCE_MODE: 'checkout',
     API_V1_ENABLED: apiV1Enabled,
     ASSETS: { async fetch() { return new Response('Not found', { status: 404 }) } },
     CLERK_AUTHORIZED_PARTIES: localOrigin,
