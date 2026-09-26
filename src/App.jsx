@@ -1,23 +1,24 @@
-import { lazy, Suspense } from 'react'
+import { lazy } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import SiteLayout from './layouts/SiteLayout'
 import HomePage from './pages/HomePage'
-import ProductDetailPage from './pages/ProductDetailPage'
 import RoutePlaceholder from './pages/RoutePlaceholder'
 import ShopPage from './pages/ShopPage'
-import SearchPage from './pages/SearchPage'
 import WishlistPage from './pages/WishlistPage'
 import CartPage from './pages/CartPage'
-import BuildBouquetPage from './pages/BuildBouquetPage'
-import FlowerFinderPage from './pages/FlowerFinderPage'
-import CheckoutPage from './pages/CheckoutPage'
-import CheckoutSuccessPage from './pages/CheckoutSuccessPage'
 import AuthPage from './pages/AuthPage'
-import AccountPage from './pages/AccountPage'
 import DeliveryInformationPage from './pages/DeliveryInformationPage'
 import FlowerCarePage from './pages/FlowerCarePage'
-import FlowerAlreadyTakenPage from './pages/FlowerAlreadyTakenPage'
-import AdminPage from './pages/AdminPage'
+
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
+const SearchPage = lazy(() => import('./pages/SearchPage'))
+const BuildBouquetPage = lazy(() => import('./pages/BuildBouquetPage'))
+const FlowerFinderPage = lazy(() => import('./pages/FlowerFinderPage'))
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage'))
+const CheckoutSuccessPage = lazy(() => import('./pages/CheckoutSuccessPage'))
+const AccountPage = lazy(() => import('./pages/AccountPage'))
+const FlowerAlreadyTakenPage = lazy(() => import('./pages/FlowerAlreadyTakenPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
 
 const TypographyTest = lazy(() => import('./pages/TypographyTest'))
 
@@ -127,7 +128,7 @@ function App() {
           path="account/orders"
           element={<RoutePlaceholder content={routeContent.orders} />}
         />
-        <Route path="font-diagnostic" element={<Suspense fallback={null}><TypographyTest /></Suspense>} />
+        <Route path="font-diagnostic" element={<TypographyTest />} />
         <Route path="*" element={<RoutePlaceholder isNotFound />} />
       </Route>
     </Routes>

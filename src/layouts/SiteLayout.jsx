@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Footer from '../components/Footer'
 import CartDrawer from '../components/CartDrawer'
 import ConciergeWidget from '../components/ConciergeWidget'
 import FloatingCartShortcut from '../components/FloatingCartShortcut'
 import Navbar from '../components/Navbar'
+import Container from '../components/Container'
 import { DELIVERY_CUTOFF_HOUR } from '../utils/delivery'
 
 function SiteLayout() {
@@ -27,7 +28,9 @@ function SiteLayout() {
       <div className="announcement">Giao hoa trong ngày cho đơn đặt trước {DELIVERY_CUTOFF_HOUR}:00.</div>
       <Navbar />
       <div className="site-main">
-        <Outlet />
+        <Suspense fallback={<main className="route-placeholder" aria-busy="true"><Container><p role="status" aria-live="polite">Đang tải nội dung…</p></Container></main>}>
+          <Outlet />
+        </Suspense>
       </div>
       <Footer />
       <FloatingCartShortcut />

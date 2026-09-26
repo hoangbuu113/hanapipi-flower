@@ -3,6 +3,22 @@ import fs from 'node:fs'
 import test from 'node:test'
 import { activateModalFocus, trapDialogFocus } from '../src/utils/focus.js'
 
+test('route splitting keeps Home/providers eager and scopes accessible Suspense to Outlet', () => {
+  const app = fs.readFileSync('src/App.jsx', 'utf8')
+  const layout = fs.readFileSync('src/layouts/SiteLayout.jsx', 'utf8')
+  assert.match(app, /import HomePage from/u)
+  for (const page of ['AdminPage', 'CheckoutPage', 'CheckoutSuccessPage', 'AccountPage', 'SearchPage', 'ProductDetailPage', 'FlowerFinderPage', 'BuildBouquetPage']) {
+    assert.ok(app.includes(`const ${page} = lazy(() => import('./pages/${page}'))`))
+    assert.ok(!app.includes(`import ${page} from`))
+  }
+  assert.match(layout, /<Suspense fallback=/u)
+  assert.match(layout, /role="status" aria-live="polite"/u)
+  assert.match(layout, /<Outlet \/>\s*<\/Suspense>/u)
+  assert.ok(layout.indexOf('<Navbar />') < layout.indexOf('<Suspense'))
+  assert.ok(layout.indexOf('<CartDrawer />') > layout.indexOf('</Suspense>'))
+  assert.match(app, /<AuthPage key="login" mode="login"/u)
+})
+
 test('Admin shared modal focuses inside, traps both Tab directions, closes by Escape and restores trigger', () => {
   const previousDocument = globalThis.document
   const listeners = new Map()
