@@ -71,11 +71,6 @@ function AuthPage({ mode }) {
         password: form.password,
       })
 
-      console.log('[SIGNIN_DEBUG_RESULT]', JSON.stringify({
-        status: result?.status,
-        factors: result?.supportedFirstFactors?.map((f) => f.strategy),
-      }))
-
       if (result.status === 'needs_first_factor') {
         const hasPassword = result.supportedFirstFactors?.some((f) => f.strategy === 'password')
         if (hasPassword) {
@@ -83,7 +78,6 @@ function AuthPage({ mode }) {
             strategy: 'password',
             password: form.password,
           })
-          console.log('[SIGNIN_DEBUG_AFTER_FACTOR]', result?.status)
         }
       }
 

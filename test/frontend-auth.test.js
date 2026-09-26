@@ -3,6 +3,14 @@ import fs from 'node:fs'
 import test from 'node:test'
 import { activateModalFocus, trapDialogFocus } from '../src/utils/focus.js'
 
+test('Auth submit handlers do not log Clerk factors, session state or credentials', () => {
+  const source = fs.readFileSync('src/pages/AuthPage.jsx', 'utf8')
+  assert.doesNotMatch(source, /console\.(?:log|debug|info|warn|error)\s*\(/u)
+  assert.doesNotMatch(source, /SIGNIN_DEBUG/u)
+  assert.match(source, /setErrors\(\{ form: clerkMessage/u)
+  assert.match(source, /finally\s*\{\s*setIsSubmitting\(false\)/u)
+})
+
 test('route splitting keeps Home/providers eager and scopes accessible Suspense to Outlet', () => {
   const app = fs.readFileSync('src/App.jsx', 'utf8')
   const layout = fs.readFileSync('src/layouts/SiteLayout.jsx', 'utf8')

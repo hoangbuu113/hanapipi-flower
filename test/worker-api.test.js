@@ -2,9 +2,46 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createWorker } from '../src/worker.js'
+import { logApiRequest } from '../src/server/logger.js'
 
 const localOrigin = 'http://127.0.0.1:5173'
 const silentLogger = { info() {} }
+
+test('structured logger allowlist excludes secrets, PII and raw error/request objects', () => {
+  const logs = []
+  logApiRequest({
+    requestId: 'test-request', route: '/api/v1/orders', method: 'POST', status: 400,
+    durationMs: 12, errorCode: 'VALIDATION_ERROR',
+    authorization: 'Bearer FAKE_TOKEN', cookies: 'FAKE_COOKIE', guestToken: 'FAKE_GUEST_TOKEN',
+    body: { recipientName: 'FAKE_PRIVATE_NAME', address: 'FAKE_PRIVATE_ADDRESS' },
+    ciphertext: 'FAKE_CIPHERTEXT', payment: 'FAKE_PAYMENT',
+    error: new Error('FAKE_SECRET'), GROQ_API_KEY: 'FAKE_GROQ_KEY',
+  }, { info: value => logs.push(JSON.parse(value)) })
+  assert.deepEqual(logs, [{ event: 'api_request', requestId: 'test-request', route: '/api/v1/orders',
+    method: 'POST', status: 400, durationMs: 12, errorCode: 'VALIDATION_ERROR' }])
+})
+
+test('Worker logs only safe request metadata for sensitive order/auth paths and exceptions', async () => {
+  const logs = []
+  const worker = createWorker({
+    logger: { info: value => logs.push(JSON.parse(value)) },
+    conciergeHandler: async () => { throw new Error('FAKE_PROVIDER_SECRET') },
+  })
+  for (const path of ['/api/v1/orders', '/api/v1/me', '/api/v1/orders/FAKE_ORDER_CODE', '/api/v1/concierge']) {
+    await worker.fetch(new Request(localOrigin + path + '?token=FAKE_QUERY_TOKEN', {
+      method: 'POST', headers: {
+        Origin: localOrigin, 'Content-Type': 'application/json',
+        Authorization: 'Bearer FAKE_AUTH_TOKEN', Cookie: 'guest=FAKE_GUEST_CREDENTIAL',
+      }, body: JSON.stringify({ recipientName: 'FAKE_PRIVATE_NAME', address: 'FAKE_PRIVATE_ADDRESS',
+        phone: 'FAKE_PRIVATE_PHONE', guestToken: 'FAKE_BODY_TOKEN' }),
+    }), createEnv())
+  }
+  assert.equal(logs.length, 4)
+  for (const log of logs) {
+    assert.deepEqual(Object.keys(log).sort(), ['durationMs', 'errorCode', 'event', 'method', 'requestId', 'route', 'status'].sort())
+    assert.doesNotMatch(JSON.stringify(log), /FAKE_/u)
+  }
+})
 
 function createAssetsBinding() {
   return {
