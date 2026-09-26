@@ -121,25 +121,10 @@ function ConciergeWidget() {
   const previousFocusRef = useRef(null)
   const triggerRef = useRef(null)
   const wasOpenRef = useRef(false)
+  const catalogueReadyRef = useRef(false)
   const [catalogue, setCatalogue] = useState([])
   const pageData = useMemo(() => getPageContext(location.pathname, catalogue), [location.pathname, catalogue])
   const hasConversation = messages.some(({ role }) => role === 'user')
-
-  useEffect(() => {
-    let isSubscribed = true
-    fetchShopCatalogue()
-      .then((result) => {
-        if (isSubscribed && result.ok && Array.isArray(result.data)) {
-          setCatalogue(result.data)
-        }
-      })
-      .catch(() => {
-        // Safe fallback handled in sendMessage
-      })
-    return () => {
-      isSubscribed = false
-    }
-  }, [])
 
   function nextMessageId(prefix) {
     messageIdRef.current += 1
@@ -169,10 +154,13 @@ function ConciergeWidget() {
 
     let activeCatalogue = catalogue
     try {
-      const result = await fetchShopCatalogue()
-      if (result.ok && Array.isArray(result.data)) {
-        activeCatalogue = result.data
-        setCatalogue(result.data)
+      if (!catalogueReadyRef.current) {
+        const result = await fetchShopCatalogue()
+        if (result.ok && Array.isArray(result.data)) {
+          catalogueReadyRef.current = true
+          activeCatalogue = result.data
+          setCatalogue(result.data)
+        }
       }
     } catch {
       // Preserve the most recent useful catalogue if refresh fails.

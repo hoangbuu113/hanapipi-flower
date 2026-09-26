@@ -340,6 +340,157 @@ test('11. Error/retry state does not crash app', async () => {
   assert.equal(retryResult.data[0].id, 'test-product')
 })
 
+test('Catalogue concurrent Home/Concierge callers share one request and result', async () => {
+  let calls = 0
+  let release
+  const fetchImpl = () => {
+    calls += 1
+    return new Promise(resolve => { release = resolve })
+  }
+  const home = fetchShopCatalogue({ fetchImpl })
+  const concierge = fetchShopCatalogue({ fetchImpl })
+  assert.equal(calls, 1)
+  release(Response.json({ data: { items: [] } }))
+  const [a, b] = await Promise.all([home, concierge])
+  assert.equal(a.ok, true)
+  assert.strictEqual(a, b)
+})
+
+test('Catalogue sequential calls and failed responses never remain cached', async () => {
+  let calls = 0
+  const fetchImpl = async () => {
+    calls += 1
+    return calls === 1
+      ? Response.json({ error: { code: 'TEMPORARY' } }, { status: 503 })
+      : Response.json({ data: { items: [], version: String(calls) } })
+  }
+  assert.equal((await fetchShopCatalogue({ fetchImpl })).ok, false)
+  assert.equal((await fetchShopCatalogue({ fetchImpl })).version, '2')
+  assert.equal((await fetchShopCatalogue({ fetchImpl })).version, '3')
+  assert.equal(calls, 3)
+})
+
+test('Catalogue caller abort is isolated from other subscribers', async () => {
+  let release
+  let underlyingSignal
+  const fetchImpl = (_url, options) => {
+    underlyingSignal = options.signal
+    return new Promise(resolve => { release = resolve })
+  }
+  const controller = new AbortController()
+  const cancelled = fetchShopCatalogue({ fetchImpl, signal: controller.signal })
+  const active = fetchShopCatalogue({ fetchImpl })
+  controller.abort()
+  await assert.rejects(cancelled, { name: 'AbortError' })
+  assert.equal(underlyingSignal.aborted, false)
+  release(Response.json({ data: { items: [] } }))
+  assert.equal((await active).ok, true)
+})
+
+test('Catalogue last abort evicts entry; late settlement cannot evict a new request', async () => {
+  const pending = []
+  const fetchImpl = (_url, { signal }) => new Promise(resolve => pending.push({ resolve, signal }))
+  const controller = new AbortController()
+  const old = fetchShopCatalogue({ fetchImpl, signal: controller.signal })
+  controller.abort()
+  await assert.rejects(old, { name: 'AbortError' })
+  assert.equal(pending[0].signal.aborted, true)
+  const fresh = fetchShopCatalogue({ fetchImpl })
+  pending[0].resolve(Response.json({ data: { items: [] } }))
+  await new Promise(resolve => setImmediate(resolve))
+  const shared = fetchShopCatalogue({ fetchImpl })
+  assert.equal(pending.length, 2)
+  pending[1].resolve(Response.json({ data: { items: [] } }))
+  assert.strictEqual(await fresh, await shared)
+  await assert.rejects(fetchShopCatalogue({ fetchImpl, signal: controller.signal }), { name: 'AbortError' })
+  assert.equal(pending.length, 2)
+})
+
+test('Catalogue endpoints have independent in-flight requests', async () => {
+  let calls = 0
+  const fetchImpl = async () => { calls += 1; return Response.json({ data: { items: [] } }) }
+  await Promise.all([
+    fetchShopCatalogue({ fetchImpl, endpoint: '/one' }),
+    fetchShopCatalogue({ fetchImpl, endpoint: '/two' }),
+  ])
+  assert.equal(calls, 2)
+})
+
+test('Concierge retries only without successfully loaded catalogue, including empty results', () => {
+  const source = fs.readFileSync(path.resolve('src/components/ConciergeWidget.jsx'), 'utf8')
+  const send = source.slice(source.indexOf('async function sendMessage'), source.indexOf('const currentProduct = pageData'))
+  assert.match(send, /if \(!catalogueReadyRef\.current\)\s*\{\s*const result = await fetchShopCatalogue\(\)/)
+  assert.match(send, /result\.ok && Array\.isArray\(result\.data\)/)
+  assert.match(send, /catalogueReadyRef\.current = true/)
+  assert.equal((send.match(/fetchShopCatalogue\(/g) ?? []).length, 1)
+})
+
+// Execute the actual pre-message loading block without DOM/AI dependencies.
+function createConciergeCatalogueHarness(fetchCatalogue) {
+  const source = fs.readFileSync(path.resolve('src/components/ConciergeWidget.jsx'), 'utf8')
+  const start = source.indexOf('    let activeCatalogue = catalogue', source.indexOf('async function sendMessage'))
+  const end = source.indexOf('    const currentProduct = pageData', start)
+  assert.ok(start > 0 && end > start)
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+  const load = new AsyncFunction('catalogue', 'catalogueReadyRef', 'fetchShopCatalogue', 'setCatalogue',
+    source.slice(start, end) + '\nreturn activeCatalogue')
+  const ready = { current: false }
+  let catalogue = []
+  return {
+    ready,
+    message: () => load(catalogue, ready, fetchCatalogue, value => { catalogue = value }),
+  }
+}
+
+test('Closed Concierge has no catalogue mount effect; Home is the sole startup caller', async () => {
+  const source = fs.readFileSync(path.resolve('src/components/ConciergeWidget.jsx'), 'utf8')
+  const calls = [...source.matchAll(/fetchShopCatalogue\(/g)]
+  assert.equal(calls.length, 1, 'Only the sendMessage branch may fetch catalogue')
+  assert.ok(calls[0].index > source.indexOf('async function sendMessage'))
+  const home = fs.readFileSync(path.resolve('src/pages/HomePage.jsx'), 'utf8')
+  assert.equal((home.match(/fetchShopCatalogue\(/g) ?? []).length, 1)
+  let requests = 0
+  const fetchImpl = async () => { requests += 1; return Response.json({ data: { items: [] } }) }
+  createConciergeCatalogueHarness(() => fetchShopCatalogue({ fetchImpl }))
+  assert.equal(requests, 0)
+  await fetchShopCatalogue({ fetchImpl })
+  assert.equal(requests, 1)
+})
+
+test('First Concierge message loads once; later messages reuse successful catalogue', async () => {
+  let requests = 0
+  const data = [{ id: 'real-flower' }]
+  const concierge = createConciergeCatalogueHarness(async () => {
+    requests += 1
+    return { ok: true, data }
+  })
+  assert.equal(requests, 0)
+  assert.strictEqual(await concierge.message(), data)
+  assert.strictEqual(await concierge.message(), data)
+  assert.strictEqual(await concierge.message(), data)
+  assert.equal(requests, 1)
+})
+
+test('Failed Concierge catalogue fetch retries on next message and then stays ready', async () => {
+  for (const failure of ['http', 'throw']) {
+    let requests = 0
+    const concierge = createConciergeCatalogueHarness(async () => {
+      requests += 1
+      if (requests === 1) {
+        if (failure === 'throw') throw new Error('Network unavailable')
+        return { ok: false, data: null }
+      }
+      return { ok: true, data: [] }
+    })
+    await concierge.message()
+    assert.equal(concierge.ready.current, false)
+    await concierge.message()
+    assert.equal(concierge.ready.current, true)
+    await concierge.message()
+    assert.equal(requests, 2)
+  }
+})
+
 test('12. Static products remain intact for compatibility fallback', () => {
   const catalogueClientFile = fs.readFileSync(path.resolve('src/services/catalogueClient.js'), 'utf8')
   assert.ok(catalogueClientFile.includes("from '../data/products.js'"), 'catalogueClient must retain intentional static fallback')

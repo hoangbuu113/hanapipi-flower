@@ -179,7 +179,50 @@ export function normalizeCatalogueProduct(product, variantsArg = null, relatedPr
   }
 }
 
-export async function fetchShopCatalogue({
+// Only pending identical GETs are shared; completed responses are never cached.
+const catalogueRequests = new WeakMap()
+
+export function fetchShopCatalogue({ fetchImpl = globalThis.fetch, signal, endpoint = '/api/v1/catalogue/products' } = {}) {
+  const abortError = () => new DOMException('Catalogue request aborted', 'AbortError')
+  if (signal?.aborted) return Promise.reject(abortError())
+  let requests = catalogueRequests.get(fetchImpl)
+  if (!requests) {
+    requests = new Map()
+    catalogueRequests.set(fetchImpl, requests)
+  }
+  let entry = requests.get(endpoint)
+  if (!entry) {
+    const controller = new AbortController()
+    entry = { controller, subscribers: 0, settled: false }
+    requests.set(endpoint, entry)
+    entry.promise = requestShopCatalogue({ fetchImpl, endpoint, signal: controller.signal }).finally(() => {
+      entry.settled = true
+      if (requests.get(endpoint) === entry) requests.delete(endpoint)
+    })
+  }
+  entry.subscribers += 1
+  return new Promise((resolve, reject) => {
+    let finished = false
+    const finish = (callback, value) => {
+      if (finished) return
+      finished = true
+      signal?.removeEventListener('abort', onAbort)
+      entry.subscribers -= 1
+      callback(value)
+    }
+    const onAbort = () => {
+      finish(reject, abortError())
+      if (!entry.settled && entry.subscribers === 0) {
+        if (requests.get(endpoint) === entry) requests.delete(endpoint)
+        entry.controller.abort()
+      }
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    entry.promise.then(value => finish(resolve, value), error => finish(reject, error))
+  })
+}
+
+async function requestShopCatalogue({
   fetchImpl = globalThis.fetch,
   signal,
   endpoint = '/api/v1/catalogue/products',
