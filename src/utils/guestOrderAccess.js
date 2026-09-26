@@ -1,12 +1,12 @@
 const storagePrefix = 'hanapipi-flower:guest-order:'
 
-export function saveGuestOrderAccess(orderCode, token) {
-  if (!orderCode || !token) return false
+// Read-only compatibility for orders created before HttpOnly recovery.
+export function removeLegacyGuestOrderAccess(orderCode) {
+  if (!orderCode) return
   try {
-    window.sessionStorage.setItem(`${storagePrefix}${orderCode}`, token)
-    return true
+    window.sessionStorage.removeItem(`${storagePrefix}${orderCode}`)
   } catch {
-    return false
+    // Browser storage is optional; a valid server cookie remains authoritative.
   }
 }
 

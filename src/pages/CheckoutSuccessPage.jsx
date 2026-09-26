@@ -6,7 +6,7 @@ import Container from '../components/Container'
 import momoQrAsset from '../assets/payment_momo_qr_staging.png'
 import { useAccount } from '../context/accountStore'
 import { fetchGuestOrderDetail, fetchUserOrderDetail } from '../services/apiClient'
-import { readGuestOrderAccess } from '../utils/guestOrderAccess'
+import { readGuestOrderAccess, removeLegacyGuestOrderAccess } from '../utils/guestOrderAccess'
 import { formatCurrency } from '../utils/formatCurrency'
 import {
   formatDeliveryDate,
@@ -92,25 +92,21 @@ function CheckoutSuccessPage() {
   const [fetchError, setFetchError] = useState(null)
 
   useEffect(() => {
-    if (hasCompleteContextOrder || (!guestToken && !isAuthLoaded)) {
-      return
-    }
-
-    if (!guestToken && !isSignedIn) {
-      setIsLoading(false)
+    if (hasCompleteContextOrder || !isAuthLoaded) {
       return
     }
 
     let isCancelled = false
     setIsLoading(true)
     setFetchError(null)
-    const fetchDetail = guestToken
+    const fetchDetail = !isSignedIn
       ? fetchGuestOrderDetail(orderCode, { guestToken })
       : fetchUserOrderDetail(orderCode, { getToken })
     fetchDetail
       .then((result) => {
         if (isCancelled) return
         if (result.ok && result.order) {
+          if (guestToken && !isSignedIn) removeLegacyGuestOrderAccess(orderCode)
           setDetailOrder(result.order)
           setFetchError(null)
         } else {

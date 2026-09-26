@@ -5,6 +5,7 @@ import {
   requireAuthenticatedUser,
 } from './auth.js'
 import { createDatabaseRepositories } from './database.js'
+import { createGuestOrderCookie, readGuestOrderCookie, GUEST_ACCESS_UNAVAILABLE_MESSAGE } from './guestOrderAccess.js'
 import {
   errorResponse,
   jsonResponse,
@@ -239,7 +240,10 @@ async function handleCreateOrder(request, env, requestId, dependencies) {
       ? { order: await repositories.orders.createForUser(auth.user, body, request.headers.get('Idempotency-Key')) }
       : await repositories.orders.createForGuest(body, request.headers.get('Idempotency-Key'))
     return result(
-      successResponse(created, requestId, { status: 201 }),
+      successResponse({ order: created.order }, requestId, {
+        status: 201,
+        headers: auth ? undefined : { 'Set-Cookie': createGuestOrderCookie(request, created.order, created.guestAccessToken) },
+      }),
       V1_ORDERS_PATH,
     )
   } catch (err) {
@@ -307,8 +311,9 @@ async function handleGetUserOrder(idOrCode, request, env, requestId, dependencie
     ), route, { errorCode: auth.code })
   }
 
-  if (!auth && !request.headers.get('X-Guest-Order-Token')) {
-    return result(errorResponse(401, 'AUTHENTICATION_REQUIRED', 'Bạn cần quyền truy cập để xem đơn hoa.', requestId), route, {
+  const guestToken = readGuestOrderCookie(request, idOrCode) || request.headers.get('X-Guest-Order-Token')
+  if (!auth && !guestToken) {
+    return result(errorResponse(401, 'AUTHENTICATION_REQUIRED', GUEST_ACCESS_UNAVAILABLE_MESSAGE, requestId), route, {
       errorCode: 'AUTHENTICATION_REQUIRED',
     })
   }
@@ -318,9 +323,11 @@ async function handleGetUserOrder(idOrCode, request, env, requestId, dependencie
   try {
     const order = auth
       ? await repositories.orders.getForUser(auth.user, idOrCode)
-      : await repositories.orders.getForGuest(idOrCode, request.headers.get('X-Guest-Order-Token'))
+      : await repositories.orders.getForGuest(idOrCode, guestToken)
     return result(
-      successResponse({ order }, requestId),
+      successResponse({ order }, requestId, {
+        headers: auth ? undefined : { 'Set-Cookie': createGuestOrderCookie(request, order, guestToken) },
+      }),
       route,
     )
   } catch (err) {

@@ -13,7 +13,6 @@ import { cartHasGiftAddOn, cartSubtotal } from '../utils/cart'
 import { isDeliveryDateAvailable } from '../utils/delivery'
 import { validateHcmcDeliveryAddress } from '../utils/hcmcDelivery.js'
 import { getCheckoutSavedAddressFields } from '../utils/savedAddress.js'
-import { saveGuestOrderAccess } from '../utils/guestOrderAccess.js'
 import { clearCheckoutAttempt, getCheckoutAttempt } from '../utils/checkoutAttempt.js'
 import { getCartScope } from '../utils/cartIdentity.js'
 import './CheckoutPage.css'
@@ -196,16 +195,7 @@ function CheckoutPage() {
         return
       }
 
-      if (!isSignedIn && !result.guestAccessToken) {
-        setSubmitError('Đơn hoa đã được ghi nhận nhưng chưa thể mở trang thanh toán. Vui lòng liên hệ Hanapipi Flower và giữ nguyên giỏ hàng.')
-        return
-      }
-
       if (isSignedIn) addOrder(result.order)
-      else if (!saveGuestOrderAccess(result.order.code || result.order.orderCode, result.guestAccessToken)) {
-        setSubmitError('Chưa thể lưu quyền xem đơn hoa trong phiên này. Giỏ hoa vẫn được giữ nguyên; vui lòng thử lại hoặc liên hệ Hanapipi.')
-        return
-      }
       clearCart()
       clearCheckoutAttempt(checkoutScope, idempotencyKey)
 

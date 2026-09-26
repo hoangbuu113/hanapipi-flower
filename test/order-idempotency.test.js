@@ -7,6 +7,7 @@ import { createWorker } from '../src/worker.js'
 import { createOrder } from '../src/services/apiClient.js'
 import { clearCheckoutAttempt, getCheckoutAttempt } from '../src/utils/checkoutAttempt.js'
 import { getCartScope, getCartStorageKey, writeScopedCart } from '../src/utils/cartIdentity.js'
+import { createGuestOrderCookie, readGuestOrderCookie, GUEST_ORDER_ACCESS_LIFETIME_MS } from '../src/server/guestOrderAccess.js'
 
 const origin = 'http://127.0.0.1:5173'
 const fulfilmentKey = Buffer.alloc(32, 7).toString('base64')
@@ -59,8 +60,164 @@ function harness(t) {
 async function successful(response) {
   const body = await response.json()
   assert.equal(response.status, 201, JSON.stringify(body))
-  return body.data
+  assert.equal('guestAccessToken' in body.data, false, 'JSON never exposes the guest credential')
+  // Test-only extraction; real browser JS cannot read Set-Cookie.
+  const cookie = response.headers.get('Set-Cookie')
+  return cookie ? { ...body.data, guestAccessToken: cookie.split(';')[0].split('=')[1] } : body.data
 }
+
+test('persistent guest recovery: independent order-scoped cookies survive storage-free reload and protect ownership', async (t) => {
+  const h = harness(t)
+  const orders = []
+  for (let index = 0; index < 3; index += 1) {
+    const response = await h.send(crypto.randomUUID())
+    assert.equal(response.status, 201)
+    const setCookie = response.headers.get('Set-Cookie')
+    const body = await response.json()
+    assert.equal(body.data.guestAccessToken, undefined)
+    assert.match(setCookie, /; HttpOnly; SameSite=Lax/u)
+    assert.match(setCookie, /Max-Age=25919\d{2}/u)
+    assert.match(setCookie, /; Expires=/u)
+    assert.ok(setCookie.includes(`Path=/api/v1/orders/${body.data.order.code};`))
+    orders.push({ order: body.data.order, cookie: setCookie.split(';')[0] })
+  }
+  const jar = orders.map((entry) => entry.cookie).join('; ')
+  const read = (code, headers = {}) => h.fetchImpl(`/api/v1/orders/${code}`, { headers })
+  for (const { order } of orders) {
+    // No sessionStorage, token getter or Authorization: simulate a reopened tab.
+    const response = await read(order.code, { Cookie: jar })
+    assert.equal(response.status, 200)
+    const detail = (await response.json()).data.order
+    assert.equal(detail.payment.momo.transferContent, `HANAPIPI ${order.code}`)
+    assert.equal(detail.payment.status, 'pending')
+    assert.equal(JSON.stringify(detail).includes('ciphertext'), false)
+    assert.equal((await read(order.code)).status, 401)
+  }
+  assert.equal((await read(orders[1].order.code, { Cookie: orders[0].cookie })).status, 401)
+  const wrongCookie = orders[1].cookie.split('=')[0] + '=' + orders[0].cookie.split('=')[1]
+  assert.equal((await read(orders[1].order.code, { Cookie: wrongCookie })).status, 404)
+  assert.equal((await read(orders[0].order.code, { Cookie: jar, Authorization: 'Bearer forged' })).status, 401)
+  assert.equal((await read(orders[0].order.code, { Cookie: jar, Authorization: 'Bearer customer-b' })).status, 404)
+  const history = await h.fetchImpl('/api/v1/orders', { headers: { Authorization: 'Bearer customer-b', Cookie: jar } })
+  assert.equal(history.status, 200)
+  assert.equal((await history.json()).data.total, 0)
+  assert.equal(h.sqlite.prepare('SELECT count(*) AS n FROM orders WHERE user_id IS NOT NULL').get().n, 0)
+})
+
+test('HTTPS guest creation/replay emits identical Secure capability without JSON/log/storage exposure', async (t) => {
+  const h = harness(t)
+  const httpsOrigin = 'https://staging.example'
+  h.env.API_ALLOWED_ORIGINS = httpsOrigin
+  const key = crypto.randomUUID()
+  const send = () => h.fetchImpl(`${httpsOrigin}/api/v1/orders`, {
+    method: 'POST', body: JSON.stringify(payload()),
+    headers: { Origin: httpsOrigin, 'Content-Type': 'application/json', 'Idempotency-Key': key },
+  })
+  const first = await send()
+  const firstCookie = first.headers.get('Set-Cookie')
+  const body = await first.json()
+  assert.equal(first.status, 201)
+  assert.match(firstCookie, /^__Secure-hf_guest_HF-/u)
+  assert.match(firstCookie, /; Secure$/u)
+  assert.match(firstCookie, /; HttpOnly;/u)
+  assert.doesNotMatch(firstCookie, /Domain=/u)
+  const replay = await send()
+  assert.equal(replay.status, 201)
+  assert.equal(replay.headers.get('Set-Cookie').split(';')[0], firstCookie.split(';')[0])
+  assert.deepEqual((await replay.json()).data, body.data)
+  const token = firstCookie.split(';')[0].split('=')[1]
+  assert.equal(JSON.stringify(body).includes(token), false)
+  assert.equal(JSON.stringify(h.logs).includes(token), false)
+  for (const table of ['orders', 'idempotency_keys']) {
+    assert.equal(JSON.stringify(h.sqlite.prepare(`SELECT * FROM ${table}`).all()).includes(token), false)
+  }
+  assert.equal(h.count('orders'), 1)
+})
+
+test('legacy header upgrades only verified order to cookie and never extends 30-day server expiry', async (t) => {
+  const h = harness(t)
+  const response = await h.send(crypto.randomUUID())
+  const cookie = response.headers.get('Set-Cookie').split(';')[0]
+  const token = cookie.split('=')[1]
+  const { order } = (await response.json()).data
+  const get = (headers) => h.fetchImpl(`/api/v1/orders/${order.code}`, { headers })
+  const upgraded = await get({ 'X-Guest-Order-Token': token })
+  assert.equal(upgraded.status, 200)
+  assert.equal(upgraded.headers.get('Set-Cookie').split(';')[0], cookie)
+  const invalid = await get({ 'X-Guest-Order-Token': 'x'.repeat(43) })
+  assert.equal(invalid.status, 404)
+  assert.equal(invalid.headers.has('Set-Cookie'), false)
+  // Server-enforced expiry is independent of browser cookie expiry/replay lifetime.
+  h.sqlite.prepare('UPDATE orders SET created_at_utc = ? WHERE id = ?')
+    .run(new Date(Date.now() - GUEST_ORDER_ACCESS_LIFETIME_MS - 1000).toISOString(), order.id)
+  for (const headers of [{ Cookie: cookie }, { 'X-Guest-Order-Token': token }]) {
+    const expired = await get(headers)
+    assert.equal(expired.status, 404)
+    assert.equal((await expired.json()).error.code, 'ORDER_NOT_FOUND')
+    assert.equal(expired.headers.has('Set-Cookie'), false)
+  }
+  assert.equal(h.count('orders'), 1, 'Expiry never deletes historical orders')
+})
+
+test('cookie helpers enforce narrow paths, Secure, duplicate rejection and original lifetime', () => {
+  const code = 'HF-20260926-ABCDEF12'
+  const request = new Request(`https://staging.example/api/v1/orders/${code}`)
+  const token = 'a'.repeat(43)
+  const now = Date.now()
+  const order = { code, createdAtUtc: new Date(now - 86400000).toISOString() }
+  const cookie = createGuestOrderCookie(request, order, token, now)
+  assert.match(cookie, /Max-Age=2505600/u)
+  const pair = cookie.split(';')[0]
+  assert.equal(readGuestOrderCookie(new Request(request.url, { headers: { Cookie: pair } }), code), token)
+  assert.equal(readGuestOrderCookie(new Request(request.url, { headers: { Cookie: `${pair}; ${pair}` } }), code), null)
+  assert.equal(readGuestOrderCookie(new Request(request.url, { headers: { Cookie: pair } }), 'HF-20260926-ABCDEF13'), null)
+  assert.throws(() => createGuestOrderCookie(request, { ...order, createdAtUtc: '2020-01-01T00:00:00.000Z' }, token, now))
+})
+
+test('30-day guest access expiry does not expire authenticated ownership', async (t) => {
+  const h = harness(t)
+  const created = await successful(await h.send(crypto.randomUUID(), payload(), 'customer-a'))
+  h.sqlite.prepare('UPDATE orders SET created_at_utc = ? WHERE id = ?')
+    .run('2020-01-01T00:00:00.000Z', created.order.id)
+  assert.equal((await h.detail(created.order, 'customer-a')).status, 200)
+  assert.equal((await h.detail(created.order, 'customer-b')).status, 404)
+})
+
+test('cookie capability grants READ only; cannot create ownership or authorize Admin mutations', async (t) => {
+  const h = harness(t)
+  const response = await h.send(crypto.randomUUID())
+  const cookie = response.headers.get('Set-Cookie').split(';')[0]
+  const { order } = (await response.json()).data
+  const adminMutation = await h.fetchImpl(`/api/v1/admin/orders/${order.code}/confirm-payment`, {
+    method: 'POST', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: '{}',
+  })
+  assert.equal(adminMutation.status, 401)
+  const disallowedOrigin = await h.fetchImpl('/api/v1/orders', {
+    method: 'POST', headers: { Cookie: cookie, Origin: 'https://attacker.invalid', 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+    body: JSON.stringify(payload()),
+  })
+  assert.equal(disallowedOrigin.status, 403)
+  const mutationOnRead = await h.fetchImpl(`/api/v1/orders/${order.code}`, { method: 'POST', headers: { Cookie: cookie } })
+  assert.equal(mutationOnRead.status, 405)
+  assert.equal(h.sqlite.prepare('SELECT payment_status FROM orders WHERE id = ?').get(order.id).payment_status, 'pending')
+})
+
+test('new checkout/client flow never writes a raw guest credential or puts it in URLs', async () => {
+  const checkout = fs.readFileSync('src/pages/CheckoutPage.jsx', 'utf8')
+  const legacy = fs.readFileSync('src/utils/guestOrderAccess.js', 'utf8')
+  assert.doesNotMatch(checkout, /guestAccessToken|saveGuestOrderAccess/u)
+  assert.doesNotMatch(legacy, /setItem|localStorage/u)
+  const { fetchGuestOrderDetail } = await import('../src/services/apiClient.js')
+  let call
+  const read = await fetchGuestOrderDetail('HF-20260926-ABCDEF12', { fetchImpl: async (url, init) => {
+    call = { url, init }
+    return Response.json({ data: { order: { code: 'HF-20260926-ABCDEF12' } } })
+  } })
+  assert.equal(read.ok, true)
+  assert.equal(call.init.credentials, 'same-origin')
+  assert.deepEqual(call.init.headers, {})
+  assert.equal(call.url, '/api/v1/orders/HF-20260926-ABCDEF12')
+})
 
 test('A. authenticated replay returns one order and identical canonical response', async (t) => {
   const h = harness(t)
@@ -192,11 +349,17 @@ test('E. committed transaction followed by lost HTTP response replays original t
   assert.equal(lost.error.code, 'NETWORK_ERROR')
   assert.equal(requests, 1, 'No automatic POST retry')
   const original = h.sqlite.prepare('SELECT id, order_code FROM orders').get()
-  const retried = await createOrder({ ...options, fetchImpl: (url, init) => h.fetchImpl(url, { ...init, headers: { ...init.headers, Origin: origin } }) })
+  let replayCookie
+  const retried = await createOrder({ ...options, fetchImpl: async (url, init) => {
+    const response = await h.fetchImpl(url, { ...init, headers: { ...init.headers, Origin: origin } })
+    replayCookie = response.headers.get('Set-Cookie').split(';')[0]
+    return response
+  } })
   assert.equal(retried.ok, true)
   assert.equal(retried.order.id, original.id)
   assert.equal(retried.order.code, original.order_code)
-  assert.equal((await h.detail(retried.order, null, retried.guestAccessToken)).status, 200)
+  assert.equal(retried.guestAccessToken, undefined)
+  assert.equal((await h.fetchImpl(`/api/v1/orders/${retried.order.code}`, { headers: { Cookie: replayCookie } })).status, 200)
   assert.equal(h.count('orders'), 1)
 })
 

@@ -178,7 +178,8 @@ test('1. guest request to POST /api/v1/orders creates an unowned order', async (
 
   assert.equal(response.status, 201)
   const body = await response.json()
-  assert.ok(body.data?.guestAccessToken)
+  assert.equal(body.data?.guestAccessToken, undefined)
+  assert.match(response.headers.get('Set-Cookie'), /HttpOnly/u)
   assert.equal(sqlite.prepare('SELECT user_id FROM orders WHERE id = ?').get(body.data.order.id).user_id, null)
 })
 
@@ -196,7 +197,8 @@ test('guest MoMo order uses canonical prices, encrypts PII, and has one-time acc
     body: JSON.stringify(payload),
   })
   assert.equal(response.status, 201)
-  const { order, guestAccessToken } = (await response.json()).data
+  const { order } = (await response.json()).data
+  const guestAccessToken = response.headers.get('Set-Cookie').split(';')[0].split('=')[1]
   assert.match(guestAccessToken, /^[A-Za-z0-9_-]{43}$/u)
   assert.equal(order.totalVnd, 1420000)
   assert.equal(order.payment.momo.amountVnd, order.totalVnd)
@@ -227,7 +229,7 @@ test('guest order access rejects code alone, wrong token, cross-order token, and
     const response = await worker.fetch('/api/v1/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(createValidOrderPayload()),
     })
-    return (await response.json()).data
+    return { ...(await response.json()).data, guestAccessToken: response.headers.get('Set-Cookie').split(';')[0].split('=')[1] }
   }
   const first = await create()
   const second = await create()
@@ -1213,17 +1215,18 @@ test('Checkout renders one recipient/location flow and no obsolete province or d
   assert.ok(!source.includes('label="Quận / huyện"'))
 })
 
-test('guest checkout UI keeps saved addresses account-only and reloads MoMo success by token', () => {
+test('guest checkout UI keeps saved addresses account-only and reloads MoMo success by HttpOnly cookie', () => {
   const checkout = fs.readFileSync(path.resolve('src/pages/CheckoutPage.jsx'), 'utf8')
   const success = fs.readFileSync(path.resolve('src/pages/CheckoutSuccessPage.jsx'), 'utf8')
   const access = fs.readFileSync(path.resolve('src/utils/guestOrderAccess.js'), 'utf8')
   assert.match(checkout, /Thanh toán không cần tài khoản/u)
   assert.match(checkout, /isSignedIn && savedAddresses/u)
   assert.match(checkout, /requireAuth: Boolean\(isSignedIn\)/u)
-  assert.match(checkout, /saveGuestOrderAccess\(result\.order/u)
+  assert.doesNotMatch(checkout, /saveGuestOrderAccess|guestAccessToken/u)
   assert.ok(checkout.indexOf('if (!result.ok)') < checkout.indexOf('clearCart()'))
   assert.match(success, /fetchGuestOrderDetail\(orderCode, \{ guestToken \}\)/u)
   assert.match(success, /momoQrAsset/u)
   assert.match(access, /window\.sessionStorage/u)
+  assert.doesNotMatch(access, /setItem|localStorage/u)
   assert.doesNotMatch(access, /buyer|recipient|address/u)
 })

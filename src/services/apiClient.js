@@ -94,6 +94,7 @@ export async function createOrder({ getToken, order, idempotencyKey, requireAuth
   try {
     const response = await fetchImpl('/api/v1/orders', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': idempotencyKey,
@@ -121,7 +122,6 @@ export async function createOrder({ getToken, order, idempotencyKey, requireAuth
       error: null,
       ok: true,
       order: body?.data?.order ?? null,
-      guestAccessToken: body?.data?.guestAccessToken ?? null,
       status: response.status,
     }
   } catch {
@@ -135,13 +135,10 @@ export async function createOrder({ getToken, order, idempotencyKey, requireAuth
 
 export async function fetchGuestOrderDetail(idOrCode, { guestToken, fetchImpl = globalThis.fetch } = {}) {
   if (!idOrCode || typeof idOrCode !== 'string') throw new TypeError('An order ID or code is required.')
-  if (!guestToken) {
-    return { error: { code: 'ORDER_NOT_FOUND', message: 'Không tìm thấy quyền xem đơn hoa này.' }, ok: false, order: null, status: 404 }
-  }
-
   try {
     const response = await fetchImpl(`/api/v1/orders/${encodeURIComponent(idOrCode)}`, {
-      headers: { 'X-Guest-Order-Token': guestToken },
+      credentials: 'same-origin',
+      headers: guestToken ? { 'X-Guest-Order-Token': guestToken } : {},
     })
     const body = await response.json().catch(() => null)
     if (!response.ok) {

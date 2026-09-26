@@ -6,7 +6,7 @@ import {
 import { generateVietQrPayload } from '../vietqr.js'
 import { HCMC_CITY } from '../../data/hcmcAdministrativeUnits.js'
 import { validateHcmcDeliveryAddress } from '../../utils/hcmcDelivery.js'
-import { createGuestOrderAccess, verifyGuestOrderToken } from '../guestOrderAccess.js'
+import { createGuestOrderAccess, verifyGuestOrderToken, guestOrderAccessExpiresAt, GUEST_ACCESS_UNAVAILABLE_MESSAGE } from '../guestOrderAccess.js'
 import {
   createOrderFingerprint,
   idempotencyError,
@@ -725,6 +725,10 @@ export function createOrderRepository(db, options = {}) {
         .bind(...(isGuest ? [] : [access.userId]), idOrCode, idOrCode).first()
       if (!order || (isGuest && !await verifyGuestOrderToken(access.guestToken, order.guest_access_token_hash))) {
         throw orderError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hoa.')
+      }
+      if (isGuest && !(guestOrderAccessExpiresAt(order.created_at_utc) > now().getTime())) {
+        // Never reveal existence/expiry of an order to an unverified capability.
+        throw orderError(404, 'ORDER_NOT_FOUND', GUEST_ACCESS_UNAVAILABLE_MESSAGE)
       }
 
       const itemRowsResult = await db.prepare(`
