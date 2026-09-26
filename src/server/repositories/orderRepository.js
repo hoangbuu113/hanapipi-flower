@@ -7,6 +7,12 @@ import { generateVietQrPayload } from '../vietqr.js'
 import { HCMC_CITY } from '../../data/hcmcAdministrativeUnits.js'
 import { validateHcmcDeliveryAddress } from '../../utils/hcmcDelivery.js'
 import { createGuestOrderAccess, verifyGuestOrderToken } from '../guestOrderAccess.js'
+import {
+  createOrderFingerprint,
+  idempotencyError,
+  ORDER_IDEMPOTENCY_ACTION,
+  ORDER_REPLAY_WINDOW_MS,
+} from '../orderIdempotency.js'
 
 const MAX_ITEMS = 20
 const MAX_QUANTITY = 20
@@ -254,22 +260,61 @@ function buildPaymentPresentation(order, configs = {}) {
 
 export function createOrderRepository(db, options = {}) {
   if (!db?.prepare || !db?.batch) throw new TypeError('A D1-compatible database binding is required.')
+  const databaseBinding = db
+  // Initial replay reads must observe committed primary data.
+  if (typeof db.withSession === 'function') db = db.withSession('first-primary')
   const catalogue = options.catalogue
   if (!catalogue) throw new TypeError('Catalogue repository is required.')
   const now = options.now ?? (() => new Date())
+  const findReplay = (fingerprint) => db.prepare(`
+    SELECT * FROM idempotency_keys WHERE scope = ? AND action = ? AND key_hash = ?
+  `).bind(fingerprint.scope, ORDER_IDEMPOTENCY_ACTION, fingerprint.keyHash).first()
 
   return {
-    async createForUser(user, payload) {
+    async createForUser(user, payload, idempotencyKey) {
       if (!user?.id) throw new TypeError('Authenticated D1 user is required.')
-      return (await this.createForPrincipal(user, payload)).order
+      return (await this.createForPrincipal(user, payload, idempotencyKey)).order
     },
 
-    async createForGuest(payload) {
-      return this.createForPrincipal(null, payload)
+    async createForGuest(payload, idempotencyKey) {
+      return this.createForPrincipal(null, payload, idempotencyKey)
     },
 
-    async createForPrincipal(user, payload) {
+    async replayCreatedOrder(record, fingerprint, user) {
+      if (record.request_hash !== fingerprint.requestHash) {
+        throw idempotencyError('IDEMPOTENCY_CONFLICT', 'Mã yêu cầu này đã dùng cho thông tin đặt hoa khác. Vui lòng kiểm tra lại đơn hoa.')
+      }
+      if (record.expires_at_utc <= now().toISOString()) {
+        await db.prepare('UPDATE idempotency_keys SET response_snapshot_json = NULL, guest_token_ciphertext = NULL WHERE id = ?')
+          .bind(record.id).run()
+        throw idempotencyError('IDEMPOTENCY_EXPIRED', 'Yêu cầu này đã hết thời gian gửi lại. Vui lòng kiểm tra đơn đã đặt hoặc liên hệ Hanapipi trước khi đặt tiếp.')
+      }
+      if (!record.response_snapshot_json || !record.response_body_reference) {
+        throw idempotencyError('IDEMPOTENCY_UNAVAILABLE', 'Chưa thể khôi phục yêu cầu đặt hoa. Vui lòng thử lại sau.', 503)
+      }
+      const safeOrder = JSON.parse(record.response_snapshot_json)
+      let guestAccessToken = null
+      if (!user) {
+        const replay = await decryptFulfilmentValue(record.guest_token_ciphertext, options.fulfilmentKey)
+        if (replay.purpose !== 'order-idempotency-guest-v1' || replay.orderId !== record.response_body_reference) {
+          throw idempotencyError('IDEMPOTENCY_UNAVAILABLE', 'Chưa thể khôi phục quyền xem đơn hoa.', 503)
+        }
+        guestAccessToken = replay.token
+      }
+      const detail = await this.getForOrderAccess(user ? { userId: user.id } : { guestToken: guestAccessToken }, record.response_body_reference)
+      return {
+        guestAccessToken,
+        order: { ...safeOrder, address: detail.address, buyer: detail.buyer, gifting: detail.gifting, receiver: detail.receiver },
+      }
+    },
+
+    async createForPrincipal(user, payload, idempotencyKey) {
       const orderInput = normalizePayload(payload)
+      const fingerprint = await createOrderFingerprint(user, orderInput, idempotencyKey, options.fulfilmentKey)
+      const existing = await findReplay(fingerprint)
+      // Replay precedes live catalogue validation: historical snapshots win even
+      // if prices/options change or the original product is later archived.
+      if (existing) return this.replayCreatedOrder(existing, fingerprint, user)
       if (!user && orderInput.savedAddressId) {
         throw orderError(400, 'INVALID_DELIVERY_ADDRESS', 'Khách không tài khoản cần nhập địa chỉ giao hoa.')
       }
@@ -462,8 +507,6 @@ export function createOrderRepository(db, options = {}) {
         })
       }
 
-      await db.batch(statements)
-
       const payment = buildPaymentPresentation({
         order_code: orderCode,
         payment_method: orderInput.paymentMethod,
@@ -471,7 +514,7 @@ export function createOrderRepository(db, options = {}) {
         total_vnd: subtotalVnd,
       }, { bankConfig: options.bankConfig, momoConfig: options.momoConfig })
 
-      return {
+      const createdResult = {
         guestAccessToken: guestAccess?.token ?? null,
         order: {
           address: orderInput.address,
@@ -495,6 +538,37 @@ export function createOrderRepository(db, options = {}) {
           totalVnd: subtotalVnd,
         },
       }
+      // No fulfilment PII is copied into the replay record. It remains encrypted
+      // in orders; payment/item snapshots here are immutable public commerce data.
+      const safeOrder = { ...createdResult.order }
+      for (const field of ['address', 'buyer', 'gifting', 'receiver']) delete safeOrder[field]
+      const guestReplay = guestAccess ? await encryptFulfilmentValue({
+        purpose: 'order-idempotency-guest-v1', orderId, token: guestAccess.token,
+      }, fulfilmentKey) : null
+      statements.unshift(db.prepare(`
+        INSERT INTO idempotency_keys (
+          id, user_id, scope, action, key_hash, request_hash, response_status,
+          response_body_reference, response_snapshot_json, guest_token_ciphertext,
+          created_at_utc, expires_at_utc
+        ) VALUES (?, ?, ?, ?, ?, ?, 201, ?, ?, ?, ?, ?)
+      `).bind(
+        createId('idem'), user?.id ?? null, fingerprint.scope, ORDER_IDEMPOTENCY_ACTION,
+        fingerprint.keyHash, fingerprint.requestHash, orderId, JSON.stringify(safeOrder), guestReplay,
+        timestamp, new Date(createdAt.getTime() + ORDER_REPLAY_WINDOW_MS).toISOString(),
+      ))
+      try {
+        // UNIQUE scope/action/key + one D1 transaction is the claim. A loser
+        // rolls back all order/items; no durable pending/partial claim exists.
+        await db.batch(statements)
+      } catch (error) {
+        // A failed batch need not advance a session bookmark. Start a fresh
+        // primary session so a losing writer cannot read a stale replica.
+        if (typeof databaseBinding.withSession === 'function') db = databaseBinding.withSession('first-primary')
+        const winner = await findReplay(fingerprint)
+        if (winner) return this.replayCreatedOrder(winner, fingerprint, user)
+        throw error
+      }
+      return createdResult
     },
 
     async listForUser(user, _callOptions = {}) {

@@ -64,6 +64,7 @@ function createSeededDatabase() {
   db.exec(m7)
   db.exec(m8)
   db.exec(m9)
+  db.exec(fs.readFileSync(path.resolve('drizzle/0010_order_idempotency.sql'), 'utf8'))
   return { d1: new D1Wrapper(db), sqlite: db }
 }
 
@@ -104,12 +105,12 @@ function createTestWorker(d1, options = {}) {
     env,
     async fetch(url, fetchOpts = {}) {
       const fullUrl = url.startsWith('http') ? url : `${localOrigin}${url}`
+      const headers = new Headers(fetchOpts.headers || {})
+      if (!headers.has('Origin')) headers.set('Origin', localOrigin)
+      if (fetchOpts.method === 'POST' && new URL(fullUrl).pathname === '/api/v1/orders' && !headers.has('Idempotency-Key')) headers.set('Idempotency-Key', crypto.randomUUID())
       return worker.fetch(new Request(fullUrl, {
-        headers: {
-          Origin: localOrigin,
-          ...fetchOpts.headers,
-        },
         ...fetchOpts,
+        headers,
       }), env)
     },
   }

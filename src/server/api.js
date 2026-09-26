@@ -237,8 +237,8 @@ async function handleCreateOrder(request, env, requestId, dependencies) {
 
   try {
     const created = auth
-      ? { order: await repositories.orders.createForUser(auth.user, body) }
-      : await repositories.orders.createForGuest(body)
+      ? { order: await repositories.orders.createForUser(auth.user, body, request.headers.get('Idempotency-Key')) }
+      : await repositories.orders.createForGuest(body, request.headers.get('Idempotency-Key'))
     return result(
       successResponse(created, requestId, { status: 201 }),
       V1_ORDERS_PATH,

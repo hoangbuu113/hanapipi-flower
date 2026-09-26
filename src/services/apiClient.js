@@ -63,7 +63,7 @@ export async function fetchCurrentUser({ getToken, fetchImpl = globalThis.fetch 
   }
 }
 
-export async function createOrder({ getToken, order, requireAuth = false, fetchImpl = globalThis.fetch } = {}) {
+export async function createOrder({ getToken, order, idempotencyKey, requireAuth = false, fetchImpl = globalThis.fetch } = {}) {
   if (typeof getToken !== 'function') {
     throw new TypeError('A token getter function is required.')
   }
@@ -87,11 +87,16 @@ export async function createOrder({ getToken, order, requireAuth = false, fetchI
     }
   }
 
+  if (typeof idempotencyKey !== 'string') {
+    return { error: { code: 'INVALID_IDEMPOTENCY_KEY', message: 'Chưa thể chuẩn bị yêu cầu đặt hoa. Vui lòng thử lại.' }, ok: false, status: 400 }
+  }
+
   try {
     const response = await fetchImpl('/api/v1/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(order),

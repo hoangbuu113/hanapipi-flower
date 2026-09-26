@@ -49,6 +49,7 @@ function createSeededDatabase() {
     '0007_tighten_order_payment_methods.sql',
     '0008_create_user_addresses.sql',
     '0009_guest_orders.sql',
+    '0010_order_idempotency.sql',
   ]
   for (const m of migrationFiles) {
     db.exec(fs.readFileSync(path.resolve('drizzle', m), 'utf8'))
@@ -124,6 +125,7 @@ function createTestHarness(d1, options = {}) {
       const fullUrl = url.startsWith('http') ? url : `${localOrigin}${url}`
       const headers = new Headers(fetchOpts.headers || {})
       if (fetchOpts.method === 'POST' && !headers.has('Origin')) headers.set('Origin', localOrigin)
+      if (fetchOpts.method === 'POST' && new URL(fullUrl).pathname === '/api/v1/orders' && !headers.has('Idempotency-Key')) headers.set('Idempotency-Key', crypto.randomUUID())
       return worker.fetch(new Request(fullUrl, { ...fetchOpts, headers }), env)
     },
     worker,

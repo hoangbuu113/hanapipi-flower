@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import Container from '../components/Container'
@@ -14,6 +14,8 @@ import { isDeliveryDateAvailable } from '../utils/delivery'
 import { validateHcmcDeliveryAddress } from '../utils/hcmcDelivery.js'
 import { getCheckoutSavedAddressFields } from '../utils/savedAddress.js'
 import { saveGuestOrderAccess } from '../utils/guestOrderAccess.js'
+import { clearCheckoutAttempt, getCheckoutAttempt } from '../utils/checkoutAttempt.js'
+import { getCartScope } from '../utils/cartIdentity.js'
 import './CheckoutPage.css'
 
 const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer: false, receiverName: '', receiverPhone: '', city: HCMC_CITY, district: '', ward: '', unitCode: '', address: '', deliveryNote: '', message: '', cardSenderName: '', anonymousSender: false }
@@ -21,7 +23,14 @@ const initialForm = { buyerName: '', buyerPhone: '', email: '', receiverIsBuyer:
 function CheckoutPage() {
   const { addAddress, addOrder, savedAddresses, user } = useAccount()
   const { cartItems, clearCart, deliveryDraft, hasUnavailableItems } = useCommerce()
-  const { getToken, isLoaded: isAuthLoaded, isSignedIn } = useAuth()
+  const { getToken, isLoaded: isAuthLoaded, isSignedIn, userId } = useAuth()
+  const checkoutScope = getCartScope({ isLoaded: isAuthLoaded, isSignedIn, userId })
+  const activeScopeRef = useRef(checkoutScope)
+  const submittingRef = useRef(false)
+  useLayoutEffect(() => {
+    activeScopeRef.current = checkoutScope
+    return () => { activeScopeRef.current = null }
+  }, [checkoutScope])
   const [form, setForm] = useState(() => ({ ...initialForm, buyerName: user?.name ?? '', buyerPhone: user?.phone ?? '', email: user?.email ?? '' }))
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [saveForLater, setSaveForLater] = useState(false)
@@ -118,7 +127,7 @@ function CheckoutPage() {
   }
   async function submit(event) {
     event.preventDefault()
-    if (isSubmitting) return
+    if (submittingRef.current) return
     setSubmitError(null)
     if (!validate()) return
 
@@ -174,8 +183,11 @@ function CheckoutPage() {
     }
 
     setIsSubmitting(true)
+    submittingRef.current = true
     try {
-      const result = await createOrder({ getToken, order: payload, requireAuth: Boolean(isSignedIn) })
+      const idempotencyKey = await getCheckoutAttempt({ scope: checkoutScope, order: payload })
+      const result = await createOrder({ getToken, idempotencyKey, order: payload, requireAuth: Boolean(isSignedIn) })
+      if (activeScopeRef.current !== checkoutScope) return
       if (!result.ok) {
         if (result.error?.fieldErrors) {
           setErrors((current) => ({ ...current, ...result.error.fieldErrors, unitCode: result.error.fieldErrors.unitCode || result.error.fieldErrors['address.unitCode'] || current.unitCode, address: result.error.fieldErrors.detail || result.error.fieldErrors['address.detail'] || current.address }))
@@ -190,8 +202,12 @@ function CheckoutPage() {
       }
 
       if (isSignedIn) addOrder(result.order)
-      else saveGuestOrderAccess(result.order.code || result.order.orderCode, result.guestAccessToken)
+      else if (!saveGuestOrderAccess(result.order.code || result.order.orderCode, result.guestAccessToken)) {
+        setSubmitError('Chưa thể lưu quyền xem đơn hoa trong phiên này. Giỏ hoa vẫn được giữ nguyên; vui lòng thử lại hoặc liên hệ Hanapipi.')
+        return
+      }
       clearCart()
+      clearCheckoutAttempt(checkoutScope, idempotencyKey)
 
       let addressSaveFailed = false
       if (saveForLater && isSignedIn) {
@@ -216,9 +232,10 @@ function CheckoutPage() {
         state: addressSaveFailed ? { addressSaveFailed: true } : undefined,
       })
     } catch {
-      setSubmitError('Đã xảy ra lỗi khi gửi thông tin đơn hoa. Vui lòng thử lại.')
+      if (activeScopeRef.current === checkoutScope) setSubmitError('Đã xảy ra lỗi khi gửi thông tin đơn hoa. Vui lòng thử lại.')
     } finally {
-      setIsSubmitting(false)
+      submittingRef.current = false
+      if (activeScopeRef.current === checkoutScope) setIsSubmitting(false)
     }
   }
 
