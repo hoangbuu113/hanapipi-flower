@@ -226,6 +226,8 @@ test('8. Homepage hero renders independently of catalogue loading/error', () => 
   assert.ok(homeContent.indexOf('className="home-hero__actions"') > homeContent.indexOf('className="home-hero__copy-content"'))
   assert.ok(homeContent.includes('HERO_ROTATION_INTERVAL = 3500'))
   assert.ok(homeContent.includes('HERO_TRANSITION_DURATION = 600'))
+  assert.ok(homeContent.includes("fetchPriority={index === 0 ? 'high' : 'low'}"))
+  assert.ok(homeContent.includes("loading={index === 0 ? 'eager' : 'lazy'}"))
   assert.ok(homeContent.includes("document.addEventListener('visibilitychange', syncVisibility)"))
   assert.ok(homeContent.includes('setHeroTimerReset((current) => current + 1)'))
   assert.ok(homeContent.includes('home-hero__controls'))

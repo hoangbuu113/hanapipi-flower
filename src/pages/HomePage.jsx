@@ -357,8 +357,8 @@ function HomePage() {
                       alt={isActive ? slide.alt : ''}
                       aria-hidden={!isActive}
                       decoding="async"
-                      fetchPriority={index === 0 ? 'high' : 'auto'}
-                      loading="eager"
+                      fetchPriority={index === 0 ? 'high' : 'low'}
+                      loading={index === 0 ? 'eager' : 'lazy'}
                       src={slide.image}
                     />
                   </div>
