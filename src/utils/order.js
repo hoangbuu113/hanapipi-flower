@@ -22,7 +22,7 @@ export function getCartItemPresentation(item) {
   return {
     details: [sizeLabel, wrappingLabel].filter(Boolean).join(' · '),
     giftAddOns: normalizeGiftAddOns(item.giftAddOns),
-    name: item.name || 'Bó hoa Hanapipi',
+    name: item.name || 'Bó hoa Hut Flower',
   }
 }
 

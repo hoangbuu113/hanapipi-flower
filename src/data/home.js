@@ -63,7 +63,7 @@ export const testimonials = [
   {
     author: 'Ngọc Hà',
     location: 'Quận Cầu Giấy, Hà Nội',
-    quote: 'Chỉ cần nói dịp tặng, Hanapipi Flower đã hiểu đúng điều mình muốn gửi gắm.',
+    quote: 'Chỉ cần nói dịp tặng, Hut Flower đã hiểu đúng điều mình muốn gửi gắm.',
   },
 ]
 

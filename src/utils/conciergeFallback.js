@@ -80,7 +80,7 @@ export function createLocalConciergeResponse({ currentProduct, grounding, messag
   if (includesAny(normalized, ['trang thai don', 'don cua toi', 'don da dat', 'lich su don', 'xem don'])) {
     return createResponse(
       'navigation',
-      'Bạn có thể xem những đơn đã ghi nhận trên trình duyệt này trong trang Tài khoản. Hanapipi Flower chưa thể xác nhận trạng thái đơn thực tế qua khung chat.',
+      'Bạn có thể xem những đơn đã ghi nhận trên trình duyệt này trong trang Tài khoản. Hut Flower chưa thể xác nhận trạng thái đơn thực tế qua khung chat.',
       { links: ['account'] },
     )
   }
@@ -192,7 +192,7 @@ export function createLocalConciergeResponse({ currentProduct, grounding, messag
 
   return createResponse(
     'clarification',
-    'Mình chỉ hỗ trợ chọn hoa và giải đáp về dịch vụ của Hanapipi Flower. Bạn muốn bắt đầu với điều nào?',
+    'Mình chỉ hỗ trợ chọn hoa và giải đáp về dịch vụ của Hut Flower. Bạn muốn bắt đầu với điều nào?',
     {
       links: ['flower_finder'],
       quickReplies: ['Chọn hoa theo dịp', 'Cách chăm hoa', 'Giao hoa trong ngày', 'Quà tặng và lời nhắn'],

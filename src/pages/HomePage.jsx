@@ -536,7 +536,7 @@ function HomePage() {
               rel="noopener noreferrer"
               target="_blank"
             >
-              Theo dõi Hanapipi Flower
+              Theo dõi Hut Flower
               <ArrowUpRight aria-hidden="true" />
             </a>
           </div>

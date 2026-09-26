@@ -181,7 +181,7 @@ function CheckoutSuccessPage() {
     <main className="success-page">
       <Container>
         <div className="success-page__content">
-          <p className="eyebrow">Cảm ơn bạn đã chọn Hanapipi Flower</p>
+          <p className="eyebrow">Cảm ơn bạn đã chọn Hut Flower</p>
           <h1>Đơn hoa đã được ghi nhận</h1>
           <p className="success-page__code">
             Mã đơn: <strong>{orderId}</strong>
@@ -270,12 +270,12 @@ function CheckoutSuccessPage() {
                 </div>
               ) : (
                 <div className="bank-transfer-box__unavailable">
-                  <p>{order.payment?.momo?.message || 'Thông tin thanh toán MoMo hiện chưa được cấu hình. Vui lòng liên hệ Hanapipi Flower để được hỗ trợ.'}</p>
+                  <p>{order.payment?.momo?.message || 'Thông tin thanh toán MoMo hiện chưa được cấu hình. Vui lòng liên hệ Hut Flower để được hỗ trợ.'}</p>
                 </div>
               )}
 
               <div className="bank-transfer-box__reassurance">
-                <p>❀ Đơn hoa sẽ được xử lý sau khi Hanapipi Flower xác nhận nhận được thanh toán.</p>
+                <p>❀ Đơn hoa sẽ được xử lý sau khi Hut Flower xác nhận nhận được thanh toán.</p>
                 <p>❀ Vui lòng chuyển chính xác số tiền và lời nhắn để đơn được xác nhận nhanh nhất.</p>
               </div>
             </section>
@@ -333,12 +333,12 @@ function CheckoutSuccessPage() {
                 </div>
               ) : (
                 <div className="bank-transfer-box__unavailable">
-                  <p>{order.payment?.bank?.message || 'Thông tin chuyển khoản hiện chưa được cấu hình. Vui lòng liên hệ Hanapipi Flower để được hỗ trợ.'}</p>
+                  <p>{order.payment?.bank?.message || 'Thông tin chuyển khoản hiện chưa được cấu hình. Vui lòng liên hệ Hut Flower để được hỗ trợ.'}</p>
                 </div>
               )}
 
               <div className="bank-transfer-box__reassurance">
-                <p>❀ Đơn hoa sẽ được xử lý sau khi Hanapipi Flower xác nhận nhận được chuyển khoản.</p>
+                <p>❀ Đơn hoa sẽ được xử lý sau khi Hut Flower xác nhận nhận được chuyển khoản.</p>
                 <p>❀ Vui lòng giữ nguyên nội dung chuyển khoản để đơn được xác nhận nhanh nhất.</p>
               </div>
             </section>
@@ -351,7 +351,7 @@ function CheckoutSuccessPage() {
                 <span className="bank-transfer-badge bank-transfer-badge--paid">Đã thanh toán</span>
               </div>
               <div className="bank-transfer-box__confirmed">
-                <p className="bank-transfer-box__confirmed-msg">❀ Hanapipi đã xác nhận thanh toán</p>
+                <p className="bank-transfer-box__confirmed-msg">❀ Hut Flower đã xác nhận thanh toán</p>
                 <p className="bank-transfer-box__confirmed-sub">Đơn hoa của bạn đang được chuẩn bị và xử lý theo lịch giao.</p>
               </div>
             </section>

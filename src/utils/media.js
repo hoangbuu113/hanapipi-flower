@@ -36,7 +36,7 @@ export function resolveMediaSrc(src) {
  * with a client-only product fallback. Both Admin and storefront consumers
  * use this shape so legacy seeded paths and managed R2 paths resolve equally.
  */
-export function resolveCatalogueMedia(media, { productName = 'Hanapipi Flower' } = {}) {
+export function resolveCatalogueMedia(media, { productName = 'Hut Flower' } = {}) {
   if (!Array.isArray(media)) return []
 
   return media

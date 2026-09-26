@@ -74,7 +74,7 @@ function ConciergeLink({ link, onNavigate }) {
 
 function ConciergeMessage({ message, onNavigate, onQuickReply }) {
   const isUser = message.role === 'user'
-  const sourceLabel = message.source === 'ai' ? 'Hanapipi AI' : 'Hướng dẫn từ Hanapipi Flower'
+  const sourceLabel = message.source === 'ai' ? 'Hut Flower AI' : 'Hướng dẫn từ Hut Flower'
   return (
     <article className={`concierge-message concierge-message--${message.role}`}>
       <p className="concierge-message__label">{isUser ? 'Bạn' : sourceLabel}</p>
@@ -146,7 +146,7 @@ function ConciergeWidget() {
     const trimmedMessage = value.trim()
     if (!trimmedMessage || isLoading) {
       if (!trimmedMessage) {
-        setInputError('Hãy nhập điều bạn muốn Hanapipi Flower hỗ trợ.')
+        setInputError('Hãy nhập điều bạn muốn Hut Flower hỗ trợ.')
         inputRef.current?.focus()
       }
       return
@@ -303,7 +303,7 @@ function ConciergeWidget() {
       <button
         aria-controls="hanapipi-concierge-panel"
         aria-expanded={isOpen}
-        aria-label="Mở Hanapipi tư vấn"
+        aria-label="Mở Hut Flower tư vấn"
         className={`concierge-trigger${isOpen ? ' is-hidden' : ''}`}
         ref={triggerRef}
         tabIndex={isOpen ? -1 : 0}
@@ -316,7 +316,7 @@ function ConciergeWidget() {
 
       {isOpen && isMobile && (
         <button
-          aria-label="Đóng Hanapipi tư vấn"
+          aria-label="Đóng Hut Flower tư vấn"
           className="concierge-backdrop"
           type="button"
           onClick={closePanel}
@@ -334,10 +334,10 @@ function ConciergeWidget() {
         >
           <header className="concierge-dialog__header">
             <div>
-              <h2 id="hanapipi-concierge-title">Hanapipi tư vấn</h2>
+              <h2 id="hanapipi-concierge-title">Hut Flower tư vấn</h2>
               <p>Chọn hoa và giải đáp cùng bạn.</p>
             </div>
-            <button aria-label="Đóng Hanapipi tư vấn" type="button" onClick={closePanel}>
+            <button aria-label="Đóng Hut Flower tư vấn" type="button" onClick={closePanel}>
               <X aria-hidden="true" />
             </button>
           </header>
@@ -365,7 +365,7 @@ function ConciergeWidget() {
             )}
             {isLoading && (
               <p className="concierge-loading-message" role="status">
-                Hanapipi đang tìm lời phù hợp…
+                Hut Flower đang tìm lời phù hợp…
               </p>
             )}
             <span ref={messagesEndRef} />

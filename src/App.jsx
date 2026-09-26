@@ -24,7 +24,7 @@ const TypographyTest = lazy(() => import('./pages/TypographyTest'))
 
 const routeContent = {
   home: {
-    eyebrow: 'Hanapipi Flower',
+    eyebrow: 'Hut Flower',
     title: 'Một trải nghiệm hoa đầy cảm xúc đang dần thành hình.',
     description:
       'Cửa hàng hoa trực tuyến của chúng tôi đang được vun đắp với sự chăm chút dành cho từng bó hoa. Bộ sưu tập sẽ sớm ra mắt.',
@@ -67,7 +67,7 @@ const routeContent = {
   },
   confirmation: {
     eyebrow: 'Xác nhận đơn hoa',
-    title: 'Cảm ơn bạn đã chọn Hanapipi Flower.',
+    title: 'Cảm ơn bạn đã chọn Hut Flower.',
     description:
       'Trải nghiệm xác nhận đơn sẽ được hoàn thiện cùng quy trình thanh toán.',
   },
@@ -90,7 +90,7 @@ const routeContent = {
       'Trải nghiệm đăng nhập đơn giản sẽ được hoàn thiện trong giai đoạn tiếp theo.',
   },
   account: {
-    eyebrow: 'Hanapipi Flower của bạn',
+    eyebrow: 'Hut Flower của bạn',
     title: 'Mọi điều bạn cần, thật gọn gàng.',
     description:
       'Địa chỉ đã lưu, đơn hàng và nhắc nhở tặng hoa sẽ có mặt trong giai đoạn tiếp theo.',

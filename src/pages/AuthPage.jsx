@@ -193,7 +193,7 @@ function AuthPage({ mode }) {
       <main className="auth-page">
         <Container>
           <div className="auth-panel">
-            <p className="eyebrow">Hanapipi Flower của bạn</p>
+            <p className="eyebrow">Hut Flower của bạn</p>
             <h1>{verificationContent.heading}</h1>
             <p className="auth-panel__intro">
               {verificationContent.intro}
@@ -226,7 +226,7 @@ function AuthPage({ mode }) {
     <main className="auth-page">
       <Container>
         <div className="auth-panel">
-          <p className="eyebrow">Hanapipi Flower của bạn</p>
+          <p className="eyebrow">Hut Flower của bạn</p>
           <h1>{isRegister ? 'Tạo một tài khoản thật gọn gàng.' : 'Chào mừng bạn trở lại.'}</h1>
           <p className="auth-panel__intro">
             {isRegister

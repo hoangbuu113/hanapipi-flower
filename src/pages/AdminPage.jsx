@@ -938,7 +938,7 @@ function AdminPage() {
         <Container>
           <header className="admin-page__header">
             <p className="eyebrow">Hệ thống quản trị</p>
-            <h1>Quản lý Hanapipi</h1>
+            <h1>Quản lý Hut Flower</h1>
           </header>
           <div className="admin-state-container admin-loading" role="status">
             <h2>Đang kiểm tra quyền truy cập...</h2>
@@ -1006,7 +1006,7 @@ function AdminPage() {
       <Container>
         <header className="admin-page__header">
           <p className="eyebrow">Hệ thống quản trị</p>
-          <h1>Quản lý Hanapipi</h1>
+          <h1>Quản lý Hut Flower</h1>
         </header>
 
         {/* Admin Identity Summary */}

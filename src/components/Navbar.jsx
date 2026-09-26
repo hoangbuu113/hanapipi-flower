@@ -114,7 +114,7 @@ function Navbar() {
           <button aria-label="Mở giỏ hàng" className="utility-nav__link" type="button" onClick={openCart}><ShoppingBag aria-hidden="true" />{cartCount > 0 && <em>{cartCount}</em>}</button>
           <Link aria-label={user ? 'Tài khoản của bạn' : 'Đăng nhập'} className="utility-nav__link" to={accountPath}><UserRound aria-hidden="true" /></Link>
           {user?.role === 'admin' && (
-            <Link aria-label="Quản lý Hanapipi" className="utility-nav__link utility-nav__link--admin" to="/admin"><ShieldCheck aria-hidden="true" /></Link>
+            <Link aria-label="Quản lý Hut Flower" className="utility-nav__link utility-nav__link--admin" to="/admin"><ShieldCheck aria-hidden="true" /></Link>
           )}
         </nav>
 

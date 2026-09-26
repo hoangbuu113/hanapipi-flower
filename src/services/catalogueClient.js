@@ -103,7 +103,7 @@ export function normalizeCatalogueProduct(product, variantsArg = null, relatedPr
 
   if (images.length === 0) {
     images = [{
-      alt: product.name ?? 'Hanapipi Flower',
+      alt: product.name ?? 'Hut Flower',
       caption: null,
       fit: 'cover',
       position: 'center',

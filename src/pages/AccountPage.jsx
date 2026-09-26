@@ -32,7 +32,7 @@ function AccountPage() {
     <main className="account-page">
       <Container>
         <header className="account-page__intro">
-          <p className="eyebrow">Hanapipi Flower của bạn</p>
+          <p className="eyebrow">Hut Flower của bạn</p>
           <h1>Mọi điều bạn cần, thật gọn gàng.</h1>
         </header>
 

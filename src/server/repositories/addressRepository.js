@@ -63,7 +63,7 @@ function normalizeAddressPayload(payload, { isPartial = false } = {}) {
   if (location) {
     Object.assign(fieldErrors, location.errors)
   } else if (city !== undefined && city !== HCMC_CITY) {
-    fieldErrors.city = 'Hanapipi hiện chỉ giao hoa tại TP. Hồ Chí Minh.'
+    fieldErrors.city = 'Hut Flower hiện chỉ giao hoa tại TP. Hồ Chí Minh.'
   }
 
   let detail = undefined

@@ -4,8 +4,8 @@ function BrandMark({ className = '', showTagline = true }) {
   const classes = ['brand-mark', className].filter(Boolean).join(' ')
 
   return (
-    <Link className={classes} to="/" aria-label="Trang chủ Hanapipi Flower">
-      <span className="brand-mark__name">Hanapipi Flower</span>
+    <Link className={classes} to="/" aria-label="Trang chủ Hut Flower">
+      <span className="brand-mark__name">Hut Flower</span>
       {showTagline && (
         <span className="brand-mark__tagline">Hoa được chăm chút tinh tế.</span>
       )}

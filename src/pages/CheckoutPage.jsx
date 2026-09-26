@@ -64,14 +64,14 @@ function CheckoutPage() {
               <Link className="button button--text" to="/cart">Chỉnh sửa giỏ hoa</Link>
             </section>
             <aside className="selection-contact" aria-labelledby="selection-contact-title">
-              <p className="eyebrow">Trao đổi cùng Hanapipi</p>
+              <p className="eyebrow">Trao đổi cùng Hut Flower</p>
               <h2 id="selection-contact-title">Liên hệ tư vấn</h2>
               {currentReceived ? (
                 <div className="selection-contact__received" role="status">
-                  <p>Hanapipi đã nhận thông tin lựa chọn của bạn.</p>
+                  <p>Hut Flower đã nhận thông tin lựa chọn của bạn.</p>
                   <p>Mã tham chiếu: <strong>{currentReceived.referenceCode}</strong></p>
                   <p>Tổng giá tham khảo: {formatCurrency(currentReceived.referenceTotal)}</p>
-                  <p>Khi nhắn Zalo, bạn chỉ cần gửi mã trên để Hanapipi nhận ra lựa chọn này.</p>
+                  <p>Khi nhắn Zalo, bạn chỉ cần gửi mã trên để Hut Flower nhận ra lựa chọn này.</p>
                 </div>
               ) : (
                 <button className="button button--primary" type="button" onClick={handleConsultation}
@@ -81,7 +81,7 @@ function CheckoutPage() {
               )}
               {submitError && <p role="alert">{submitError}</p>}
               {STORE_CONTACT.zaloQrImage ? (
-                <img className="selection-contact__qr" src={STORE_CONTACT.zaloQrImage} alt="Mã QR liên hệ Zalo của Hanapipi Flower" width="180" height="180" loading="lazy" />
+                <img className="selection-contact__qr" src={STORE_CONTACT.zaloQrImage} alt="Mã QR liên hệ Zalo của Hut Flower" width="180" height="180" loading="lazy" />
               ) : (
                 <p className="selection-contact__pending">Mã QR Zalo chưa được cập nhật.</p>
               )}
@@ -89,7 +89,7 @@ function CheckoutPage() {
               <a className="button button--secondary" href={STORE_CONTACT.zaloUrl} target="_blank" rel="noopener noreferrer">{currentReceived ? 'Nhắn qua Zalo' : 'Liên hệ qua Zalo'}</a>
               <p>{STORE_CONTACT.phoneDisplay}</p>
               <a className="button button--secondary" href={STORE_CONTACT.phoneTel}>Gọi tư vấn</a>
-              <p className="selection-contact__notice">Hanapipi Flower là dự án portfolio/demo. Website không tiếp nhận đơn hàng và không xử lý thanh toán trực tuyến.</p>
+              <p className="selection-contact__notice">Hut Flower là dự án portfolio/demo. Website không tiếp nhận đơn hàng và không xử lý thanh toán trực tuyến.</p>
             </aside>
           </div>
         )}

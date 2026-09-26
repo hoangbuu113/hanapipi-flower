@@ -81,7 +81,7 @@ function ProductDetailPage() {
     return (
       <main className="product-page product-loading">
         <Container>
-          <p className="eyebrow">Hanapipi Flower</p>
+          <p className="eyebrow">Hut Flower</p>
           <h1 className="product-loading-title">Đang chuẩn bị thông tin bó hoa...</h1>
         </Container>
       </main>

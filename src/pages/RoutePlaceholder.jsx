@@ -9,12 +9,12 @@ function RoutePlaceholder({ content, isNotFound = false }) {
         eyebrow: 'Không tìm thấy trang',
         title: 'Trang này chưa kịp nở.',
         description:
-          'Nội dung bạn tìm kiếm chưa có sẵn. Hãy tiếp tục khám phá những bó hoa của Hanapipi Flower.',
+          'Nội dung bạn tìm kiếm chưa có sẵn. Hãy tiếp tục khám phá những bó hoa của Hut Flower.',
       }
     : content
 
   useEffect(() => {
-    document.title = pageContent.title + ' — Hanapipi Flower'
+    document.title = pageContent.title + ' — Hut Flower'
   }, [pageContent.title])
 
   return (

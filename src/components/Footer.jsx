@@ -85,7 +85,7 @@ function Footer() {
 
       <Container className="site-footer__lower">
             <span>Được chọn lựa và gửi gắm thật tinh tế.</span>
-        <span>© 2026 Hanapipi Flower. Bảo lưu mọi quyền.</span>
+        <span>© 2026 Hut Flower. Bảo lưu mọi quyền.</span>
       </Container>
     </footer>
   )

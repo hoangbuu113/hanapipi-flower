@@ -113,7 +113,7 @@ function StepFinder() {
         <div>
           <p className="eyebrow">Một gợi ý thật vừa vặn</p>
           <h1 id="step-finder-intro-title">Tìm một bó hoa thật vừa vặn.</h1>
-          <p>Trả lời vài câu hỏi, Hanapipi Flower sẽ gợi ý những thiết kế phù hợp với dịp bạn muốn gửi gắm.</p>
+          <p>Trả lời vài câu hỏi, Hut Flower sẽ gợi ý những thiết kế phù hợp với dịp bạn muốn gửi gắm.</p>
           <button className="button button--primary" type="button" onClick={() => setStarted(true)}>
             Bắt đầu tìm hoa <ArrowRight aria-hidden="true" />
           </button>
@@ -199,7 +199,7 @@ function FlowerFinderPage() {
         <aside className="finder-concierge-cta" aria-label="Tư vấn bằng ngôn ngữ tự nhiên">
           <p>Bạn muốn hỏi tự nhiên hơn?</p>
           <button className="button button--text" type="button" onClick={(event) => openConcierge(event.currentTarget)}>
-            <MessageCircle aria-hidden="true" /> Mở Hanapipi tư vấn
+            <MessageCircle aria-hidden="true" /> Mở Hut Flower tư vấn
           </button>
         </aside>
       </Container>

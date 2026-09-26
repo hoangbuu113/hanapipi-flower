@@ -5,7 +5,7 @@ export { getHcmcDeliveryUnit }
 
 export function validateHcmcDeliveryAddress(address) {
   const errors = {}
-  if (address?.city !== HCMC_CITY) errors.city = 'Hanapipi hiện chỉ giao hoa tại TP. Hồ Chí Minh.'
+  if (address?.city !== HCMC_CITY) errors.city = 'Hut Flower hiện chỉ giao hoa tại TP. Hồ Chí Minh.'
   const administrativeUnit = getHcmcAdministrativeUnit(address?.unitCode)
   const unit = getHcmcDeliveryUnit(address?.unitCode)
   let rejectionCode = null
@@ -13,7 +13,7 @@ export function validateHcmcDeliveryAddress(address) {
     errors.unitCode = 'Vui lòng chọn phường hoặc xã hiện hành tại TP. Hồ Chí Minh.'
     rejectionCode = 'INVALID_ADMIN_UNIT'
   } else if (!unit) {
-    errors.unitCode = 'Hanapipi hiện chưa giao hoa tại khu vực này.'
+    errors.unitCode = 'Hut Flower hiện chưa giao hoa tại khu vực này.'
     rejectionCode = 'NOT_SERVICEABLE'
   }
   if (unit && address?.ward != null && address.ward !== '' && address.ward !== unit.name) {

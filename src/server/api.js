@@ -82,7 +82,7 @@ function originNotAllowed(requestId, route) {
 const RATE_LIMIT_MESSAGES = Object.freeze({
   addressMutation: 'Bạn đã thao tác địa chỉ quá nhanh. Vui lòng đợi một phút rồi thử lại.',
   adminMutation: 'Có quá nhiều thao tác quản trị. Vui lòng đợi một phút rồi thử lại.',
-  concierge: 'Hanapipi đang nhận nhiều lời nhắn. Vui lòng đợi một phút rồi thử lại.',
+  concierge: 'Hut Flower đang nhận nhiều lời nhắn. Vui lòng đợi một phút rồi thử lại.',
   orderCreation: 'Bạn đã gửi quá nhiều yêu cầu đặt hoa. Vui lòng đợi một phút rồi thử lại; giỏ hàng vẫn được giữ nguyên.',
 })
 

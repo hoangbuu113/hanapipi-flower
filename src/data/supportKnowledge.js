@@ -5,7 +5,7 @@ import { DELIVERY_CUTOFF_HOUR } from '../utils/delivery.js'
 export const OFFICIAL_INSTAGRAM_URL = 'https://www.instagram.com/tiem_hoa_hanapipi/'
 
 export const UNKNOWN_SUPPORT_MESSAGE =
-  'Mình chưa có đủ thông tin để xác nhận điều này. Bạn có thể liên hệ trực tiếp Hanapipi Flower để được hỗ trợ chính xác hơn.'
+  'Mình chưa có đủ thông tin để xác nhận điều này. Bạn có thể liên hệ trực tiếp Hut Flower để được hỗ trợ chính xác hơn.'
 
 export const supportLinks = [
   { id: 'home', label: 'Trang chủ', to: '/' },
@@ -26,7 +26,7 @@ export const supportLinks = [
   {
     external: true,
     id: 'instagram',
-    label: 'Liên hệ Hanapipi Flower qua Instagram',
+    label: 'Liên hệ Hut Flower qua Instagram',
     to: OFFICIAL_INSTAGRAM_URL,
   },
 ]
@@ -42,11 +42,11 @@ export const deliveryKnowledge = {
     },
     {
       title: 'Ngày và khung giờ',
-      text: 'Ngày cùng khung giờ tại Giỏ hàng và Thanh toán là lựa chọn dự kiến. Hanapipi Flower sẽ xác nhận lại thời gian phù hợp dựa trên địa chỉ người nhận.',
+      text: 'Ngày cùng khung giờ tại Giỏ hàng và Thanh toán là lựa chọn dự kiến. Hut Flower sẽ xác nhận lại thời gian phù hợp dựa trên địa chỉ người nhận.',
     },
     {
       title: 'Phạm vi và chi phí',
-      text: 'Hanapipi hiện nhận địa chỉ tại TP. Hồ Chí Minh. Website chưa tính phí giao động theo khu vực; thông tin giao nhận sẽ được xác nhận trước khi đơn hoa được xử lý thực tế.',
+      text: 'Hut Flower hiện nhận địa chỉ tại TP. Hồ Chí Minh. Website chưa tính phí giao động theo khu vực; thông tin giao nhận sẽ được xác nhận trước khi đơn hoa được xử lý thực tế.',
     },
   ],
 }
@@ -75,7 +75,7 @@ export const giftingKnowledge = {
 }
 
 export const supportKnowledgeForModel = {
-  brand: 'Hanapipi Flower',
+  brand: 'Hut Flower',
   buildYourBouquet: {
     guidance:
       'Công cụ Tự tạo bó hoa gồm sáu bước. Người dùng tự chọn từng phương án, xem lại cấu hình rồi chủ động thêm vào giỏ hàng.',

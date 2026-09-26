@@ -5,9 +5,9 @@ import { validateConciergeResponse } from '../utils/conciergeSchema.js'
 
 const DEFAULT_TIMEOUT_MS = 14000
 const FALLBACK_NOTICE =
-  'Kết nối tư vấn đang bận một chút, mình vẫn có thể hỗ trợ bạn bằng thông tin của Hanapipi Flower.'
+  'Kết nối tư vấn đang bận một chút, mình vẫn có thể hỗ trợ bạn bằng thông tin của Hut Flower.'
 const RATE_LIMIT_NOTICE =
-  'Hanapipi đang nhận nhiều lời nhắn. Bạn vui lòng đợi một phút rồi thử lại nhé.'
+  'Hut Flower đang nhận nhiều lời nhắn. Bạn vui lòng đợi một phút rồi thử lại nhé.'
 
 function compactHistory(history) {
   return history

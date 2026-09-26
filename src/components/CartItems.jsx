@@ -77,7 +77,7 @@ function CartItems() {
         const isPriceless = item.isPriceless === true
         const image = item.image
         const imageSrc = image?.src ?? ''
-        const imageAlt = image?.alt ?? item.name ?? 'Bó hoa Hanapipi'
+        const imageAlt = image?.alt ?? item.name ?? 'Bó hoa Hut Flower'
         const imageFit = image?.fit ?? 'cover'
         const imagePosition = image?.position ?? 'center 45%'
         const selectedGiftAddOns = Array.isArray(item.giftAddOns)

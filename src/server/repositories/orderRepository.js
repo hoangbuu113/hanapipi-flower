@@ -219,7 +219,7 @@ function buildPaymentPresentation(order, configs = {}) {
       bank = {
         available: false,
         error: 'PAYMENT_CONFIG_UNAVAILABLE',
-        message: 'Thông tin chuyển khoản hiện chưa được cấu hình. Vui lòng liên hệ Hanapipi Flower.',
+        message: 'Thông tin chuyển khoản hiện chưa được cấu hình. Vui lòng liên hệ Hut Flower.',
       }
     }
   }
@@ -239,7 +239,7 @@ function buildPaymentPresentation(order, configs = {}) {
       momo = {
         available: false,
         error: 'PAYMENT_CONFIG_UNAVAILABLE',
-        message: 'Thông tin thanh toán MoMo hiện chưa được cấu hình. Vui lòng liên hệ Hanapipi Flower.',
+        message: 'Thông tin thanh toán MoMo hiện chưa được cấu hình. Vui lòng liên hệ Hut Flower.',
       }
     }
   }
@@ -287,7 +287,7 @@ export function createOrderRepository(db, options = {}) {
       if (record.expires_at_utc <= now().toISOString()) {
         await db.prepare('UPDATE idempotency_keys SET response_snapshot_json = NULL, guest_token_ciphertext = NULL WHERE id = ?')
           .bind(record.id).run()
-        throw idempotencyError('IDEMPOTENCY_EXPIRED', 'Yêu cầu này đã hết thời gian gửi lại. Vui lòng kiểm tra đơn đã đặt hoặc liên hệ Hanapipi trước khi đặt tiếp.')
+        throw idempotencyError('IDEMPOTENCY_EXPIRED', 'Yêu cầu này đã hết thời gian gửi lại. Vui lòng kiểm tra đơn đã đặt hoặc liên hệ Hut Flower trước khi đặt tiếp.')
       }
       if (!record.response_snapshot_json || !record.response_body_reference) {
         throw idempotencyError('IDEMPOTENCY_UNAVAILABLE', 'Chưa thể khôi phục yêu cầu đặt hoa. Vui lòng thử lại sau.', 503)
