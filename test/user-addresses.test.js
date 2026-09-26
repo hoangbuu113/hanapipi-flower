@@ -116,6 +116,39 @@ function createTestWorker(d1, options = {}) {
   }
 }
 
+test('address cap is authoritative, concurrent-safe and permits legacy edit/delete', async () => {
+  const { d1, sqlite } = createSeededDatabase()
+  const { fetch: testFetch } = createTestWorker(d1)
+  const headers = { Authorization: 'Bearer customer-a-token', 'Content-Type': 'application/json' }
+  const payload = { recipientName: 'Nguyễn Văn A', recipientPhone: '0901234567',
+    city: 'TP. Hồ Chí Minh', unitCode: '26740', ward: 'Phường Sài Gòn', detail: '123 Đồng Khởi' }
+  const create = () => testFetch('/api/v1/addresses', { method: 'POST', headers, body: JSON.stringify(payload) })
+  const ids = []
+  for (let i = 0; i < 9; i += 1) {
+    const response = await create()
+    assert.equal(response.status, 201)
+    ids.push((await response.json()).data.address.id)
+  }
+  const concurrent = await Promise.all([create(), create()])
+  assert.deepEqual(concurrent.map(r => r.status).sort(), [201, 409])
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM user_addresses WHERE deleted_at_utc IS NULL').get().count, 10)
+  const rejected = await create()
+  assert.equal(rejected.status, 409)
+  assert.equal((await rejected.json()).error.code, 'ADDRESS_LIMIT_REACHED')
+  assert.equal((await testFetch('/api/v1/addresses/' + ids[0], { method: 'PATCH', headers,
+    body: JSON.stringify({ label: 'Đã cập nhật' }) })).status, 200)
+  assert.equal((await testFetch('/api/v1/addresses/' + ids[1], { method: 'DELETE', headers })).status, 200)
+  assert.equal((await create()).status, 201)
+  // Simulate an existing pre-cap row, preserving encrypted fields.
+  sqlite.exec(`INSERT INTO user_addresses SELECT 'legacy-extra', user_id, label, recipient_ciphertext,
+    address_ciphertext, key_version, 0, created_at_utc, updated_at_utc, NULL FROM user_addresses LIMIT 1`)
+  assert.equal((await create()).status, 409)
+  assert.equal((await testFetch('/api/v1/addresses/legacy-extra', { method: 'PATCH', headers,
+    body: JSON.stringify({ label: 'Địa chỉ cũ' }) })).status, 200)
+  assert.equal((await testFetch('/api/v1/addresses/legacy-extra', { method: 'DELETE', headers })).status, 200)
+  sqlite.close()
+})
+
 test('1. unauthenticated requests to /api/v1/addresses return 401', async () => {
   const { d1 } = createSeededDatabase()
   const { fetch: testFetch } = createTestWorker(d1)

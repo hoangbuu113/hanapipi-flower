@@ -50,8 +50,13 @@ test('production config defines isolated limits and keeps the API gate closed', 
   assert.equal(config.env.staging.vars.RATE_LIMITING_ENABLED, 'false')
   assert.equal(config.env.staging.vars.CONCIERGE_RATE_LIMITING_ENABLED, 'true')
   assert.equal(config.vars.CONCIERGE_RATE_LIMITING_ENABLED, undefined)
-  assert.equal(config.env.staging.ratelimits.length, 1)
-  const stagingLimit = config.env.staging.ratelimits[0]
+  assert.equal(config.env.staging.ratelimits.length, 2)
+  assert.deepEqual(limits.ADDRESS_MUTATION_RATE_LIMITER, { limit: 20, period: 60 })
+  const addressLimit = config.env.staging.ratelimits.find(entry => entry.name === 'ADDRESS_MUTATION_RATE_LIMITER')
+  assert.deepEqual(addressLimit.simple, { limit: 20, period: 60 })
+  assert.equal(config.env.staging.vars.ADDRESS_RATE_LIMITING_ENABLED, 'true')
+  assert.ok(!config.ratelimits.some(entry => entry.namespace_id === addressLimit.namespace_id))
+  const stagingLimit = config.env.staging.ratelimits.find(entry => entry.name === 'CONCIERGE_RATE_LIMITER')
   assert.equal(stagingLimit.name, 'CONCIERGE_RATE_LIMITER')
   assert.deepEqual(stagingLimit.simple, { limit: 6, period: 60 })
   assert.ok(!config.ratelimits.some(entry => entry.namespace_id === stagingLimit.namespace_id))
@@ -108,6 +113,54 @@ test('enabled staging Concierge fails closed without binding or HMAC secret', as
     const { response } = await route(createRequest('/api/v1/concierge', { body: '{}', ip: '203.0.113.10' }), env, 'missing')
     assert.equal(response.status, 503)
     assert.equal(response.headers.get('Retry-After'), '60')
+    assert.equal((await response.json()).error.code, 'RATE_LIMIT_UNAVAILABLE')
+  }
+})
+
+test('address mutation quota uses canonical user, isolates users, leaves reads alone and fails closed', async () => {
+  const keys = new Map()
+  let canonicalId = 'user-one'
+  const repositories = { addresses: {
+    async createForUser() { return { id: 'addr-test' } },
+    async updateForUser() { return { id: 'addr-test' } },
+    async deleteForUser() { return { deleted: true } },
+    async setDefaultForUser() { return { id: 'addr-test' } },
+    async listForUser() { return [] },
+    async getForUser() { return { id: 'addr-test' } },
+  } }
+  const route = createApiRouter({
+    authenticateUser: async () => ({ ok: true, user: { id: canonicalId } }),
+    databaseRepositoriesFactory: () => repositories,
+  })
+  const env = createRateEnv({
+    RATE_LIMITING_ENABLED: 'false', ADDRESS_RATE_LIMITING_ENABLED: 'true',
+    ADDRESS_MUTATION_RATE_LIMITER: limiterBinding(async ({ key }) => {
+      keys.set(key, (keys.get(key) ?? 0) + 1)
+      return { success: keys.get(key) <= 20 }
+    }),
+  })
+  const cases = [['/api/v1/addresses', 'POST'], ['/api/v1/addresses/addr-test', 'PATCH'],
+    ['/api/v1/addresses/addr-test', 'DELETE'], ['/api/v1/addresses/addr-test/default', 'POST']]
+  for (let i = 0; i < 21; i += 1) {
+    const [path, method] = cases[i % cases.length]
+    const { response } = await route(createRequest(path, { method, body: '{"userId":"forged"}', headers: { 'X-User-Id': String(i) } }), env, String(i))
+    assert.equal(response.status, i < 20 ? (path === '/api/v1/addresses' ? 201 : 200) : 429)
+    if (i === 20) {
+      assert.equal(response.headers.get('Retry-After'), '60')
+      assert.equal((await response.json()).error.code, 'RATE_LIMITED')
+    }
+  }
+  assert.equal(keys.size, 1)
+  for (const path of ['/api/v1/addresses', '/api/v1/addresses/addr-test']) {
+    assert.equal((await route(createRequest(path, { method: 'GET' }), env, 'read')).response.status, 200)
+  }
+  assert.equal([...keys.values()][0], 21)
+  canonicalId = 'user-two'
+  assert.equal((await route(createRequest('/api/v1/addresses', { body: '{}' }), env, 'other')).response.status, 201)
+  assert.equal(keys.size, 2)
+  for (const missing of ['ADDRESS_MUTATION_RATE_LIMITER', 'RATE_LIMIT_KEY_SECRET']) {
+    const { response } = await route(createRequest('/api/v1/addresses', { body: '{}' }), { ...env, [missing]: undefined }, 'missing')
+    assert.equal(response.status, 503)
     assert.equal((await response.json()).error.code, 'RATE_LIMIT_UNAVAILABLE')
   }
 })

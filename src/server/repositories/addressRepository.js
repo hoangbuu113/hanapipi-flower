@@ -7,6 +7,7 @@ import { HCMC_CITY } from '../../data/hcmcAdministrativeUnits.js'
 import { validateHcmcDeliveryAddress } from '../../utils/hcmcDelivery.js'
 
 const PHONE_PATTERN = /^(0\d{9}|\+84\d{9})$/u
+const MAX_SAVED_ADDRESSES = 10
 
 function addressError(status, code, message, fieldErrors) {
   const error = new Error(message)
@@ -190,6 +191,9 @@ export function createAddressRepository(db, options = {}) {
     `).bind(user.id).first()
 
     const existingCount = Number(countRow?.count || 0)
+    if (existingCount >= MAX_SAVED_ADDRESSES) {
+      throw addressError(409, 'ADDRESS_LIMIT_REACHED', 'Bạn chỉ có thể lưu tối đa 10 địa chỉ.')
+    }
     const isFirstAddress = existingCount === 0
     const makeDefault = isFirstAddress || Boolean(normalized.isDefault)
 
@@ -210,35 +214,16 @@ export function createAddressRepository(db, options = {}) {
       ward: normalized.ward,
     }, fulfilmentKey)
 
-    if (makeDefault && existingCount > 0) {
-      await db.batch([
-        db.prepare(`
-          UPDATE user_addresses
-          SET is_default = 0, updated_at_utc = ?
-          WHERE user_id = ? AND deleted_at_utc IS NULL
-        `).bind(now, user.id),
-        db.prepare(`
-          INSERT INTO user_addresses (
-            id, user_id, label, recipient_ciphertext, address_ciphertext,
-            key_version, is_default, created_at_utc, updated_at_utc, deleted_at_utc
-          ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)
-        `).bind(
-          addressId,
-          user.id,
-          normalized.label,
-          recipientCiphertext,
-          addressCiphertext,
-          FULFILMENT_KEY_VERSION,
-          now,
-          now,
-        ),
-      ])
-    } else {
-      await db.prepare(`
+    // The count check and insert share one SQL statement, so concurrent creates
+    // cannot both claim the last slot. D1 batch also keeps default changes atomic.
+    const results = await db.batch([
+      db.prepare(`
         INSERT INTO user_addresses (
           id, user_id, label, recipient_ciphertext, address_ciphertext,
           key_version, is_default, created_at_utc, updated_at_utc, deleted_at_utc
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
+        WHERE (SELECT COUNT(*) FROM user_addresses
+          WHERE user_id = ? AND deleted_at_utc IS NULL) < ?
       `).bind(
         addressId,
         user.id,
@@ -246,10 +231,23 @@ export function createAddressRepository(db, options = {}) {
         recipientCiphertext,
         addressCiphertext,
         FULFILMENT_KEY_VERSION,
-        makeDefault ? 1 : 0,
+        0,
         now,
         now,
-      ).run()
+        user.id,
+        MAX_SAVED_ADDRESSES,
+      ),
+      db.prepare(`
+        UPDATE user_addresses SET is_default = 0, updated_at_utc = ?
+        WHERE user_id = ? AND id <> ? AND deleted_at_utc IS NULL
+          AND ? = 1 AND EXISTS (SELECT 1 FROM user_addresses WHERE id = ?)
+      `).bind(now, user.id, addressId, makeDefault ? 1 : 0, addressId),
+      db.prepare(`
+        UPDATE user_addresses SET is_default = 1 WHERE id = ? AND user_id = ? AND ? = 1
+      `).bind(addressId, user.id, makeDefault ? 1 : 0),
+    ])
+    if (!results[0]?.meta?.changes) {
+      throw addressError(409, 'ADDRESS_LIMIT_REACHED', 'Bạn chỉ có thể lưu tối đa 10 địa chỉ.')
     }
 
     return {

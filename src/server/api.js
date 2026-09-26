@@ -79,6 +79,7 @@ function originNotAllowed(requestId, route) {
 }
 
 const RATE_LIMIT_MESSAGES = Object.freeze({
+  addressMutation: 'Bạn đã thao tác địa chỉ quá nhanh. Vui lòng đợi một phút rồi thử lại.',
   adminMutation: 'Có quá nhiều thao tác quản trị. Vui lòng đợi một phút rồi thử lại.',
   concierge: 'Hanapipi đang nhận nhiều lời nhắn. Vui lòng đợi một phút rồi thử lại.',
   orderCreation: 'Bạn đã gửi quá nhiều yêu cầu đặt hoa. Vui lòng đợi một phút rồi thử lại; giỏ hàng vẫn được giữ nguyên.',
@@ -423,6 +424,9 @@ async function handleCreateUserAddress(request, env, requestId, dependencies) {
     ), V1_ADDRESSES_PATH, { errorCode: auth.code })
   }
 
+  const limited = await limitAuthenticatedMutation(auth.user, env, requestId, V1_ADDRESSES_PATH, 'addressMutation', dependencies)
+  if (limited) return limited
+
   let body = null
   try {
     body = await request.json()
@@ -477,6 +481,9 @@ async function handleUpdateUserAddress(id, request, env, requestId, dependencies
       requestId,
     ), route, { errorCode: auth.code })
   }
+
+  const limited = await limitAuthenticatedMutation(auth.user, env, requestId, route, 'addressMutation', dependencies)
+  if (limited) return limited
 
   let body = null
   try {
@@ -533,6 +540,9 @@ async function handleDeleteUserAddress(id, request, env, requestId, dependencies
     ), route, { errorCode: auth.code })
   }
 
+  const limited = await limitAuthenticatedMutation(auth.user, env, requestId, route, 'addressMutation', dependencies)
+  if (limited) return limited
+
   const repositories = dependencies.createRepositories(env)
 
   try {
@@ -565,6 +575,9 @@ async function handleSetDefaultUserAddress(id, request, env, requestId, dependen
       requestId,
     ), route, { errorCode: auth.code })
   }
+
+  const limited = await limitAuthenticatedMutation(auth.user, env, requestId, route, 'addressMutation', dependencies)
+  if (limited) return limited
 
   const repositories = dependencies.createRepositories(env)
 
@@ -1907,6 +1920,7 @@ export function createApiRouter(options = {}) {
       const addressDependencies = {
         authenticateUser,
         createRepositories,
+        rateLimitRequest,
         verifyIdentity,
       }
       if (request.method === 'GET') {
@@ -1920,6 +1934,7 @@ export function createApiRouter(options = {}) {
       const addressDependencies = {
         authenticateUser,
         createRepositories,
+        rateLimitRequest,
         verifyIdentity,
       }
       if (addressMatch.action === 'default') {

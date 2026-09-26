@@ -16,6 +16,11 @@
   },
   "ratelimits": [
     {
+      "name": "ADDRESS_MUTATION_RATE_LIMITER",
+      "namespace_id": "1189660666",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
       "name": "CONCIERGE_RATE_LIMITER",
       "namespace_id": "1281655824",
       "simple": { "limit": 6, "period": 60 }
@@ -63,9 +68,15 @@
         "MOMO_ACCOUNT_NAME": "Trần Huỳnh Bảo Hân",
         "MOMO_PHONE_NUMBER": "0335618019",
         "RATE_LIMITING_ENABLED": "false",
-        "CONCIERGE_RATE_LIMITING_ENABLED": "true"
+        "CONCIERGE_RATE_LIMITING_ENABLED": "true",
+        "ADDRESS_RATE_LIMITING_ENABLED": "true"
       },
       "ratelimits": [
+        {
+          "name": "ADDRESS_MUTATION_RATE_LIMITER",
+          "namespace_id": "1189660667",
+          "simple": { "limit": 20, "period": 60 }
+        },
         {
           "name": "CONCIERGE_RATE_LIMITER",
           "namespace_id": "1281655825",

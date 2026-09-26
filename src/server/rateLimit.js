@@ -1,6 +1,10 @@
 const ENABLED_VALUES = new Set(['1', 'true', 'yes', 'on'])
 
 export const RATE_LIMIT_POLICIES = Object.freeze({
+  addressMutation: Object.freeze({
+    binding: 'ADDRESS_MUTATION_RATE_LIMITER',
+    retryAfterSeconds: 60,
+  }),
   adminMutation: Object.freeze({
     binding: 'ADMIN_MUTATION_RATE_LIMITER',
     retryAfterSeconds: 60,
@@ -19,6 +23,7 @@ function isRateLimitingEnabled(env, policy) {
   const enabled = (value) => ENABLED_VALUES.has(String(value ?? '').trim().toLowerCase())
   return enabled(env?.RATE_LIMITING_ENABLED)
     || (policy === 'concierge' && enabled(env?.CONCIERGE_RATE_LIMITING_ENABLED))
+    || (policy === 'addressMutation' && enabled(env?.ADDRESS_RATE_LIMITING_ENABLED))
 }
 
 function decodeBase64Secret(value) {
