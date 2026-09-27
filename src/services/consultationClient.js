@@ -1,7 +1,7 @@
 import { canonicalJson } from '../utils/canonicalJson.js'
 
-export function buildConsultationPayload(items) {
-  return { items: items.map((item) => ({
+export function buildConsultationPayload(items, deliveryDraft = {}) {
+  return { ...(deliveryDraft?.date || deliveryDraft?.slot ? { desiredDate: deliveryDraft.date ?? null, desiredTimeSlot: deliveryDraft.slot ?? null } : {}), items: items.map((item) => ({
     quantity: item.quantity, giftAddOnIds: (item.giftAddOns ?? []).map((gift) => gift.id).sort(), message: item.message ?? '',
     ...(item.custom ? { kind: 'custom', selections: { style: item.style, palette: item.palette, size: item.size, wrapping: item.wrapping, flowers: [...(item.flowers ?? [])].sort() } }
       : { kind: 'product', productId: item.productId, sizeId: item.sizeId, wrappingId: item.wrappingId ?? '' }),

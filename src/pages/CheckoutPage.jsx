@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useRef, useState } from 'react'
 import Container from '../components/Container'
 import CheckoutSummary from '../components/CheckoutSummary'
+import CopyReferenceButton from '../components/CopyReferenceButton.jsx'
 import { STORE_CONTACT } from '../config/storeContact.js'
 import { useCommerce } from '../context/commerceStore'
 import { buildConsultationPayload, createConsultation, getConsultationAttempt } from '../services/consultationClient.js'
@@ -9,13 +10,13 @@ import { formatCurrency } from '../utils/formatCurrency.js'
 import './CheckoutPage.css'
 
 function CheckoutPage() {
-  const { cartItems, cartError, isCartLoading, retryCart, clearCart } = useCommerce()
+  const { cartItems, cartError, isCartLoading, retryCart, clearCart, deliveryDraft } = useCommerce()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [received, setReceived] = useState(null)
   const attemptRef = useRef(null)
   const submittingRef = useRef(false)
-  const payload = buildConsultationPayload(cartItems)
+  const payload = buildConsultationPayload(cartItems, deliveryDraft)
   const fingerprint = JSON.stringify(payload)
   const currentReceived = received?.consultation ?? null
   const summaryItems = received?.items ?? cartItems
@@ -65,7 +66,10 @@ function CheckoutPage() {
             <section aria-label="Thông tin lựa chọn">
               {!currentReceived && isCartLoading && <p role="status">Đang cập nhật giá tham khảo...</p>}
               {!currentReceived && cartError && <div className="selection-page__feedback" role="alert"><p>Chưa thể cập nhật giá tham khảo. Lựa chọn của bạn vẫn được giữ lại.</p><button className="button button--text" onClick={retryCart} type="button">Thử lại</button></div>}
-              <CheckoutSummary cartItems={summaryItems} snapshotItems={currentReceived?.items} pricesReady={Boolean(currentReceived) || (!isCartLoading && !cartError)} />
+              <CheckoutSummary cartItems={summaryItems} snapshotItems={currentReceived?.items}
+                preferences={currentReceived ? { desiredDate: currentReceived.desiredDate, desiredTimeSlot: currentReceived.desiredTimeSlot }
+                  : { desiredDate: deliveryDraft?.date, desiredTimeSlot: deliveryDraft?.slot }}
+                pricesReady={Boolean(currentReceived) || (!isCartLoading && !cartError)} />
               <Link className="button button--text" to={currentReceived ? '/shop' : '/cart'}>{currentReceived ? 'Tiếp tục chọn hoa' : 'Chỉnh sửa giỏ hoa'}</Link>
             </section>
             <aside className="selection-contact" aria-labelledby="selection-contact-title">
@@ -75,6 +79,7 @@ function CheckoutPage() {
                 <div className="selection-contact__received" role="status">
                   <p>Hut Flower đã nhận thông tin lựa chọn của bạn.</p>
                   <p>Mã tham chiếu: <strong>{currentReceived.referenceCode}</strong></p>
+                  <CopyReferenceButton referenceCode={currentReceived.referenceCode} />
                   <p>Tổng giá tham khảo: {formatCurrency(currentReceived.referenceTotal)}</p>
                   <p>Khi nhắn Zalo, bạn chỉ cần gửi mã trên để Hut Flower nhận ra lựa chọn này.</p>
                 </div>

@@ -3,6 +3,7 @@ function getLocalDateValue(date) {
 }
 
 export const DELIVERY_CUTOFF_HOUR = 14
+export const DELIVERY_TIME_SLOTS = Object.freeze(['09:00 – 12:00', '13:00 – 17:00', '17:00 – 20:00'])
 
 export function isDeliveryDateAvailable(value, now = new Date()) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? '')) return false

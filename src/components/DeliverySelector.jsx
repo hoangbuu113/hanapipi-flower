@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
 import { useCommerce } from '../context/commerceStore'
 import { usePublicCommerce } from '../context/publicCommerceStore.js'
-import { isDeliveryDateAvailable } from '../utils/delivery'
+import { DELIVERY_TIME_SLOTS, isDeliveryDateAvailable } from '../utils/delivery'
 import './DeliverySelector.css'
 
-const slots = ['09:00 – 12:00', '13:00 – 17:00', '17:00 – 20:00']
+const slots = DELIVERY_TIME_SLOTS
 
 function createDateOptions() {
   const now = new Date()
@@ -28,7 +28,7 @@ function DeliverySelector() {
     <p className="eyebrow">Một lựa chọn dự kiến</p><h2 id="delivery-title">{isCheckout ? 'Thời gian giao hoa' : 'Thời gian mong muốn'}</h2>
     <div className="delivery-selector__group"><h3>{isCheckout ? 'Chọn ngày giao' : 'Ngày dự kiến'}</h3><div className="delivery-date-list">{dates.map((date) => <button aria-pressed={deliveryDraft.date === date.value} className={deliveryDraft.date === date.value ? 'is-selected' : ''} disabled={date.disabled} key={date.value} type="button" onClick={() => chooseDate(date.value)}>{date.label}{deliveryDraft.date === date.value && <span aria-hidden="true"> ✓</span>}</button>)}</div></div>
     {sameDayUnavailable && <p className="delivery-selector__notice">Khung giờ giao trong ngày đã kết thúc. Bạn có thể chọn ngày gần nhất tiếp theo.</p>}
-    <div className="delivery-selector__group"><h3>Chọn khung giờ</h3><div className="delivery-slot-list">{slots.map((slot) => <button aria-pressed={deliveryDraft.slot === slot} className={deliveryDraft.slot === slot ? 'is-selected' : ''} disabled={!deliveryDraft.date} key={slot} type="button" onClick={() => setDeliveryDraft({ ...deliveryDraft, slot })}>{slot}{deliveryDraft.slot === slot && <span aria-hidden="true"> ✓</span>}</button>)}</div></div>
+    <div className="delivery-selector__group"><h3>{isCheckout ? 'Chọn khung giờ' : 'Khung giờ mong muốn'}</h3><div className="delivery-slot-list">{slots.map((slot) => <button aria-pressed={deliveryDraft.slot === slot} className={deliveryDraft.slot === slot ? 'is-selected' : ''} disabled={!deliveryDraft.date} key={slot} type="button" onClick={() => setDeliveryDraft({ ...deliveryDraft, slot })}>{slot}{deliveryDraft.slot === slot && <span aria-hidden="true"> ✓</span>}</button>)}</div></div>
     <p className="delivery-selector__disclosure">{isCheckout ? 'Khung giờ sẽ được xác nhận theo địa chỉ giao hàng ở bước thanh toán.' : 'Đây là lựa chọn dự kiến trong giỏ hoa. Bạn có thể trao đổi thời gian mong muốn khi liên hệ tư vấn.'}</p>
   </section>
 }

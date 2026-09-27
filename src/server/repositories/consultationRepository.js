@@ -1,5 +1,7 @@
 import { resolveMediaSrc } from '../../utils/media.js'
 import { canonicalJson } from '../../utils/canonicalJson.js'
+import { DELIVERY_TIME_SLOTS } from '../../utils/delivery.js'
+import { isCalendarDate, isCurrentConsultationDate } from '../../utils/consultationPreferences.js'
 
 export function consultationError(status, code, message) {
   return Object.assign(new Error(message), { status, code, consultationError: true })
@@ -18,7 +20,11 @@ function ids(value, max = 8) {
 }
 export function normalizeConsultation(payload) {
   if (!payload || !Array.isArray(payload.items) || !payload.items.length || payload.items.length > 20) throw invalid()
-  return { items: payload.items.map((item) => {
+  const desiredDate = payload.desiredDate == null || payload.desiredDate === '' ? null : payload.desiredDate
+  const desiredTimeSlot = payload.desiredTimeSlot == null || payload.desiredTimeSlot === '' ? null : payload.desiredTimeSlot
+  if ((desiredDate !== null && !isCalendarDate(desiredDate))
+    || (desiredTimeSlot !== null && (!desiredDate || !DELIVERY_TIME_SLOTS.includes(desiredTimeSlot)))) throw invalid()
+  return { ...(desiredDate || desiredTimeSlot ? { desiredDate, desiredTimeSlot } : {}), items: payload.items.map((item) => {
     if (!item || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20) throw invalid()
     const common = { quantity: item.quantity, giftAddOnIds: ids(item.giftAddOnIds ?? []), message: text(item.message, 200, true) }
     if (item.kind === 'custom') {
@@ -38,10 +44,12 @@ async function digest(value) {
 }
 function mapRequest(row) {
   return row && { id: row.id, referenceCode: row.reference_code, status: row.status, referenceTotal: row.reference_total,
-    notificationStatus: row.notification_status, createdAt: row.created_at_utc, updatedAt: row.updated_at_utc }
+    notificationStatus: row.notification_status, createdAt: row.created_at_utc, updatedAt: row.updated_at_utc,
+    desiredDate: row.desired_date ?? null, desiredTimeSlot: row.desired_time_slot ?? null }
 }
 export function publicConsultation(request) {
   return { referenceCode: request.referenceCode, createdAt: request.createdAt, referenceTotal: request.referenceTotal, status: 'new',
+    desiredDate: request.desiredDate ?? null, desiredTimeSlot: request.desiredTimeSlot ?? null,
     items: request.items.map(({ name, image, quantity, unitReferencePrice, lineReferenceTotal, selections }) =>
       ({ name, image, quantity, unitReferencePrice, lineReferenceTotal, selections })) }
 }
@@ -78,6 +86,7 @@ export function createConsultationRepository(db, { catalogue }) {
       const [keyHash, requestHash] = await Promise.all([digest(key), digest(canonicalJson(input))])
       const replay = await findReplay(keyHash, requestHash)
       if (replay) return replay
+      if (input.desiredDate && !isCurrentConsultationDate(input.desiredDate)) throw invalid()
       const giftsById = new Map((await catalogue.getGiftAddOns({ activeOnly: false })).map((gift) => [gift.id, gift]))
       let options
       const items = []
@@ -123,8 +132,8 @@ export function createConsultationRepository(db, { catalogue }) {
         const referenceCode = `HP-${crypto.randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`
         const now = new Date().toISOString()
         const statements = [db.prepare(`INSERT INTO consultation_requests
-          (id, reference_code, idempotency_key_hash, request_hash, reference_total, created_at_utc, updated_at_utc)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(id, referenceCode, keyHash, requestHash, referenceTotal, now, now)]
+          (id, reference_code, idempotency_key_hash, request_hash, reference_total, created_at_utc, updated_at_utc, desired_date, desired_time_slot)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, referenceCode, keyHash, requestHash, referenceTotal, now, now, input.desiredDate ?? null, input.desiredTimeSlot ?? null)]
         items.forEach((item, index) => statements.push(db.prepare(`INSERT INTO consultation_request_items
           (id, consultation_request_id, product_id, product_name_snapshot, image_url_snapshot, quantity,
            unit_reference_price, line_reference_total, selections_json, sort_order)
@@ -132,7 +141,8 @@ export function createConsultationRepository(db, { catalogue }) {
           item.quantity, item.unitReferencePrice, item.lineReferenceTotal, JSON.stringify(item.selections), index)))
         try {
           await db.batch(statements) // D1 batch is transactional; unique key arbitrates concurrent creators.
-          return { created: true, request: { id, referenceCode, referenceTotal, status: 'new', notificationStatus: 'pending', createdAt: now, updatedAt: now, items } }
+          return { created: true, request: { id, referenceCode, referenceTotal, status: 'new', notificationStatus: 'pending', createdAt: now, updatedAt: now,
+            desiredDate: input.desiredDate ?? null, desiredTimeSlot: input.desiredTimeSlot ?? null, items } }
         } catch (error) {
           const concurrent = await findReplay(keyHash, requestHash)
           if (concurrent) return concurrent

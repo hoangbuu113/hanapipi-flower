@@ -11,6 +11,8 @@ const CheckoutPage = (await import('../src/pages/CheckoutPage.jsx')).default
 const CheckoutSummary = (await import('../src/components/CheckoutSummary.jsx')).default
 const { STORE_CONTACT } = await import('../src/config/storeContact.js')
 const AdminConsultations = (await import('../src/components/admin/AdminConsultations.jsx')).default
+const { copyText } = await import('../src/utils/clipboard.js')
+const CopyReferenceButton = (await import('../src/components/CopyReferenceButton.jsx')).default
 
 const item = { key: 'a', productId: 'nang-diu', slug: 'nang-diu', name: 'Nắng Dịu', sizeId: 'standard', wrappingId: 'ivory-paper', quantity: 2, unitPrice: 590000, size: { label: 'Tiêu chuẩn' }, wrapping: { label: 'Giấy ivory' }, giftAddOns: [], image: { src: '/api/v1/media/flowers.jfif', alt: 'Nắng Dịu' } }
 const text = (renderer) => JSON.stringify(renderer.toJSON())
@@ -21,6 +23,12 @@ function assertContactsHidden(renderer) {
   assert.equal(renderer.root.findAllByType('a').filter((node) => node.props.href === STORE_CONTACT.zaloUrl || String(node.props.href).startsWith('tel:')).length, 0)
 }
 function assertContactsVisible(renderer) {
+  assert.ok(STORE_CONTACT.zaloQrImage)
+  const qr = renderer.root.findByProps({ className: 'selection-contact__qr' })
+  assert.equal(qr.props.src, STORE_CONTACT.zaloQrImage)
+  assert.equal(Number(qr.props.width), 180)
+  assert.equal(Number(qr.props.height), 180)
+  assert.ok(qr.props.alt)
   const links = renderer.root.findAllByType('a')
   const zalo = links.find((node) => node.props.href === STORE_CONTACT.zaloUrl)
   assert.equal(zalo.props.children, 'Nhắn qua Zalo')
@@ -97,6 +105,70 @@ test('success summary renders server snapshot prices/names instead of a stale cl
     assert.doesNotMatch(text(renderer), /590\.000|1\.180\.000/u)
     assertContactsVisible(renderer)
   } finally { await act(async () => renderer.unmount()) }
+})
+
+test('preferences flow from scoped Cart to payload and successful snapshot after Cart clears', async (t) => {
+  const oldFetch = globalThis.fetch
+  const oldAct = globalThis.IS_REACT_ACT_ENVIRONMENT
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  t.after(() => { globalThis.fetch = oldFetch; globalThis.IS_REACT_ACT_ENVIRONMENT = oldAct })
+  const preferences = { date: '2026-09-29', slot: '09:00 – 12:00' }
+  let calls = 0
+  globalThis.fetch = async (_, init) => {
+    assert.equal(JSON.parse(init.body).desiredDate, preferences.date)
+    assert.equal(JSON.parse(init.body).desiredTimeSlot, preferences.slot)
+    calls++
+    if (calls === 1) return Response.json({}, { status: 429 })
+    return Response.json({ data: { consultation: { referenceCode: 'HP-PREFERENCE', referenceTotal: 1180000,
+      desiredDate: preferences.date, desiredTimeSlot: preferences.slot } } })
+  }
+  function Harness() {
+    const [cart, setCart] = React.useState([item])
+    const [delivery, setDelivery] = React.useState(preferences)
+    return React.createElement(CommerceContext.Provider, { value: { cartItems: cart, deliveryDraft: delivery,
+      clearCart() { setCart([]); setDelivery({ date: null, slot: null }) } } }, React.createElement(CheckoutPage))
+  }
+  let renderer
+  await act(async () => { renderer = create(React.createElement(MemoryRouter, null, React.createElement(Harness))) })
+  try {
+    assert.match(text(renderer), /29\/09\/2026|09:00 – 12:00/u)
+    assertContactsHidden(renderer)
+    await act(async () => { await button(renderer, 'Gửi yêu cầu tư vấn').props.onClick() })
+    assertContactsHidden(renderer)
+    assert.match(text(renderer), /29\/09\/2026/u)
+    await act(async () => { await button(renderer, 'Gửi yêu cầu tư vấn').props.onClick() })
+    assert.match(text(renderer), /HP-PREFERENCE/u)
+    assert.match(text(renderer), /29\/09\/2026/u)
+    assert.match(text(renderer), /09:00 – 12:00/u)
+    assertContactsVisible(renderer)
+    assert.equal(renderer.root.findAllByType(CopyReferenceButton).length, 1)
+    assert.equal(renderer.root.findByProps({ className: 'selection-contact__qr' }).props.src, STORE_CONTACT.zaloQrImage)
+  } finally { await act(async () => renderer.unmount()) }
+})
+
+test('copy HP uses exact code, provides accessible feedback, and fallback restores focus without alerts', async (t) => {
+  const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  const oldAct = globalThis.IS_REACT_ACT_ENVIRONMENT
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  const copied = []
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { clipboard: { writeText: async (code) => copied.push(code) } } })
+  t.after(() => { if (oldNavigator) Object.defineProperty(globalThis, 'navigator', oldNavigator); else delete globalThis.navigator; globalThis.IS_REACT_ACT_ENVIRONMENT = oldAct })
+  let renderer
+  await act(async () => { renderer = create(React.createElement(CopyReferenceButton, { referenceCode: 'HP-COPY123456' })) })
+  try {
+    const control = button(renderer, 'Sao chép mã')
+    assert.equal(control.props['aria-label'], 'Sao chép mã HP-COPY123456')
+    await act(async () => { await control.props.onClick() })
+    assert.deepEqual(copied, ['HP-COPY123456'])
+    assert.match(text(renderer), /Đã sao chép/u)
+  } finally { await act(async () => renderer.unmount()) }
+  let removed = false; let restored = false; let selected = false; let value
+  const field = { style: {}, setAttribute() {}, select() { selected = true; value = this.value }, remove() { removed = true } }
+  const document = { body: { appendChild() {} }, activeElement: { focus() { restored = true } }, createElement: () => field,
+    execCommand(command) { assert.equal(command, 'copy'); return true } }
+  assert.equal(await copyText('HP-FALLBACK12', { navigator: {}, document }), true)
+  assert.equal(value, 'HP-FALLBACK12'); assert.equal(selected && removed && restored, true)
+  assert.equal(await copyText('HP-FAIL', { navigator: {}, document: {} }), false)
 })
 
 test('failed consultation keeps selections and retries the same idempotency key', async (t) => {
@@ -196,7 +268,7 @@ test('small Admin consultation view loads snapshots, localized notification/stat
   globalThis.document = { activeElement: null, addEventListener() {}, removeEventListener() {} }
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   t.after(() => { globalThis.fetch = originalFetch; globalThis.IS_REACT_ACT_ENVIRONMENT = originalAct; globalThis.document = originalDocument })
-  const consultation = { id: 'cr_test', referenceCode: 'HP-TEST123456', referenceTotal: 1180000, createdAt: '2026-09-26T12:00:00.000Z', status: 'new', notificationStatus: 'partial', items: [{ name: 'Nắng Dịu', image: item.image.src, quantity: 2, unitReferencePrice: 590000, lineReferenceTotal: 1180000, selections: { size: { label: 'Tiêu chuẩn' }, message: 'Một ngày thật dịu dàng', gifts: [] } }] }
+  const consultation = { id: 'cr_test', referenceCode: 'HP-TEST123456', referenceTotal: 1180000, desiredDate: '2026-09-29', desiredTimeSlot: '09:00 – 12:00', createdAt: '2026-09-26T12:00:00.000Z', status: 'new', notificationStatus: 'partial', items: [{ name: 'Nắng Dịu', image: item.image.src, quantity: 2, unitReferencePrice: 590000, lineReferenceTotal: 1180000, selections: { size: { label: 'Tiêu chuẩn' }, message: 'Một ngày thật dịu dàng', gifts: [] } }] }
   const calls = []
   globalThis.fetch = async (url, init) => {
     calls.push(url); assert.equal(init.headers.Authorization, 'Bearer test-admin-token')
@@ -210,6 +282,10 @@ test('small Admin consultation view loads snapshots, localized notification/stat
   try {
     assert.match(text(renderer), /Đã gửi một phần/u)
     await act(async () => { await button(renderer, 'Xem chi tiết').props.onClick() })
+    assert.match(text(renderer), /29\/09\/2026/u)
+    assert.match(text(renderer), /09:00 – 12:00/u)
+    assert.ok(text(renderer).includes(new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(consultation.createdAt))))
+    assert.equal(renderer.root.findByType(CopyReferenceButton).props.referenceCode, 'HP-TEST123456')
     assert.match(text(renderer), /Một ngày thật dịu dàng/u)
     assert.equal(renderer.root.findByProps({ role: 'dialog' }).props['aria-modal'], 'true')
     await act(async () => { await button(renderer, 'Đánh dấu đã liên hệ').props.onClick() })

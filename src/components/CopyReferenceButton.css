@@ -1,0 +1,3 @@
+.consultation-copy{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;min-width:0;font-size:12px}
+.consultation-copy .button,.selection-contact .consultation-copy .button{width:auto;min-height:44px}
+.consultation-copy [role=status]{overflow-wrap:anywhere;color:var(--text-muted)}

@@ -8,8 +8,10 @@ import { consultationNotification } from '../src/server/telegramConsultations.js
 import { createConsultationRepository } from '../src/server/repositories/consultationRepository.js'
 import { createCatalogueRepository } from '../src/server/repositories/catalogueRepository.js'
 import { buildConsultationPayload, createConsultation, getConsultationAttempt } from '../src/services/consultationClient.js'
+import { isCurrentConsultationDate } from '../src/utils/consultationPreferences.js'
 
 const origin = 'https://staging.example'
+const desiredDate = () => new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10)
 function payload() {
   return { items: [{ productId: 'nang-diu', sizeId: 'standard', wrappingId: 'ivory-paper', giftAddOnIds: ['mini-scented-candle'], quantity: 2 }] }
 }
@@ -56,7 +58,7 @@ test('Guest consultation stores authoritative immutable snapshots, no orders/pay
   Object.assign(input.items[0], { name: 'forged', image: 'https://attacker.invalid/image', unitPrice: 1 })
   const result = await created(await h.send(input))
   assert.match(result.referenceCode, /^HP-[A-F0-9]{10}$/u)
-  assert.deepEqual(Object.keys(result).sort(), ['createdAt', 'items', 'referenceCode', 'referenceTotal', 'status'])
+  assert.deepEqual(Object.keys(result).sort(), ['createdAt', 'desiredDate', 'desiredTimeSlot', 'items', 'referenceCode', 'referenceTotal', 'status'])
   assert.equal(result.items[0].name, 'Nắng Dịu')
   assert.equal(result.items[0].lineReferenceTotal, result.referenceTotal)
   assert.equal(result.items[0].productId, undefined)
@@ -100,6 +102,50 @@ test('same key, concurrency and lost-response replay create one request/notifica
   const replay = await created(await h.send(payload(), key))
   assert.equal(replay.referenceCode, references[0].referenceCode)
   assert.deepEqual(replay.items, references[0].items)
+})
+
+test('desired date/time persist independently, return on replay/Admin, and reach Telegram without changing pricing', async (t) => {
+  const h = harness(t)
+  const body = { ...payload(), desiredDate: desiredDate(), desiredTimeSlot: '09:00 – 12:00' }
+  const key = crypto.randomUUID()
+  const result = await created(await h.send(body, key))
+  assert.equal(result.desiredDate, body.desiredDate)
+  assert.equal(result.desiredTimeSlot, body.desiredTimeSlot)
+  const stored = h.sqlite.prepare('SELECT * FROM consultation_requests').get()
+  assert.equal(stored.desired_date, body.desiredDate)
+  assert.equal(stored.desired_time_slot, body.desiredTimeSlot)
+  await h.flush()
+  assert.match(h.calls[0].body.text, /Thời gian mong muốn \(dự kiến\)/u)
+  assert.ok(h.calls[0].body.text.includes(body.desiredDate.split('-').reverse().join('/')))
+  assert.ok(h.calls[0].body.text.includes(body.desiredTimeSlot))
+  assert.deepEqual(h.calls.map((call) => call.method), ['sendMessage', 'sendPhoto'])
+  const replay = await created(await h.send(body, key))
+  assert.deepEqual(replay, result)
+  const changed = await h.send({ ...body, desiredTimeSlot: '13:00 – 17:00' }, key)
+  assert.equal(changed.status, 409)
+  await h.readyAdmin()
+  const detail = (await (await h.admin(`/${stored.id}`)).json()).data.consultation
+  assert.equal(detail.desiredDate, body.desiredDate)
+  assert.equal(detail.desiredTimeSlot, body.desiredTimeSlot)
+  assert.equal(detail.createdAt, result.createdAt)
+  assert.equal(h.count('orders'), 0)
+})
+
+test('optional preferences do not invent defaults; malformed/oversized/unavailable dates and unknown slots reject', async (t) => {
+  const h = harness(t)
+  const empty = await created(await h.send())
+  assert.equal(empty.desiredDate, null); assert.equal(empty.desiredTimeSlot, null)
+  for (const preferences of [
+    { desiredDate: '2026-02-30' }, { desiredDate: 'not-a-date' }, { desiredDate: 'x'.repeat(1000) },
+    { desiredDate: 20260929 }, { desiredDate: '2000-01-01' }, { desiredDate: '2099-01-01' },
+    { desiredTimeSlot: '09:00 – 12:00' }, { desiredDate: desiredDate(), desiredTimeSlot: 'morning' },
+    { desiredDate: desiredDate(), desiredTimeSlot: 'x'.repeat(1000) },
+  ]) assert.equal((await h.send({ ...payload(), ...preferences })).status, 400)
+  const partial = await created(await h.send({ ...payload(), desiredDate: desiredDate() }))
+  assert.equal(partial.desiredTimeSlot, null)
+  assert.equal(h.count('consultation_requests'), 2)
+  assert.equal(isCurrentConsultationDate('2026-09-27', new Date('2026-09-27T06:59:00Z')), true)
+  assert.equal(isCurrentConsultationDate('2026-09-27', new Date('2026-09-27T07:00:00Z')), false)
 })
 
 test('two different products generate distinct references and a unique-image Telegram album', async (t) => {

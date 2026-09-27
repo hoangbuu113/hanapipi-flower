@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { requestAdminConsultations } from '../../services/consultationClient.js'
 import { formatCurrency } from '../../utils/formatCurrency.js'
 import AdminModal from './AdminModal.jsx'
+import CopyReferenceButton from '../CopyReferenceButton.jsx'
+import { formatConsultationDate } from '../../utils/consultationPreferences.js'
 
 const statuses = { new: 'Mới nhận', contacted: 'Đã liên hệ', closed: 'Đã khép lại' }
 const notifications = { pending: 'Đang chờ gửi', sent: 'Đã gửi', partial: 'Đã gửi một phần', failed: 'Chưa gửi được' }
@@ -57,6 +59,11 @@ export default function AdminConsultations({ getToken }) {
     {detail && <div className="admin-modal-backdrop" onClick={close} role="presentation"><AdminModal className="admin-modal" onClose={close} aria-labelledby="consultation-detail-title">
       <div className="admin-modal__header"><h2 id="consultation-detail-title">Tư vấn {detail.referenceCode}</h2><button className="button button--text" type="button" onClick={close} aria-label="Đóng chi tiết tư vấn">Đóng</button></div>
       <p>{dates(detail.createdAt)} · {statuses[detail.status]} · Telegram: {notifications[detail.notificationStatus]}</p>
+      <CopyReferenceButton referenceCode={detail.referenceCode} />
+      <dl className="consultation-preferences">
+        <div><dt>Ngày mong muốn</dt><dd>{formatConsultationDate(detail.desiredDate)}</dd></div>
+        <div><dt>Khung giờ mong muốn</dt><dd>{detail.desiredTimeSlot || 'Chưa chọn'}</dd></div>
+      </dl>
       {busy && <p role="status">Đang cập nhật...</p>}{detailError && <p role="alert">{detailError}</p>}
       <div className="consultation-detail">{detail.items.map((item, index) => <article key={index}>
         {item.image && <img src={item.image} alt={item.name} width="120" height="150" loading="lazy" />}

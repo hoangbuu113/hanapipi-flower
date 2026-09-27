@@ -1,3 +1,5 @@
+import { formatConsultationDate } from '../utils/consultationPreferences.js'
+
 const money = (value) => `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
 const labels = { style: 'Phong cách', palette: 'Bảng màu', size: 'Kích thước', wrapping: 'Gói hoa' }
 
@@ -15,7 +17,9 @@ export function consultationNotification(request, origin) {
     if (item.selections.message) lines.push(`Lời nhắn: ${item.selections.message}`)
     lines.push('')
   }
-  lines.push(`Tổng giá tham khảo: ${money(request.referenceTotal)}`, `Khách sẽ liên hệ qua Zalo/điện thoại và cung cấp mã: ${request.referenceCode}`)
+  lines.push('Thời gian mong muốn (dự kiến):', `Ngày: ${formatConsultationDate(request.desiredDate)}`,
+    `Khung giờ: ${request.desiredTimeSlot || 'Chưa chọn'}`, '',
+    `Tổng giá tham khảo: ${money(request.referenceTotal)}`, `Khách sẽ liên hệ qua Zalo/điện thoại và cung cấp mã: ${request.referenceCode}`)
   if (images.length > 10) lines.push(`Album hiển thị 10 ảnh; còn ${images.length - 10} ảnh khác trong chi tiết tư vấn.`)
   // Telegram plain text maximum is 4096 characters; preserve the whole summary across messages.
   const characters = Array.from(lines.join('\n'))

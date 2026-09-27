@@ -3,9 +3,10 @@ import { bouquetPreviewImage } from '../data/bouquetOptions'
 import { formatCurrency } from '../utils/formatCurrency'
 import { getCartItemPresentation } from '../utils/order'
 import { cartItemLineTotal, cartItemUnitTotal, cartSubtotal } from '../utils/cart'
+import { formatConsultationDate } from '../utils/consultationPreferences.js'
 import './CheckoutSummary.css'
 
-function CheckoutSummary({ cartItems, pricesReady = true, snapshotItems }) {
+function CheckoutSummary({ cartItems, pricesReady = true, snapshotItems, preferences = {} }) {
   const items = snapshotItems ? snapshotItems.map((item, index) => ({
     key: `snapshot:${index}`, name: item.name, quantity: item.quantity,
     image: { src: item.image, alt: item.name },
@@ -44,6 +45,10 @@ function CheckoutSummary({ cartItems, pricesReady = true, snapshotItems }) {
           )
         })}
       </div>
+      <dl className="selection-summary__preferences">
+        <div><dt>Ngày mong muốn</dt><dd>{formatConsultationDate(preferences.desiredDate)}</dd></div>
+        <div><dt>Khung giờ mong muốn</dt><dd>{preferences.desiredTimeSlot || 'Chưa chọn'}</dd></div>
+      </dl>
       <div className="selection-summary__total"><span>Tổng giá tham khảo</span><strong>{pricesReady ? formatCurrency(cartSubtotal(items)) : 'Đang cập nhật'}</strong></div>
       <p className="selection-summary__note">Giá mang tính tham khảo cho các lựa chọn hiện khả dụng. Giỏ hoa chỉ được làm trống sau khi yêu cầu tư vấn được xác nhận.</p>
     </div>
