@@ -1,0 +1,59 @@
+{
+  "purpose": "Experimental bouquet lab only. Built-in imagegen; generated assets, not product photography. Original SVGs retained for rollback.",
+  "date": "2026-09-28",
+  "web_derivatives": "Existing local FFmpeg: scale 512:-2, libwebp quality 92, compression_level 6, yuva420p. Original PNG alpha and source files retained. No dependencies or runtime generation.",
+  "assets": [
+    {
+      "file": "rose-pink-a.png",
+      "prompt": "Photorealistic single dusty blush pink garden rose cutout. Genuine transparent alpha, natural curled layered petals, short green stem, soft upper-left daylight, front 15-degree elevated view, no illustration/text/background."
+    },
+    {
+      "file": "rose-pink-b.png",
+      "prompt": "Use case: product-mockup. Single independent photorealistic studio cutout for a premium 2.5D floral composer, genuine transparent alpha background. Soft diffuse daylight upper left, restrained natural tones, front orthographic-ish perspective with 15-degree view from above. Entire object in frame, small transparent margins. Crisp natural edges. NO background, gradient backdrop, halo, glow, cast shadow, floor, text, watermark, logos, illustrations, cartoon outlines or plastic 3D appearance. Output transparent PNG. Portrait 2:3 framing for botanical assets, plant focal point about 33% height and stem ending at 90% height. Subject: One fresh blush pink garden rose, variant B, slightly cupped bloom tilted toward the right, irregular overlapping petals with real velvety fine texture. Bloom occupies about 65% image width, a short thin straight green stem and one small low leaf. Not a bouquet."
+    },
+    {
+      "file": "rose-pink-c.png",
+      "prompt": "Use case: product-mockup. Single independent photorealistic studio cutout for a premium 2.5D floral composer, genuine transparent alpha background. Soft diffuse daylight upper left, restrained natural tones, front orthographic-ish perspective with 15-degree view from above. Entire object in frame, small transparent margins. Crisp natural edges. NO background, gradient backdrop, halo, glow, cast shadow, floor, text, watermark, logos, illustrations, cartoon outlines or plastic 3D appearance. Output transparent PNG. Portrait 2:3 framing for botanical assets, plant focal point about 33% height and stem ending at 90% height. Subject: One fresh pale dusty pink garden rose, variant C, fully open asymmetric bloom tilted slightly left, curled satin-soft real petals with fine veins and subtle folds. Bloom about 65% image width; short thin straight green stem, minimal foliage. Not a bouquet."
+    },
+    {
+      "file": "tulip-white-a.png",
+      "prompt": "Use case: product-mockup. Single independent photorealistic studio cutout for a premium 2.5D floral composer, genuine transparent alpha background. Soft diffuse daylight upper left, restrained natural tones, front orthographic-ish perspective with 15-degree view from above. Entire object in frame, small transparent margins. Crisp natural edges. NO background, gradient backdrop, halo, glow, cast shadow, floor, text, watermark, logos, illustrations, cartoon outlines or plastic 3D appearance. Output transparent PNG. Portrait 2:3 framing for botanical assets, plant focal point about 33% height and stem ending at 90% height. Subject: One ivory white tulip, slender closed-to-half-open bloom with natural translucent petal veins and soft cream highlights. Small calyx, one straight slim stem, one narrow leaf low on stem. Bloom about 50% image width, centered at 33% height. Not a bouquet."
+    },
+    {
+      "file": "tulip-white-b.png",
+      "prompt": "Use case: product-mockup. Single independent photorealistic studio cutout for a premium 2.5D floral composer, genuine transparent alpha background. Soft diffuse daylight upper left, restrained natural tones, front orthographic-ish perspective with 15-degree view from above. Entire object in frame, small transparent margins. Crisp natural edges. NO background, gradient backdrop, halo, glow, cast shadow, floor, text, watermark, logos, illustrations, cartoon outlines or plastic 3D appearance. Output transparent PNG. Portrait 2:3 framing for botanical assets, plant focal point about 33% height and stem ending at 90% height. Subject: One ivory white tulip, variant B, slightly more open organic asymmetric bloom tilted 12 degrees right. Delicate real petal veins, short straight stem, one slender low leaf. Bloom about 50% image width and centered 33% height. Not a bouquet."
+    },
+    {
+      "file": "baby-breath.png",
+      "prompt": "Use case: product-mockup. Single independent photorealistic studio cutout for a premium 2.5D floral composer, genuine transparent alpha background. Soft diffuse daylight upper left, restrained natural tones, front orthographic-ish perspective with 15-degree view from above. Entire object in frame, small transparent margins. Crisp natural edges. NO background, gradient backdrop, halo, glow, cast shadow, floor, text, watermark, logos, illustrations, cartoon outlines or plastic 3D appearance. Output transparent PNG. Portrait 2:3 framing for botanical assets, plant focal point about 33% height and stem ending at 90% height. Subject: One airy slender sprig of real baby's breath (gypsophila), many tiny ivory white florets on delicate branching sage green stems. The blooms form an irregular fan in upper half, thin gathered stems converge toward bottom center. Sparse enough for individual flowers and transparent spaces to be visible, no giant dense ball."
+    },
+    {
+      "file": "eucalyptus-a.png",
+      "prompt": "Use case: product-mockup. Single independent photorealistic studio cutout for a premium 2.5D floral composer, genuine transparent alpha background. Soft diffuse daylight upper left, restrained natural tones, front orthographic-ish perspective with 15-degree view from above. Entire object in frame, small transparent margins. Crisp natural edges. NO background, gradient backdrop, halo, glow, cast shadow, floor, text, watermark, logos, illustrations, cartoon outlines or plastic 3D appearance. Output transparent PNG. Portrait 2:3 framing for botanical assets, plant focal point about 33% height and stem ending at 90% height. Subject: One real silver-dollar eucalyptus sprig with natural round sage grey-green leaves, subtle veins and powdery surface texture. Organic slightly left-leaning tapered arrangement, leaves mainly upper 60%, slim branch continues to bottom center. Open transparent spaces between leaves, not a bouquet."
+    },
+    {
+      "file": "eucalyptus-b.png",
+      "prompt": "Use case: product-mockup. Single independent photorealistic studio cutout for a premium 2.5D floral composer, genuine transparent alpha background. Soft diffuse daylight upper left, restrained natural tones, front orthographic-ish perspective with 15-degree view from above. Entire object in frame, small transparent margins. Crisp natural edges. NO background, gradient backdrop, halo, glow, cast shadow, floor, text, watermark, logos, illustrations, cartoon outlines or plastic 3D appearance. Output transparent PNG. Portrait 2:3 framing for botanical assets, plant focal point about 33% height and stem ending at 90% height. Subject: One real silver-dollar eucalyptus sprig variant B, asymmetric gently right-leaning branch with natural matte sage round leaves of varied size, subtle veins and powdery texture. Leaves mainly upper 60%, narrow gathered branch at bottom, transparent spaces between leaves."
+    },
+    {
+      "file": "pearl-spray.png",
+      "prompt": "Use case: product-mockup. Single independent photorealistic studio cutout for a premium 2.5D floral composer, genuine transparent alpha background. Soft diffuse daylight upper left, restrained natural tones, front orthographic-ish perspective with 15-degree view from above. Entire object in frame, small transparent margins. Crisp natural edges. NO background, gradient backdrop, halo, glow, cast shadow, floor, text, watermark, logos, illustrations, cartoon outlines or plastic 3D appearance. Output transparent PNG. Portrait 2:3 framing for botanical assets, plant focal point about 33% height and stem ending at 90% height. Subject: One small elegant florist pearl spray decoration, nine small ivory freshwater-style round pearls on very fine warm silver florist wires. An airy irregular fan of delicate branching wires in upper half, wires gather into a single narrow stem at bottom center. Pearls small relative to canvas, realistic restrained satin highlights, no flowers or ribbon."
+    },
+    {
+      "file": "wrapper-back.png",
+      "prompt": "Photorealistic cutout of BACK HALF ONLY of empty premium florist bouquet wrapping, cream ivory tissue inside and muted blush matte paper outside. NO flowers, stems, ribbon, bow or front flap. Front-facing, soft daylight upper left. Square transparent canvas. Composition registration is critical: top 25% of canvas entirely transparent. Broad loose asymmetrical pointed paper wings extend from x10% to90% at y35%; folded rear paper opens upward to receive flowers. Back panel narrows toward a pinched waist centered at x50%, y82%; lower paper tapers to y94%. Real delicate paper fibers, fine irregular folds, restrained highlights. This is an independent rear layer for compositing flowers OVER it, not a complete bouquet image. Genuine transparent alpha background, no background color, halo, cast shadow, logos or text."
+    },
+    {
+      "file": "wrapper-front.png",
+      "prompt": "Photorealistic cutout of FRONT HALF ONLY of premium empty florist bouquet wrapping, muted cream/blush matte paper. NO rear paper wings, flowers, stems, ribbons or bows. Front-facing, soft daylight upper left. Square transparent canvas registered for layered bouquet composition. Entire top 56% of canvas MUST be completely transparent. Visible object starts at x22%, y57% on left and x78%,y55% on right: two overlapping paper flaps create a shallow irregular V-shaped open upper rim dipping to x50%,y65%. Folded front flaps narrow into pinched waist at x50%,y82%, then short tapered paper tails end at y94%. Natural fine paper texture and creases, subtle realistic depth, soft premium ivory/blush color. This is ONLY lower front paper covering stem bottoms; no complete enclosing back cone. Genuine transparent alpha background everywhere around object, no glow, halo, floor, shadow, text, watermark."
+    },
+    {
+      "file": "ribbon-pink.png",
+      "prompt": "Photorealistic product cutout of one small dusty blush pink satin ribbon bow with two loose asymmetric loops and two elegant short draping ribbon tails. Front-facing, soft daylight upper left, real satin weave and restrained fold highlights. Square transparent canvas, knot exactly at center x50%, y40%, loops span x15% to85%, tails end at85% height. Full bow in frame. No wrapping paper, flowers, stems, pearls or hands. Genuine transparent alpha background, no halo, floor, background or cast shadow, no text/logo/watermark."
+    },
+    {
+      "file": "ribbon-cream.png",
+      "prompt": "Photorealistic product cutout of one small warm ivory cream satin ribbon bow with two loose asymmetric loops and two elegant short draping ribbon tails. Front-facing, soft daylight upper left, real satin weave and restrained fold highlights. Square transparent canvas, knot exactly at center x50%, y40%, loops span x15% to85%, tails end at85% height. Full bow in frame. No wrapping paper, flowers, stems, pearls or hands. Genuine transparent alpha background, no halo, floor, background or cast shadow, no text/logo/watermark."
+    }
+  ]
+}

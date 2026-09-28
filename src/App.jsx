@@ -13,6 +13,7 @@ import FlowerCarePage from './pages/FlowerCarePage'
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 const BuildBouquetPage = lazy(() => import('./pages/BuildBouquetPage'))
+const BouquetLabPage = lazy(() => import('./pages/BouquetLabPage'))
 const FlowerFinderPage = lazy(() => import('./pages/FlowerFinderPage'))
 const CheckoutPage = lazy(() => import('./pages/PublicCheckoutRoute'))
 const CheckoutSuccessPage = lazy(() => import('./pages/CheckoutSuccessPage'))
@@ -114,6 +115,7 @@ function App() {
         <Route path="wishlist" element={<WishlistPage />} />
         <Route path="cart" element={<CartPage />} />
         <Route path="build-your-bouquet" element={<BuildBouquetPage />} />
+        <Route path="build-bouquet-lab" element={<BouquetLabPage />} />
         <Route path="flower-finder" element={<FlowerFinderPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="checkout/success/:orderCode" element={<CheckoutSuccessPage />} />
