@@ -70,7 +70,7 @@ test('route splitting keeps Home/providers eager and scopes accessible Suspense 
   const app = fs.readFileSync('src/App.jsx', 'utf8')
   const layout = fs.readFileSync('src/layouts/SiteLayout.jsx', 'utf8')
   assert.match(app, /import HomePage from/u)
-  for (const page of ['AdminPage', 'CheckoutPage', 'CheckoutSuccessPage', 'AccountPage', 'SearchPage', 'ProductDetailPage', 'FlowerFinderPage', 'BuildBouquetPage']) {
+  for (const page of ['AdminPage', 'CheckoutPage', 'CheckoutSuccessPage', 'AccountPage', 'SearchPage', 'ProductDetailPage', 'FlowerFinderPage', 'SmartBouquetPage']) {
     const routeModule = page === 'CheckoutPage' ? 'PublicCheckoutRoute' : page
     assert.ok(app.includes(`const ${page} = lazy(() => import('./pages/${routeModule}'))`))
     assert.ok(!app.includes(`import ${page} from`))
