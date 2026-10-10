@@ -85,18 +85,26 @@ export function createHFinalFrameStore({ mobile = false, timeline = H_FINAL_TIME
     evict(); notify(); pump()
   }
   function canPresent(index) { if (disposed || failed) return false; request(index); return images.has(index) }
+  // Pick only unstarted requests. Existing useful fetches keep their slots.
+  const pendingFetch = new Set(timeline.frames.map((_, i) => i))
+  function nextFetch() {
+    const required = hFinalWindow(anchor, direction, stats.total)
+    const i = pendingFetch.has(anchor) ? anchor : required.find(i => pendingFetch.has(i)) ?? pendingFetch.values().next().value
+    pendingFetch.delete(i)
+    return i
+  }
   const deadline = setTimeout(() => fail(new Error('H-final preload timeout')), timeout)
   return {
     async load() {
       if (loading || disposed) return
-      loading = true; let cursor = 0
+      loading = true
       telemetry?.bootstrap?.(stats.total, mobile, readinessSize())
       sourceStats()
       pumpDiagnostic(stats.fetched === stats.total ? 5 : 0)
       try {
         await Promise.all(Array.from({ length: 4 }, async () => {
-          while (!disposed && !failed && cursor < stats.total) {
-            const i = cursor++
+          while (!disposed && !failed && pendingFetch.size) {
+            const i = nextFetch()
             telemetry?.record('fetch', i + 1, 0, 0, stats.fetched, stats.total)
             const response = await fetchFrame(timeline.base + timeline.frames[i].file, { signal: abort.signal })
             telemetry?.record('fetch', i + 1, 1, 0, stats.fetched, stats.total)

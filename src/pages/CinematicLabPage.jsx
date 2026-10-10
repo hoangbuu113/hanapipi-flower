@@ -13,6 +13,7 @@ import useChapterScroll from '../components/cinematic/useChapterScroll'
 import { TOTAL_SCROLL } from '../components/cinematic/sequenceConfig'
 import { startCinematicTelemetry } from '../components/cinematic/cinematicTelemetry.js'
 import SmokeTransition from '../components/cinematic/SmokeTransition.jsx'
+import { scheduleSmokePreload } from '../components/cinematic/smokePreload.js'
 import { useSmokeTransition } from '../components/cinematic/useSmokeTransition.js'
 import ScrollFrameSequence from '../components/cinematic/ScrollFrameSequence'
 import '../components/cinematic/cinematic.css'
@@ -90,6 +91,8 @@ export default function CinematicLabPage() {
     // oxlint-disable-next-line react/set-state-in-effect
     if (!reducedMotion && chapterProgress >= .85 && hasSequenceTravel) setSequenceEnabled(true)
   }, [chapterProgress, hasSequenceTravel, reducedMotion])
+  const [smokePreloaded, setSmokePreloaded] = useState(false)
+  useEffect(() => reducedMotion ? undefined : scheduleSmokePreload({ document, window, onStart: () => setSmokePreloaded(true) }), [reducedMotion])
   const smokeEnabled = !reducedMotion
   const takeover = useSmokeTransition({ enabled: smokeEnabled, displayScrollRef, renderSectionsOnly: true })
   const smokeCandidate = smokeEnabled
@@ -208,7 +211,7 @@ export default function CinematicLabPage() {
                 debug={debug} onReady={setSequenceReady} onFrame0Ready={takeover.frame0Ready} revealFromStart={smokeCandidate} />
             </div>
           )}
-          {!reducedMotion && smokeCandidate && sequenceEnabled && <SmokeTransition active mobile={mobile} channelRef={takeover.channelRef} debug={debug} onReady={takeover.rendererReady} onFailure={takeover.rendererFailed} />}
+          {!reducedMotion && smokeCandidate && (smokePreloaded || sequenceEnabled) && <SmokeTransition active mobile={mobile} channelRef={takeover.channelRef} debug={debug} onReady={takeover.rendererReady} onFailure={takeover.rendererFailed} />}
           {headerContent}
           {PerfDebug && new URLSearchParams(window.location.search).get('perfDebug') === '1' && <Suspense fallback={null}><PerfDebug region={scrollRegion} channelRef={takeover.channelRef} /></Suspense>}
 

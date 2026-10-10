@@ -369,3 +369,52 @@ Evidence:[state attribution report](../qa/smoke-reentry-attribution/REPORT.md),H
 - Necessary query-only acceptance telemetry:cinematicTelemetry=1&cinematicTelemetryReentry=1 keeps capture active across earlyRIFE back tosmoke (45s/4096bounded cap retained),adds retained bitmap/inflight/required-window counts;standard capture still auto-stops as before,no-flag normal runtime unaffected. No fetch/decode policy change beyond accepted-together candidate. Native export includesRIFEthenreentrydraw31,0errors/0dropped.
 - Push isolated temporary branch and upload exact clean pushedcommit to separate smoke-progressive-test preview alias on existing Worker;do not merge authoritative branch or promote traffic. Release receipt follows. Physical phone BEFORE3624.7ms;AFTER pending.
 - NEXT:one cold/reloaded affected-phone run:entry ->fastforward ->reverse ->sequence ->returnsmoke~.4 ->export. User visual quality confirmation and JSON required before acceptance/merge.
+
+
+## 2026-10-11 - Isolated phone-preview deployment receipt: PENDING / NOT ACCEPTED
+
+- Pushed test/smoke-progressive-readiness@e3dab0182462fda5ffc85376ec2c3117339ca593; clean exact-commit build uploaded as Worker version 3028aacd-dc96-429c-a8d3-1d748c3eaa18, alias smoke-progressive-test. Authoritative experiment/hut-flower-3d remains ba70c841ef33d767cdda32010d4da3a1072474c6; no merge or traffic promotion; accepted cinemalab alias unchanged.
+- 61 tests/build/scoped lint/diff PASS; public bundle matches SHA256 19fdd7e218d1da0b426adfedfcf9bb9648a2659326d2b5e1ef8194b28cf28b9d; public functional re-entry native/target31/31, no errors, export captures RIFE then return. This does not establish physical-phone performance PASS.
+- Telemetry URL: https://smoke-progressive-test-hanapipi-flower.hutstudio.workers.dev/cinematic-lab?cinematicTelemetry=1&cinematicTelemetryReentry=1. Normal URL: https://smoke-progressive-test-hanapipi-flower.hutstudio.workers.dev/cinematic-lab. Re-entry capture remains 45s/4096 bounded; no flag means no telemetry. All production assets and timing preserved.
+- Phone baseline3624.7ms; AFTER pending. NEXT: one affected-phone capture and visual confirmation before acceptance/authoritative integration. No additional optimization.
+
+Evidence: [phone-preview report](../qa/smoke-phone-acceptance/REPORT.md), deployment.json, capture-summary.json, clean verification logs and public-native.log.
+
+
+## 2026-10-11 - Physical-phone progressive candidate capture: PARTIAL / acceptance NOT VERIFIED
+
+- Affected phone384x719/DPR2.8125,8GB/8cores,23.063s capture;4096ring overwritten1338 records. Retained window begins4457ms alreadyRIFE:startup demand/bootstrap/fetch/ready/initialdraw lost. Phone AFTER vs3624.7ms NOT VERIFIED;do not use reverse first-retained draw as entry.
+- Observed sequence returns draw31 with requested/available/drawn31/31/31 near.4 twice;no stale38 persistence in moving returns.260draws,0display-progress/frame-mapping mismatch;maxretained24/inflight4. Later encoded88 supports full availability,but completion milestones lost. Exact stationary1000ms/frame0false equivalent and visual quality not confirmed.
+- Gap counts>=33/50/100/250:12/9/4/0;retainedp95~16.6ms,worst158.4ms(CHAPTER). Reverse smoke precover gaps149.9/108.4ms remain;no new causal attribution/optimization.
+- DECISION:PARTIAL/NOT VERIFIED,not candidate FAIL proof;testcommit e3dab01 remainsPENDING. No authoritative merge/commit/push/deploy or runtime change. NEXT:one shorter single-cycle reloaded capture,export immediately plus user appearance/entry-hold confirmation.
+
+Evidence:[phone capture report](../qa/smoke-phone-acceptance/phone-capture-01/REPORT.md),input.json,analyze.mjs,summary.json.
+
+
+## 2026-10-11 - Supplementary wide-viewport progressive capture: phone gate still PENDING
+
+- New JSON3440x1317/DPR1,memory32/cores16 differs from affected phone384x719/DPR2.8125,8/8.13.039s/2894rows/0drops,all88fetch-stage sets complete. Pump471.7ms/1encoded,ready1422.7ms/24encoded24decoded,firstdraw2707.5ms/40encoded,all88available4151.1ms:progressive behavior supported here.
+- Initial demand80/cover38 returnszero at31.5ms,renewed request/draw2707.3/2707.5ms;not comparable entry latency. Do not use as physicalAFTER vs3624.7ms. Retained24/inflight4,p95~8.4ms,worst124.9ms;>=33/50/100/250:3/2/2/0,all>=33 inCHAPTER. Reverse clears swapplate,but exact31/31 stationarycheckpoint absent.
+- No physical acceptance/merge/commit/push/deploy/runtime change. NEXT:one short affected-phone capture plus visual confirmation;no additional optimization.
+
+Evidence:[supplementary capture report](../qa/smoke-phone-acceptance/desktop-capture-02/REPORT.md),input.json,analyze.mjs,summary.json.
+
+
+## 2026-10-11 - Complete affected-phone progressive capture: PARTIAL / NOT ACCEPTED; STOP
+
+- Correct affectedphone384x719/DPR2.8125,8GB/8cores;18.109s/3876rows/0drops,all88complete. Demand1017->draw2749.1=1732.1ms vs prior3624.7ms(-52.2%). Pump starts1encoded;ready58encoded/24decoded;firstdraw36 with58encoded precedesall88 by913.6ms. Prewarm/network/scroll differ;do not claim controlled device-independent speedup. Barrier removal behavior and large measured entry reduction supported.
+-0drawmappingmismatch;reverse reentry clearscover38 tolatest36/lower,subsequent near.4 sample31/31/31. Bitmapmax24/inflight4;240API/240complete,0duplicateoverlap/unfinished. Exact stationaryframe0false fixture not repeated onphone.
+- Residual reverseprecover gap166.7ms at13316.1ms afterownership/swapplate crossing;global>=33/50/100/250:4/2/1/0,p95~8.4ms. User explicitly reports occasionalstutter/lightlag. No underlying workload attribution proven;no further RIFE/GPU/fetch/decode/Bloom investigation or optimization.
+- DECISION:PARTIAL/NOT ACCEPTED for authoritativepromotion;not globalperformancePASS. Visualquality confirmation incomplete. Do not merge/push/deploy:authoritativeba70c84 unchanged,testcandidatee3dab01/testpreview retained as evidence only. NEXT:STOP;separately scoped future residual-reverse-crossing attribution if authorized. Runtime/media/timing/runway unchanged.
+
+Evidence:[complete phone report](../qa/smoke-phone-acceptance/phone-capture-03/REPORT.md),input.json,analyze.mjs,summary.json,acceptance-summary.json;userfeedback in session.
+
+
+## 2026-10-11 - Progressive test redeploy + ONE staged smoke preload candidate
+
+- Explicit new task supersedes priorSTOP only for this scopedpreloadpass. Progressive-onlye3dab01 clean61tests/build/scopedlint/diff verified,uploaded versionc5168638-1ee2-43ca-85eb-d7e103927051 smoke-progressive-test;publicbundle matches. Authoritativeba70c84/traffic unchanged,PARTIAL/pendingfinalphoneacceptance.
+- One preregistered hypothesis:waitwindowload/firstphoto decode/fontsready/idle,thenmountsameexistingH-finalstore;proximityfallback intact. Existing4fetchworkers prioritize latestanchor/current24window from unstartedqueue,no duplicatecache/cancel/restart/RIFEpreload. Decode4/retentionpolicy/assets/Bloom/watchdog1500/timing1150/220/380/runway preserved.
+- Cheap390pair same300mscriticalmedia/140msPNGlatency/2sopportunity:entry1408.7->0.2ms,encodedatdemand0->40,0smokerequests beforeload/firstphotodecode,both88complete/duplicates0/fetch4/decode4/bitmap24/reentry31/31. Initialphoto2599.9->2089.4ms,FCP2232->1728ms;no regressionobserved,not statistically proven timinggain. Localbenefit conditional onopportunity;physicalresultpending.64tests/build/scopedlint PASS,preservation403assets/protectedsource.
+- Cheapgatewins permits stagedtestpreview only;do not promoteauthoritativebranch. PhoneBEFORE3624.7/progressive1732.1/newPENDING. Reverse166.7ms remains separateunresolved;NOinvestigation. Ifphonefails,reject/stop;NOsecondarchitecture,all88barrier,quality/concurrency/RIFEchange or rejectedcache/layer/opacity retry.
+
+Evidence:[staged preload report](../qa/staged-smoke-preload/REPORT.md),HYPOTHESIS.md,comparison.json,probe.mjs,verification/preservation;deployment receipt follows.
