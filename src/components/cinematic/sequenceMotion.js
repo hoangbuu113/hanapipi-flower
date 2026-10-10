@@ -64,7 +64,7 @@ export function createSequentialPlayer(videos, {
     const seek = s.seek
     cancelDelay(seek.timer)
     s.seek = null
-    if (pending?.direction === direction && pending.frame === s.frame) {
+    if (pending?.direction === direction && pending.frame === s.frame && intent === direction) {
       active = direction
       pending = null
       swaps++
@@ -87,12 +87,12 @@ export function createSequentialPlayer(videos, {
     })
   }
   function seek(s, direction, frame) {
-    if (s.seek || s.video.readyState < 2) return false
+    if (s.seek || s.video.seeking || s.video.readyState < 2) return false
     s.video.pause()
-    s.seek = { frame, confirmed: false, started: now(), timer: delay(() => {
+    s.seek = { frame, confirmed: false, timedOut: false, started: now(), timer: delay(() => {
       if (disposed) return
-      s.seek = null
-      if (pending?.direction === direction) pending = null
+      // Keep ownership until native completion; latest target remains numeric.
+      s.seek.timedOut = true
       onError('Motion synchronization timed out; outgoing frame retained')
     }, 1500) }
     arm(s, direction)
@@ -157,7 +157,8 @@ export function createSequentialPlayer(videos, {
       }
     }
     onMotion({ position, target, active, rate: state[active].video.playbackRate, swaps, corrections, pending: Boolean(pending) })
-    if (!idle || pending || Object.values(state).some(s => s.seek)) schedule()
+    const pendingCanProgress = pending && !state[pending.direction].seek?.timedOut
+    if (!idle || pendingCanProgress || Object.values(state).some(s => s.seek && !s.seek.timedOut)) schedule()
     else previous = 0
   }
   for (const [direction, s] of Object.entries(state)) {
@@ -173,6 +174,6 @@ export function createSequentialPlayer(videos, {
     reset() { pauseAll(); for (const s of Object.values(state)) { if (s.callback) s.video.cancelVideoFrameCallback(s.callback); s.callback = 0; s.frame = -1; if (s.seek) cancelDelay(s.seek.timer); s.seek = null } pending = null; presented = -1; active = intent = 'forward'; onDirection(active, 0); schedule() },
     dispose() { disposed = true; pauseAll(); cancelFrame(raf); for (const s of Object.values(state)) { if (s.callback) s.video.cancelVideoFrameCallback(s.callback); if (s.seek) cancelDelay(s.seek.timer); s.video.removeEventListener('loadeddata', s.loaded); s.video.removeEventListener('seeked', s.endedSeek) } },
     getState: () => ({ target, position, active, presented, pending, swaps, corrections,
-      seeks: Object.fromEntries(Object.entries(state).map(([direction, s]) => [direction, { frame: s.frame, requested: s.seek?.frame ?? null, confirmed: s.seek?.confirmed ?? false, age: s.seek ? now() - s.seek.started : 0, nativeSeeking: s.video.seeking }])) }),
+      seeks: Object.fromEntries(Object.entries(state).map(([direction, s]) => [direction, { frame: s.frame, requested: s.seek?.frame ?? null, confirmed: s.seek?.confirmed ?? false, timedOut: s.seek?.timedOut ?? false, age: s.seek ? now() - s.seek.started : 0, nativeSeeking: s.video.seeking }])) }),
   }
 }
