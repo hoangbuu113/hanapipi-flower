@@ -30,7 +30,8 @@
     "test:order": "node --import ./test/register-assets.js --test test/order-checkout.test.js test/orders-read.test.js test/order-payment.test.js test/admin-orders.test.js test/order-momo.test.js test/order-idempotency.test.js",
     "lint": "oxlint",
     "test:worker": "node --import ./test/register-assets.js --test test/worker-api.test.js test/rate-limit.test.js test/csp-headers.test.js test/consultations.test.js test/public-commerce.test.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:cinema-preview": "node scripts/cinematic/build-preview.mjs"
   },
   "dependencies": {
     "@clerk/backend": "3.18.1",

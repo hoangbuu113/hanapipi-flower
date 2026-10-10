@@ -1,0 +1,151 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "hanapipi-flower-prod",
+  "main": "./src/cinemaPreviewWorker.js",
+  "compatibility_date": "2026-05-22",
+  "secrets": {
+    "required": [
+      "GROQ_API_KEY",
+      "CLERK_JWT_KEY",
+      "ORDER_FULFILMENT_KEY",
+      "RATE_LIMIT_KEY_SECRET"
+    ]
+  },
+  "vars": {
+    "API_V1_ENABLED": "false",
+    "PUBLIC_COMMERCE_MODE": "consultation",
+    "API_ALLOWED_ORIGINS": "https://hanapipi-flower-prod.hutstudio.workers.dev",
+    "CLERK_AUTHORIZED_PARTIES": "https://hanapipi-flower-prod.hutstudio.workers.dev",
+    "MOMO_ACCOUNT_NAME": "Trần Huỳnh Bảo Hân",
+    "MOMO_PHONE_NUMBER": "0335618019",
+    "RATE_LIMITING_ENABLED": "true"
+  },
+  "ratelimits": [
+    {
+      "name": "CONSULTATION_RATE_LIMITER",
+      "namespace_id": "1189660668",
+      "simple": {
+        "limit": 3,
+        "period": 60
+      }
+    },
+    {
+      "name": "ADDRESS_MUTATION_RATE_LIMITER",
+      "namespace_id": "1189660666",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    },
+    {
+      "name": "CONCIERGE_RATE_LIMITER",
+      "namespace_id": "1281655824",
+      "simple": {
+        "limit": 6,
+        "period": 60
+      }
+    },
+    {
+      "name": "ORDER_RATE_LIMITER",
+      "namespace_id": "1189660665",
+      "simple": {
+        "limit": 5,
+        "period": 60
+      }
+    },
+    {
+      "name": "ADMIN_MUTATION_RATE_LIMITER",
+      "namespace_id": "1299462244",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hanapipi-flower-prod",
+      "database_id": "3bd1a9f0-c971-4e93-b6c5-4fa0f8a8e368",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_BUCKET",
+      "bucket_name": "hanapipi-media-prod"
+    }
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "env": {
+    "staging": {
+      "name": "hanapipi-flower",
+      "secrets": {
+        "required": [
+          "CLERK_JWT_KEY",
+          "GROQ_API_KEY",
+          "ORDER_FULFILMENT_KEY",
+          "RATE_LIMIT_KEY_SECRET"
+        ]
+      },
+      "vars": {
+        "API_V1_ENABLED": "true",
+        "PUBLIC_COMMERCE_MODE": "consultation",
+        "API_ALLOWED_ORIGINS": "https://hanapipi-flower.hutstudio.workers.dev",
+        "CLERK_AUTHORIZED_PARTIES": "https://hanapipi-flower.hutstudio.workers.dev",
+        "MOMO_ACCOUNT_NAME": "Trần Huỳnh Bảo Hân",
+        "MOMO_PHONE_NUMBER": "0335618019",
+        "RATE_LIMITING_ENABLED": "false",
+        "CONCIERGE_RATE_LIMITING_ENABLED": "true",
+        "ADDRESS_RATE_LIMITING_ENABLED": "true",
+        "CONSULTATION_RATE_LIMITING_ENABLED": "true"
+      },
+      "ratelimits": [
+        {
+          "name": "CONSULTATION_RATE_LIMITER",
+          "namespace_id": "1189660669",
+          "simple": {
+            "limit": 3,
+            "period": 60
+          }
+        },
+        {
+          "name": "ADDRESS_MUTATION_RATE_LIMITER",
+          "namespace_id": "1189660667",
+          "simple": {
+            "limit": 20,
+            "period": 60
+          }
+        },
+        {
+          "name": "CONCIERGE_RATE_LIMITER",
+          "namespace_id": "1281655825",
+          "simple": {
+            "limit": 6,
+            "period": 60
+          }
+        }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "hanapipi-flower-staging",
+          "database_id": "dd0c2d87-889f-4fdf-b15e-b553ee53ccd4",
+          "migrations_dir": "drizzle"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "MEDIA_BUCKET",
+          "bucket_name": "hanapipi-media-staging"
+        }
+      ],
+      "preview_urls": true
+    }
+  },
+  "preview_urls": true
+}

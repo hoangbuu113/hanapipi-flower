@@ -1,4 +1,4 @@
-import { lazy } from 'react'
+import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import SiteLayout from './layouts/SiteLayout'
 import HomePage from './pages/HomePage'
@@ -19,6 +19,10 @@ const CheckoutSuccessPage = lazy(() => import('./pages/CheckoutSuccessPage'))
 const AccountPage = lazy(() => import('./pages/AccountPage'))
 const FlowerAlreadyTakenPage = lazy(() => import('./pages/FlowerAlreadyTakenPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+
+const cinemaPublicPreview = import.meta.env.VITE_CINEMA_PUBLIC_PREVIEW === '1'
+const CinematicLabPage = (import.meta.env.DEV || cinemaPublicPreview) ? lazy(() => import('./pages/CinematicLabRoute')) : null
+const isLocalCinematicLab = cinemaPublicPreview || (import.meta.env.DEV && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname))
 
 const TypographyTest = lazy(() => import('./pages/TypographyTest'))
 
@@ -106,6 +110,7 @@ const routeContent = {
 function App() {
   return (
     <Routes>
+      {isLocalCinematicLab && <Route path="cinematic-lab" element={<Suspense fallback={<main className="lab-loading" role="status">Đang tải trải nghiệm hoa…</main>}><CinematicLabPage /></Suspense>} />}
       <Route element={<SiteLayout />}>
         <Route index element={<HomePage />} />
         <Route path="shop" element={<ShopPage />} />

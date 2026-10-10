@@ -1,0 +1,29 @@
+{
+  "storage": "existing hanapipi-media-staging R2 bucket",
+  "files": [
+    {
+      "file": "sequence-rife48-1080p-gop4.mp4",
+      "key": "cinemalab-preview/20261010-a8ae71e/sequence-rife48-1080p-gop4.mp4",
+      "bytes": 72659781,
+      "sha256": "d169aac75af688663ce790c82c643b246940070005c7815b0b7f01af3a1db730"
+    },
+    {
+      "file": "sequence-rife48-1080p-gop4-reverse.mp4",
+      "key": "cinemalab-preview/20261010-a8ae71e/sequence-rife48-1080p-gop4-reverse.mp4",
+      "bytes": 69013893,
+      "sha256": "a275261eb772d62c2452379b840cb02d332c227b36ab85fb1d01389bd3dfba53"
+    },
+    {
+      "file": "sequence-rife48-1440p-gop4.mp4",
+      "key": "cinemalab-preview/20261010-a8ae71e/sequence-rife48-1440p-gop4.mp4",
+      "bytes": 105388199,
+      "sha256": "cd4dc13d8849cbd27db1bb75fd7ad5621c5637fa8b7daebfd0f043d8f085dd7d"
+    },
+    {
+      "file": "sequence-rife48-1440p-gop4-reverse.mp4",
+      "key": "cinemalab-preview/20261010-a8ae71e/sequence-rife48-1440p-gop4-reverse.mp4",
+      "bytes": 100141362,
+      "sha256": "a5dd264679621689e14145e7c4321ef64d919c9526fac7f06ee44525fb319493"
+    }
+  ]
+}
