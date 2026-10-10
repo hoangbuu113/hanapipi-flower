@@ -11,6 +11,7 @@ import HeadlineText from '../components/cinematic/HeadlineText.jsx'
 import { holdHeadlineForFonts, preloadHeadlineFonts } from '../components/cinematic/headlineGraphemes.js'
 import useChapterScroll from '../components/cinematic/useChapterScroll'
 import { TOTAL_SCROLL } from '../components/cinematic/sequenceConfig'
+import { startCinematicTelemetry } from '../components/cinematic/cinematicTelemetry.js'
 import SmokeTransition from '../components/cinematic/SmokeTransition.jsx'
 import { useSmokeTransition } from '../components/cinematic/useSmokeTransition.js'
 import ScrollFrameSequence from '../components/cinematic/ScrollFrameSequence'
@@ -59,6 +60,7 @@ const reducedChapterChrome = CHAPTERS.map((chapter, index) => <div key={chapter.
 </div>)
 
 export default function CinematicLabPage() {
+  useEffect(startCinematicTelemetry, [])
   const scrollRegion = useRef(null)
   const displayScrollRef = useRef(null)
   const copyRegion = useRef(null)

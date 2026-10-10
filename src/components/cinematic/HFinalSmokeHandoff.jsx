@@ -1,3 +1,4 @@
+import { cinematicTelemetry } from './cinematicTelemetry.js'
 import { memo, useEffect, useLayoutEffect, useRef } from 'react'
 import { followSmokeChannel } from './smokeRendererUtils.js'
 import { createHFinalFrameStore, hFinalCover, hFinalFrameAt, H_FINAL_TIMELINE } from './hFinalSmoke.js'
@@ -15,6 +16,8 @@ export default memo(function HFinalSmokeHandoff({ displayScrollRef, settings, de
       if (lastVisible !== state.visible) container.style.visibility = state.visible ? 'visible' : 'hidden'
       container.dataset.renderer = 'h-final-png-sequence'
       if (targetIndex !== index) { container.dataset.targetFrame = String(index + 1); targetIndex = index }
+      const requestedIndex = cinematicTelemetry ? hFinalFrameAt((state.requestedProgress ?? state.progress) * H_FINAL_TIMELINE.duration) : index
+      cinematicTelemetry?.smokeFrame(requestedIndex + 1, Boolean(store.get(requestedIndex)), lastIndex + 1)
       const wasVisible = lastVisible; lastVisible = state.visible
       // Keep the reverse neighborhood hot; release decoded buffers only well
       // inside RIFE. Encoded PNGs and native timing remain unchanged.
@@ -34,6 +37,8 @@ export default memo(function HFinalSmokeHandoff({ displayScrollRef, settings, de
           if (diagnostics.drawn.length > 12000) diagnostics.drawn.shift()
         }
         diagnostics.maxDrawMs = Math.max(diagnostics.maxDrawMs, performance.now() - start)
+        cinematicTelemetry?.record('draw', index + 1, performance.now() - start)
+        cinematicTelemetry?.smokeFrame(requestedIndex + 1, Boolean(store.get(requestedIndex)), index + 1)
         lastIndex = index; container.dataset.nativeFrame = String(index + 1); store.hold(index)
       }
       publishDiagnostics()

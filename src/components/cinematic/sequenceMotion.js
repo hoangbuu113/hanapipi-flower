@@ -1,3 +1,4 @@
+import { cinematicTelemetry } from './cinematicTelemetry.js'
 import { SEQUENCE_TIMELINE, SEQUENCE_TIMING } from './sequenceConfig.js'
 import { positionAtProgress } from './sequenceTimeline.js'
 import { createVideoScrubber, sequenceFrameAt } from './videoSequence.js'
@@ -70,6 +71,7 @@ export function createSequentialPlayer(videos, {
       swaps++
       onDirection(active, now() - seek.started)
     }
+    if (seek.timedOut) cinematicTelemetry?.record('recovery', direction === 'reverse' ? 1 : 0, seek.frame + 1, sequenceFrameAt(target / timeline.duration, timeline) + 1)
     emit(s, direction, now() - seek.started)
     schedule()
   }
@@ -93,6 +95,7 @@ export function createSequentialPlayer(videos, {
       if (disposed) return
       // Keep ownership until native completion; latest target remains numeric.
       s.seek.timedOut = true
+      cinematicTelemetry?.record('watchdog', direction === 'reverse' ? 1 : 0, frame + 1)
       onError('Motion synchronization timed out; outgoing frame retained')
     }, 1500) }
     arm(s, direction)

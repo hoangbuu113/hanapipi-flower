@@ -1,3 +1,4 @@
+import { cinematicTelemetry } from './cinematicTelemetry.js'
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { createSmokeScrub } from './smokeScrub.js'
 export function smokeViewChanged(previous, next) {
@@ -18,6 +19,8 @@ export function useSmokeTransition({ enabled, displayScrollRef, renderSectionsOn
     const params = new URLSearchParams(window.location?.search || '')
     const detailed = import.meta.env?.DEV && (params.has('debug') || params.get('smokeDebug') === '1')
     const stopView = runtime.subscribe(next => {
+      cinematicTelemetry?.observe(next)
+      if (next.gated) cinematicTelemetry?.record('gate', next.requestedProgress, next.progress, next.gated)
       if (!renderSectionsOnly || detailed || smokeViewChanged(rendered, next)) { rendered = next; setView(next) }
     })
     const stopSource = source?.subscribe(state => runtime.observe(state))

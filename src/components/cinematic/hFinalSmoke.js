@@ -1,3 +1,4 @@
+import { cinematicTelemetry } from './cinematicTelemetry.js'
 import { H_FINAL_TIMELINE } from './hFinalSmokeTimeline.js'
 export { H_FINAL_TIMELINE }
 export const MOBILE_SMOKE_WINDOW = 24
@@ -39,8 +40,10 @@ export function createHFinalFrameStore({ mobile = false, timeline = H_FINAL_TIME
   }
   async function decode(i) {
     inFlight.add(i)
+    const telemetry = cinematicTelemetry, decodeStarted = telemetry ? now() : 0
     try {
       const image = await decodeFrame(blobs[i])
+      telemetry?.record('decode', i + 1, now() - decodeStarted, !disposed && !failed && (wanted.has(i) || i === held) ? 1 : 0)
       if (disposed || failed || (!wanted.has(i) && i !== held)) { image.close(); return }
       if (image.width !== 960 || image.height !== 540) { image.close(); throw new Error(`H-final frame ${i + 1} dimensions`) }
       images.set(i, image); stats.decodeCount++; evict(); notify(); checkReady()
