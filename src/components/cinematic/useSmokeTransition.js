@@ -1,3 +1,5 @@
+import { telemetrySmokeFrameAt } from './smokeTelemetryMapping.js'
+import { SMOKE_TRANSITION_TIMING } from './smokeTransitionConfig.js'
 import { cinematicTelemetry } from './cinematicTelemetry.js'
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { createSmokeScrub } from './smokeScrub.js'
@@ -19,8 +21,11 @@ export function useSmokeTransition({ enabled, displayScrollRef, renderSectionsOn
     const params = new URLSearchParams(window.location?.search || '')
     const detailed = import.meta.env?.DEV && (params.has('debug') || params.get('smokeDebug') === '1')
     const stopView = runtime.subscribe(next => {
-      cinematicTelemetry?.observe(next)
-      if (next.gated) cinematicTelemetry?.record('gate', next.requestedProgress, next.progress, next.gated)
+      if (cinematicTelemetry) {
+        const requested = telemetrySmokeFrameAt(next.requestedProgress)
+        const required = ['decode-cover', 'frame0', 'swap-plate'].includes(next.gated) ? SMOKE_TRANSITION_TIMING.safeSwapFrame : requested
+        cinematicTelemetry.observe(next, requested, required)
+      }
       if (!renderSectionsOnly || detailed || smokeViewChanged(rendered, next)) { rendered = next; setView(next) }
     })
     const stopSource = source?.subscribe(state => runtime.observe(state))
