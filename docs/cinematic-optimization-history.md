@@ -316,3 +316,56 @@ Evidence: [corrected phone capture report](../qa/phone-smoke-telemetry/user-capt
 - NEXT: exact pushed-commit preview release, then one clean affected-phone smoke ENTRY capture. Continue slightly after smoke begins; RIFE not required. Keep startup classification F/unresolved until stage timestamps arrive; no optimization.
 
 Evidence: qa/smoke-startup-telemetry/{tests.log,build.log,lint.log,export-verification.json,overhead.json,preservation.json,verify.mjs}. Deployment receipt follows after release without amending runtime commit.
+
+
+## 2026-10-11 ? Smoke STARTUP telemetry v2 preview receipt
+
+- Exact commitba70c841ef33d767cdda32010d4da3a1072474c6 pushed on experiment/hut-flower-3d; clean detached checkout58/58 tests,build:cinema-preview,scoped lint/diff PASS. Existing cinemalab preview versionefa03c1e-4ff0-4b56-af27-5785a869b80f;bundleCinematicLabPage-DmTB7GGd.js SHA2562baff9fcd542e3033aa223c57da3299ef86a25dfe0845b2bfc5df80a5faeee01 byte-matches committed build. Versions-upload only; traffic records unchanged.
+- Phone URL:https://cinemalab-hanapipi-flower.hutstudio.workers.dev/cinematic-lab?cinematicTelemetry=1. Public normal no-flag UI absent; v2 export1494 rows/0dropped/0browser errors,88 request/headers/body/encoded milestones and pump/decode/ready/draw verified. Callback904 samples:p95 .5ms,worst2ms;desktop only,not phone overhead proof.
+-403 static asset/109 media hashes unchanged;1150/220/380 timing/smoke/RIFE/Bloom/timeline preserved,unrelated root work excluded. No runtime optimization/streaming/preload policy change. Stage attribution remains pending new affected-phone entry capture; no need to enter RIFE.
+- This immutable deployment receipt remains local docs-only; pushed runtime is not amended. NEXT:one clean phone smoke-entry reproduction,Copy/Download JSON,then split fetch/pump/decode/readiness/draw wait. No optimization until evidence arrives.
+
+Evidence:qa/smoke-startup-telemetry/REPORT.md,deployment.json,milestones.json,export-verification.json,overhead.json,preservation.json and fresh clean verification logs.
+
+
+## 2026-10-11 - Physical-phone smoke startup v2 capture: A / FETCH BARRIER; STOP
+
+- New affected-phone capture-03 v2 (384x719,DPR2.8125),954rows/4.141s/0dropped;all88 request/headers/body/encoded timestamps. Complements authoritative capture-02;capture-01 not reused. Effective80 draw mapping valid.
+- Demand499.5 -> bootstrap519.4 -> all88 encoded4073.0 -> runnable4073.2 -> first API submit4073.3 -> first decode4077.8 ->24-window ready4099.4 -> cover38 draw4124.2. Hold3624.7ms;3573.5ms/98.6% before all88available,51.2ms after. Pump delay0.2ms;bootstrap delay19.9ms;not a seconds-long scheduling/decode barrier after fetch.
+- Frame1 encoded613.1;initial24 all encoded1769.7;cover38 encoded2967.9. No decode scheduled/submitted until88available;fetch-barrier/runnable counts and source guard agree. Classification A FETCH BARRIER supported for this entry hold:existing all88 barrier delays decoding despite relevant subset available earlier. Underlying wire/cache/server/bandwidth cause NOT established;do not claim network alone or decodeCPU/GPU primary. Capture-02'sunmeasured2.10s fetch partition remains unknown,not retroactively proven.
+- rAFp95 8.5/worst33.3ms;one>=33,zero>=50/100/250;0longtasks/watchdogs/recovery/media events.33decode completions,maxasync15.1ms. RIFE target1/frame0,no native seek during hold;early ready0/1->4. Only1draw;requested already1,thenearlyRIFE auto-stop. Final RIFE completion/continuous smoke rendering NOT VERIFIED;no generic GPU/thermal or repeat RIFE audit.
+- NEXT recommendation,separate task only:controlled progressive decode/readiness of existing requested window while remaining88encoded fetches continue;preserve quality/concurrency/timeline/cover/reverse/re-entry and validate phone wait/memory. No implementation in this pass. Overall performance unresolved;attribution PASS for captured startup only.
+- Runtime/art/media/timing1150/220/380/budgets unchanged;QA/docs-only analysis,analyzer assertions/diff check,no full build/tests needed,no commit/push/deploy. STOP after report.
+
+Evidence:[v2 physical capture report](../qa/smoke-startup-telemetry/user-capture-03/REPORT.md),input.json,analyze.mjs,summary.json,fetch-frames.json.
+
+
+## 2026-10-11 - Progressive smoke readiness REJECT / STOP
+
+- One candidate fromcapture-03A/FETCH BARRIER3624.7ms:progressive encoded decode,current24-window readiness,latest gated target/cover priority;quality/concurrency/retention/timing unchanged.
+- Cheap actual-route finalPNG1500ms-delay control:BASE1966.1ms -> candidate366.2ms firstdraw. Pump1encoded,ready29encoded/24decoded,all88complete. Fast.65 cover38then52 correct;14focused cheaptests/build/scopedlint PASS,controlled source reverse/reentry/25mobilebound/88desktop/4slots/no concurrent duplicate checks PASS. Not a physical-phone result.
+- Actual-route reentry checkpoint FAIL: .1 -> .65 -> .25 -> sequence.2 -> smoke.4;after1000ms visible/native38/target38 remains cover instead of latest approximately31. Repeated checkpoint. Post-RIFE telemetry auto-stopped;internal cause/baseline-relative regression NOT ATTRIBUTED. No additional candidate/profile/RIFE investigation.
+- REJECT/STOP before phone deploy. User allowed PENDING-phone candidate commit/deploy,but cheapgate failed. No physicalAFTER/PASS/commit/push/deploy;publicefa03c1e unchanged. Four runtime/testfiles restored to accepted Git content,scoped diff empty;old mixed lineendings normalized (raw initial SHA may differ),rejected diff/source archived. Unrelated work preserved. Release-checkout source restored;remaining candidate dist is QA-only and MUST NOT be deployed.
+- NEXT:stop;future separately authorized evidence may inspect cover/latest target at re-entry. Do not retry blindly,reduce quality/change concurrency/architecture. All88barrier attribution stands;this candidate not accepted.
+
+Evidence:[report](../qa/progressive-smoke-readiness/REPORT.md),HYPOTHESIS.md,comparison.json,REENTRY/resumed.json,failed logs,rejected.diff,before.json/restored.json.
+
+
+## 2026-10-11 - Progressive smoke re-entry STATE attribution: local correctness PASS
+
+- Archived candidate exact flow .1 -> .65 -> .25 -> sequence.2 -> smoke.4 traced without optimization benchmark. Divergence:requested.3999367/frame31 remains scene sequence/displaycover38/gatedframe0 despite cover decoded because frame0Readyfalse. Anchor/window38 follows required gate;target recomputed,no old epoch/fallback/pump reset defect. Accepted baseline contains same unconditional reverse guard;previous rejection was not proof of progressive-policy-specific regression.
+- Proven cause:smokeScrub ownership crossing required outgoing RIFEframe0 even when restoring chapter background. One state fix checks missingframe0 ONLY when desiredScene===sequence. Cover availability/one swapplate/latest decode/masterrefresh preserved;no RIFE/seek/watchdog/network/GPU investigation or scheduling redesign.
+- Exact deterministic/master mobile+desktop tests and actual route AFTER:decode-cover ->chapter swapplate38 ->decode-target ->latest31 whileframe0FALSE. Final uninstrumented build visible/native31/target31 at1000ms. Trace retained24/inflight4;source fixture held<=25,duplicates/concurrency/reverse/dormancy/cleanup PASS.
+- After reentry PASS,archived progressive store/renderer reapplied byte-identically,no fetch/readiness changes. Functional entry firstdraw376.6ms (priorBASE1966.1/candidate366.2ms context only,no new benchmark),fast.65correct,reverse.25correct,all88complete.61tests/build/scopedlint/diff PASS;403asset/109media hashes preserved,1150/220/380/art/timeline/RIFE unchanged,no QA hooks in final source.
+- DECISION:local reentry state correctness PASS;progressive physical-phone acceptance PENDING. Candidate retained locally only,no commit/push/deploy,public previewefa03c1e unchanged. Previous REJECT is superseded only for local reentry evidence,not performance promotion. NEXT:stop;separately authorized physical-phone preview comparison before acceptance.
+
+Evidence:[state attribution report](../qa/smoke-reentry-attribution/REPORT.md),HYPOTHESIS.md,state-trace.json/timeline-before.json,AFTER/state-trace.json/timeline-after.json,summary.json,FINAL/resumed.json,focused verification/preservation.
+
+
+## 2026-10-11 - TEMP test branch progressive smoke phone candidate: PENDING PHONE TEST / NOT ACCEPTED
+
+- Base authoritative experiment/hut-flower-3d@ba70c841ef33d767cdda32010d4da3a1072474c6 unchanged. Isolated test/smoke-progressive-readiness contains exact archived progressive current-window decode/readiness plus verified one-condition reverse-scene gate fix. No new optimization. Prior REJECT resolved locally by outgoingframe0 gate evidence;not physically accepted yet.
+-61focused tests,production cinema-preview build,scopedlint/diff PASS;normal/telemetry route functional reentry31/31.403asset/109media hashes unchanged;archived store/renderer hashes exact,1150/220/380,RIFE/watchdog/Bloom/art/runway preserved. No rejected QA trace hooks included.
+- Necessary query-only acceptance telemetry:cinematicTelemetry=1&cinematicTelemetryReentry=1 keeps capture active across earlyRIFE back tosmoke (45s/4096bounded cap retained),adds retained bitmap/inflight/required-window counts;standard capture still auto-stops as before,no-flag normal runtime unaffected. No fetch/decode policy change beyond accepted-together candidate. Native export includesRIFEthenreentrydraw31,0errors/0dropped.
+- Push isolated temporary branch and upload exact clean pushedcommit to separate smoke-progressive-test preview alias on existing Worker;do not merge authoritative branch or promote traffic. Release receipt follows. Physical phone BEFORE3624.7ms;AFTER pending.
+- NEXT:one cold/reloaded affected-phone run:entry ->fastforward ->reverse ->sequence ->returnsmoke~.4 ->export. User visual quality confirmation and JSON required before acceptance/merge.

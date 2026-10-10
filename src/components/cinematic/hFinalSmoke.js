@@ -28,10 +28,11 @@ export function createHFinalFrameStore({ mobile = false, timeline = H_FINAL_TIME
   const stats = { total: timeline.frames.length, fetched: 0, decoded: 0, decodeCount: 0, failures: [], ready: false, preloadMs: null, peakDecoded: 0, encodedBytes: 0, mobile }
   const started = now()
   let lastPumpReason = -1
-  const sourceStats = () => telemetry?.source?.(stats.fetched, images.size, wanted.size)
+  const readinessSize = () => dormant ? 0 : Math.min(MOBILE_SMOKE_WINDOW, stats.total)
+  const sourceStats = () => telemetry?.source?.(stats.fetched, images.size, readinessSize())
   function pumpDiagnostic(reason) {
     sourceStats()
-    if (telemetry && reason !== lastPumpReason) { lastPumpReason = reason; telemetry.record('pump', reason, stats.fetched, images.size, anchor + 1, wanted.size, inFlight.size) }
+    if (telemetry && reason !== lastPumpReason) { lastPumpReason = reason; telemetry.record('pump', reason, stats.fetched, images.size, anchor + 1, readinessSize(), inFlight.size) }
   }
   let dormant = false, disposed = false, failed = false, ready = false, loading = false, anchor = 0, direction = 1, held = -1
   let wanted = new Set(mobile ? hFinalWindow(0, 1, stats.total) : timeline.frames.map((_, i) => i))
@@ -39,11 +40,12 @@ export function createHFinalFrameStore({ mobile = false, timeline = H_FINAL_TIME
   const fail = error => { if (disposed || failed) return; failed = true; abort.abort(); stats.failures.push(error.message || String(error)); notify(); onError(error) }
   const evict = () => { for (const [i, image] of images) if (!wanted.has(i) && i !== held) { image.close(); images.delete(i) } }
   const checkReady = () => {
-    if (!ready && stats.fetched === stats.total && [...wanted].every(i => images.has(i))) {
-      telemetry?.record('ready', stats.fetched, images.size, anchor + 1, wanted.size)
-      ready = stats.ready = true; stats.preloadMs = now() - started; clearTimeout(deadline)
+    if (!ready && !dormant && hFinalWindow(anchor, direction, stats.total).every(i => images.has(i))) {
+      telemetry?.record('ready', stats.fetched, images.size, anchor + 1, readinessSize())
+      ready = stats.ready = true; stats.preloadMs = now() - started
       onReady({ ready: true, canPresent: progress => canPresent(hFinalFrameAt(progress * timeline.duration)) })
     }
+    if (ready && stats.fetched === stats.total) clearTimeout(deadline)
   }
   async function decode(i) {
     inFlight.add(i)
@@ -59,17 +61,19 @@ export function createHFinalFrameStore({ mobile = false, timeline = H_FINAL_TIME
     finally { inFlight.delete(i); pump() }
   }
   function pump() {
-    if (disposed || failed || stats.fetched !== stats.total) { pumpDiagnostic(disposed ? 1 : failed ? 2 : 0); return }
+    if (disposed || failed) { pumpDiagnostic(disposed ? 1 : 2); return }
+    checkReady()
     if (dormant || images.size >= wanted.size && [...wanted].every(i => images.has(i))) { pumpDiagnostic(dormant ? 3 : 4); return }
-    pumpDiagnostic(5)
-    const neighbors = [...wanted].filter(i => i !== anchor && !images.has(i) && !inFlight.has(i)).sort((a, b) => Math.abs(a - anchor) - Math.abs(b - anchor) || direction * (b - a))
+    const required = new Set(hFinalWindow(anchor, direction, stats.total))
+    const neighbors = [...wanted].filter(i => i !== anchor && blobs[i] && !images.has(i) && !inFlight.has(i)).sort((a, b) => Number(required.has(b)) - Number(required.has(a)) || Math.abs(a - anchor) - Math.abs(b - anchor) || direction * (b - a))
+    pumpDiagnostic(blobs[anchor] && !images.has(anchor) && !inFlight.has(anchor) || neighbors.length ? 5 : 0)
     for (const i of [anchor, ...neighbors]) if (inFlight.size < 4 && blobs[i] && !images.has(i) && !inFlight.has(i)) { telemetry?.record('decodeSubmit', i + 1, 0, stats.fetched, inFlight.size); void decode(i) }
   }
   function request(index) {
-    if (dormant) setDormant(false)
-    if (index === anchor) return
+    if (index === anchor) { if (dormant) setDormant(false); return }
     if (index !== anchor) direction = index < anchor ? -1 : 1
     anchor = index
+    if (dormant) { setDormant(false); return }
     if (mobile) wanted = new Set(hFinalWindow(index, direction, stats.total))
     evict(); pump()
   }
@@ -86,7 +90,7 @@ export function createHFinalFrameStore({ mobile = false, timeline = H_FINAL_TIME
     async load() {
       if (loading || disposed) return
       loading = true; let cursor = 0
-      telemetry?.bootstrap?.(stats.total, mobile, wanted.size)
+      telemetry?.bootstrap?.(stats.total, mobile, readinessSize())
       sourceStats()
       pumpDiagnostic(stats.fetched === stats.total ? 5 : 0)
       try {
@@ -102,6 +106,7 @@ export function createHFinalFrameStore({ mobile = false, timeline = H_FINAL_TIME
             if (disposed || failed) return
             blobs[i] = blob; stats.fetched++; stats.encodedBytes += blob.size; notify()
             telemetry?.record('fetch', i + 1, 3, blob.size, stats.fetched, stats.total)
+            pump()
           }
         }))
         pump()

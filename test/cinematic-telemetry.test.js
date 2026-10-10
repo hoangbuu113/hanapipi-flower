@@ -13,17 +13,17 @@ test('telemetry follows effective80 runtime PTS including cover/reveal/end rathe
   assert.equal(telemetrySmokeFrameAt(SMOKE_TRANSITION_TIMING.swap),SMOKE_TRANSITION_TIMING.safeSwapFrame)
   for(let i=0;i<80;i++)assert.equal(telemetrySmokeFrameAt(H_FINAL_TIMELINE.frames[i].pts / SMOKE_TRANSITION_TIMING.duration),i+1)
 })
-test('startup instrumentation proves87 encoded cannot start decode;88 enables existing24-frame readiness', async () => {
+test('progressive startup instrumentation decodes current24 while final encoded frame is still pending', async () => {
   let release,decodes=0,ready=false; const events=[]
   const held=new Promise(r=>release=r),telemetry={record:(...row)=>events.push(row),source:()=>{},bootstrap:(...v)=>events.push(['bootstrap',...v])}
   const store=createHFinalFrameStore({mobile:true,telemetry,fetchFrame:async url=>({ok:true,blob:async()=>{if(url.endsWith(H_FINAL_TIMELINE.frames[87].file))await held;return {size:4}}}),decodeFrame:async()=>{decodes++;return {width:960,height:540,close(){}}},onReady:()=>ready=true})
   const loading=store.load();try {
     for(let i=0;i<100&&store.getStats().fetched!==87;i++)await new Promise(r=>setImmediate(r))
-    assert.equal(store.getStats().fetched,87);assert.equal(decodes,0);assert.equal(ready,false)
+    assert.equal(store.getStats().fetched,87);for(let i=0;i<100&&!ready;i++)await new Promise(r=>setImmediate(r));assert.equal(decodes,24);assert.equal(ready,true)
     assert.ok(events.some(x=>x[0]==='pump'&&x[1]===0))
     release();await loading;for(let i=0;i<100&&!ready;i++)await new Promise(r=>setImmediate(r))
     assert.equal(store.getStats().fetched,88);assert.equal(ready,true);assert.equal(store.getStats().decoded,24)
     const encoded=events.findIndex(x=>x[0]==='fetch'&&x[2]===3&&x[4]===88),submit=events.findIndex(x=>x[0]==='decodeSubmit')
-    assert.ok(encoded>=0&&submit>encoded);assert.ok(events.some(x=>x[0]==='pump'&&x[1]===5&&x[2]===88));assert.ok(events.some(x=>x[0]==='ready'&&x[1]===88&&x[2]===24))
+    assert.ok(encoded>submit && submit>=0);assert.ok(events.some(x=>x[0]==='pump'&&x[1]===5&&x[2]<88));assert.ok(events.some(x=>x[0]==='ready'&&x[1]<88&&x[2]===24))
   } finally {release();store.dispose()}
 })

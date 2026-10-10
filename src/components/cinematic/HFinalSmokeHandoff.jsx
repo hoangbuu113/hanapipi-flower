@@ -1,3 +1,4 @@
+import { SMOKE_TRANSITION_TIMING } from './smokeTransitionConfig.js'
 import { telemetrySmokeFrameAt } from './smokeTelemetryMapping.js'
 import { cinematicTelemetry } from './cinematicTelemetry.js'
 import { memo, useEffect, useLayoutEffect, useRef } from 'react'
@@ -22,7 +23,9 @@ export default memo(function HFinalSmokeHandoff({ displayScrollRef, settings, de
       const wasVisible = lastVisible; lastVisible = state.visible
       // Keep the reverse neighborhood hot; release decoded buffers only well
       // inside RIFE. Encoded PNGs and native timing remain unchanged.
-      store.setDormant(state.sequenceProgress > .15)
+      if (state.sequenceProgress > .15 || !state.gated && !state.visible) store.setDormant(state.sequenceProgress > .15)
+      // A gated display may still be frame0: prepare latest required target, not frame0.
+      if (state.gated || state.visible) store.canPresent(state.gated === 'decode-cover' || state.gated === 'frame0' || state.gated === 'swap-plate' ? SMOKE_TRANSITION_TIMING.safeSwapFrame - 1 : state.gated ? telemetrySmokeFrameAt(state.requestedProgress ?? state.progress) - 1 : index)
       if (!state.visible) {
         if (wasVisible !== false) { ctx.clearRect(0, 0, 960, 540); lastIndex = -1; store.hold(-1) }
         publishDiagnostics(); return

@@ -35,8 +35,8 @@ test('exact N38 readiness holds ownership, raw target continues; readiness resum
  // Frame0 may no longer be presented during RIFE. Only an ownership crossing
  // needs frame0; ordinary active RIFE never reclamps to smoke.
  r.c.setReady('video',false);s=r.at(1,.8);assert.equal(s.sequenceProgress,.8)
- s=r.at(.2);assert.equal(s.progress,timing.swap);assert.equal(s.scene,'sequence');assert.equal(s.sequenceProgress,0)
- r.c.setReady('video',true);s=r.at(.2);assert.equal(s.scene,'chapter');s=r.at(.2);assert.equal(s.progress,.2)
+ s=r.at(.2);assert.equal(s.progress,timing.swap);assert.equal(s.scene,'chapter');assert.equal(s.sequenceProgress,0)
+ s=r.at(.2);assert.equal(s.progress,.2);assert.equal(s.frame0Ready,false)
  r.c.observe(raw(0,0,.8));s=r.c.getSnapshot();assert.equal(s.chapterProgress,.8);r.c.dispose()
 })
 test('latest target wins decode hold and one gesture crosses smoke directly into RIFE without replay',()=>{
@@ -77,4 +77,11 @@ test('effective production boundary ends on first fully clear frame without chan
  s=r.at(.999);assert.equal(s.nativeFrame,79);assert.equal(s.visible,true)
  r.at(timing.swap);s=r.at(timing.swap);assert.equal(s.nativeFrame,38)
  s=r.at(timing.reveal);assert.equal(s.nativeFrame,51);r.c.dispose()
+})
+
+test('exact reentry flow restores newest chapter target without waiting on outgoing video frame0',()=>{
+ const r=rig();for(const [p,seq] of [[.1,0],[.65,0],[.25,0],[1,.2]]){let s=r.at(p,seq);if(s.gated==='swap-plate')s=r.at(p,seq);assert.equal(s.progress,p)}
+ r.c.setReady('video',false);let s=r.at(.4);assert.equal(s.gated,'swap-plate');assert.equal(s.nativeFrame,38);assert.equal(s.scene,'chapter');assert.equal(s.requestedProgress,.4);
+ s=r.at(.4);assert.equal(s.progress,.4);assert.equal(s.nativeFrame,31);assert.equal(s.gated,'');assert.equal(s.frame0Ready,false);
+ s=r.at(.65);assert.equal(s.gated,'frame0');assert.equal(s.nativeFrame,38);assert.equal(s.scene,'chapter');r.c.dispose()
 })

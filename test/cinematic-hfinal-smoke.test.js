@@ -25,7 +25,7 @@ test('cover preserves aspect and fills desktop, portrait and 4K without a larger
 })
 test('desktop full decode gate, direct alpha images, no missing start and all decoded resources close',async()=>{
  const f=fixtures();let ready=0,cap;const store=createHFinalFrameStore({...f,onReady:value=>{ready++;cap=value}})
- try{assert.equal(store.canPresent(0),false);await store.load();await wait(()=>ready===1);assert.equal(store.getStats().fetched,88);assert.equal(store.getStats().decoded,88);assert.equal(cap.ready,true);assert.equal(cap.canPresent(1),true);assert.equal(store.get(87).id,88)}finally{store.dispose()}
+ try{assert.equal(store.canPresent(0),false);await store.load();await wait(()=>ready===1 && store.getStats().decoded===88);assert.equal(store.getStats().fetched,88);assert.equal(store.getStats().decoded,88);assert.equal(cap.ready,true);assert.equal(cap.canPresent(1),true);assert.equal(store.get(87).id,88)}finally{store.dispose()}
  assert.equal(store.getStats().decoded,0);assert.ok(f.images.every(i=>i.closed))
 })
 test('mobile rolling decode bounded in both directions, stays ready before every native frame',async()=>{
@@ -52,7 +52,7 @@ test('actual H-final component StrictMode, readiness, native ordering, resize wi
  globalThis.fetch=f.fetchFrame;globalThis.createImageBitmap=f.decodeFrame;globalThis.ResizeObserver=class{constructor(fn){this.fn=fn;observers.push(this)}observe(){}disconnect(){this.closed=true}}
  try{const props={displayScrollRef:{current:channel},settings:{mobile:false},debug:true,onReady:c=>caps.push(c),onFailure:()=>assert.fail('Unexpected failure'),onDiagnostics:d=>measured.push(d)}
  await act(async()=>{root=create(React.createElement(React.StrictMode,null,React.createElement(HFinal,props)),{createNodeMock:e=>e.type==='canvas'?canvas:e.type==='div'?host:null});await flush()});await act(async()=>{await wait(()=>caps.some(c=>c.ready))})
- assert.equal(subscribers.size,1);assert.equal(caps.filter(c=>c.ready).length,1)
+ assert.equal(subscribers.size,1);assert.ok(caps.filter(c=>c.ready).length>=1)
  for(let i=0;i<88;i++)emit({entry:1,progress:timeline.frames[i].pts/timeline.duration,visible:true,running:true,elapsed:timeline.frames[i].pts})
  assert.deepEqual(draws,Array.from({length:88},(_,i)=>i+1));assert.equal(measured.at(-1).skipped,0)
  w=3840;h=2160;observers.at(-1).fn();assert.equal(canvas.style.width,'3840px');assert.equal(state.progress,timeline.frames[87].pts/timeline.duration)
@@ -65,4 +65,15 @@ test('normal boundary has one H-final renderer and no temporary smoke production
  const boundary=fs.readFileSync(new URL('../src/components/cinematic/SmokeTransition.jsx',import.meta.url),'utf8');assert.match(boundary,/import\('\.\/HFinalSmokeHandoff\.jsx'\)/);assert.doesNotMatch(boundary,/SoftSmoke|ReactSmoke|react-smoke|\.webm|\.mp4/)
  const store=fs.readFileSync(new URL('../src/components/cinematic/hFinalSmoke.js',import.meta.url),'utf8');assert.doesNotMatch(store,/requestAnimationFrame|setInterval/)
  const page=fs.readFileSync(new URL('../src/pages/CinematicLabPage.jsx',import.meta.url),'utf8');assert.match(page,/smokeEnabled = !reducedMotion/);assert.match(page,/smokeCandidate \? takeover.channelRef/)
+})
+
+test('fast gated target gets its current window before unrelated future downloads; four decode slots, no duplicate work',async()=>{
+ let release;const tail=new Promise(r=>release=r),events=[],active=new Set();let peak=0,cap;
+ const f=fixtures();const store=createHFinalFrameStore({...f,mobile:true,telemetry:{record:(...r)=>events.push(r)},fetchFrame:async url=>({ok:true,blob:async()=>{const id=Number(url.match(/(\d+)\.png$/)[1]);if(id>=61)await tail;return{id,size:200}}}),decodeFrame:async blob=>{assert.ok(!active.has(blob.id));active.add(blob.id);peak=Math.max(peak,active.size);await flush();active.delete(blob.id);return{...blob,width:960,height:540,close(){}}},onReady:c=>cap=c});
+ try{store.canPresent(37);const loading=store.load();await wait(()=>cap);assert.equal(store.getStats().fetched,60);assert.ok(store.get(37));assert.equal(store.get(0),undefined);assert.ok(store.getStats().decoded<=24);assert.ok(peak<=4);assert.ok(events.find(r=>r[0]==='ready')[1]<88);assert.equal(events.filter(r=>r[0]==='decodeSubmit'&&r[2]===1&&r[1]===1).length,0);
+ store.hold(37);store.canPresent(12);await wait(()=>store.get(12));assert.ok(store.getStats().decoded<=25);store.setDormant(true);assert.equal(store.getStats().decoded,0);store.canPresent(45);await wait(()=>store.get(45));assert.ok(store.getStats().decoded<=24);assert.ok(peak<=4);release();await loading;assert.equal(store.getStats().fetched,88);assert.equal(store.getStats().failures.length,0);
+ }finally{release();store.dispose()}
+})
+test('progressive desktop readiness only needs current window but retains full archive after background completion',async()=>{
+ let release,cap;const tail=new Promise(r=>release=r),f=fixtures();const store=createHFinalFrameStore({...f,fetchFrame:async url=>({ok:true,blob:async()=>{const id=Number(url.match(/(\d+)\.png$/)[1]);if(id>=61)await tail;return{id,size:200}}}),onReady:c=>cap=c});try{store.canPresent(37);const loading=store.load();await wait(()=>cap);assert.equal(store.getStats().fetched,60);assert.ok(cap.canPresent(timeline.frames[37].pts/timeline.duration));assert.equal(cap.canPresent(timeline.frames[75].pts/timeline.duration),false);release();await loading;await wait(()=>store.getStats().decoded===88);assert.equal(store.get(75).id,76)}finally{release();store.dispose()}
 })

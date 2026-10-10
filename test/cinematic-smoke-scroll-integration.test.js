@@ -29,7 +29,7 @@ for(const mobile of [false,true]) test(`${mobile?'mobile':'desktop'} real master
   await move(.72);assert.equal(channel.getSnapshot().gated,'frame0');assert.equal(frames.size,0)
   await act(async()=>view.frame0Ready(true));await settle();assert.ok(Math.abs(channel.getSnapshot().progress-.72)<1e-12)
   await move(1,.45);assert.equal(channel.getSnapshot().scene,'sequence');assert.ok(Math.abs(channel.getSnapshot().sequenceProgress-.45)<1e-12)
-  await act(async()=>view.frame0Ready(false));await settle();await move(.2);assert.equal(channel.getSnapshot().gated,'frame0');assert.equal(channel.getSnapshot().sequenceProgress,0)
+  await act(async()=>view.frame0Ready(false));await settle();await move(.2);assert.equal(channel.getSnapshot().gated,'');assert.ok(Math.abs(channel.getSnapshot().progress-.2)<1e-12);assert.equal(channel.getSnapshot().frame0Ready,false);assert.equal(channel.getSnapshot().sequenceProgress,0)
   await act(async()=>view.frame0Ready(true));await settle();assert.equal(channel.getSnapshot().scene,'chapter')
   height=844;window.innerHeight=height;events.get('resize')();await settle();assert.equal(view.channelRef.current,channel);assert.ok(Math.abs(channel.getSnapshot().progress-.2)<1e-12)
   await act(async()=>root.update(React.createElement(React.StrictMode,null,React.createElement(Probe,{enabled:false}))));assert.equal(events.size,0);assert.equal(frames.size,0);assert.equal(view.channelRef.current,null)

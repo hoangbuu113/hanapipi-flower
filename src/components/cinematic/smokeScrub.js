@@ -36,7 +36,7 @@ export function createSmokeScrub({ requestUpdate = () => {} } = {}) {
         if (!available(timing.swap)) gated = 'decode-cover'
         else {
           progress = timing.swap
-          if (!frame0) gated = 'frame0'
+          if (desiredScene === 'sequence' && !frame0) gated = 'frame0'
           else { scene = desiredScene; gated = 'swap-plate'; requestUpdate() }
         }
       } else if (target === 0 || target === 1 || available(target)) progress = target
