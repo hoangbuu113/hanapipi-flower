@@ -418,3 +418,12 @@ Evidence:[complete phone report](../qa/smoke-phone-acceptance/phone-capture-03/R
 - Cheapgatewins permits stagedtestpreview only;do not promoteauthoritativebranch. PhoneBEFORE3624.7/progressive1732.1/newPENDING. Reverse166.7ms remains separateunresolved;NOinvestigation. Ifphonefails,reject/stop;NOsecondarchitecture,all88barrier,quality/concurrency/RIFEchange or rejectedcache/layer/opacity retry.
 
 Evidence:[staged preload report](../qa/staged-smoke-preload/REPORT.md),HYPOTHESIS.md,comparison.json,probe.mjs,verification/preservation;deployment receipt follows.
+
+
+## 2026-10-11 - Staged test preview receipt: PENDING PHONE TEST / PARTIAL
+
+- Pushed test/smoke-progressive-readiness@7247348f0a6975ea05ff4fa5de13b5f3967b2f31;clean exact-commit64tests/build/scopedlint/diff PASS. Uploadedd6daf190-4a42-4905-a873-3ef1e3787ad3,smoke-staged-test alias. PublicbundleCinematicLabPage-v-lKgX3h.js SHA2565dd12f2d2dc50598c2b096270d842bd62868e1ec818834ef23f34389562cbdef matches. Productiontraffic/progressivealias/authoritativeba70c84 unchanged;no merge.
+- Firstpubliccaptureassertion incomplete despite reentry31/31;QA-onlyrepeat(no runtimechange) capturesRIFEphase4/draw31/all88,1797rows/0drops/0errors,normalroute no telemetryUI. Localgate remains supported;physicaltest pending.
+- PhoneURL:https://smoke-staged-test-hanapipi-flower.hutstudio.workers.dev/cinematic-lab?cinematicTelemetry=1&cinematicTelemetryReentry=1. Comparephone3624.7ms ->progressive1732.1ms ->stagedPENDING. Residualreverse166.7ms unchanged/outofscope. NEXT:one short affected-phone coldrun after2sfirstscreen opportunity,exportJSON + appearance/initialload/entry feedback;then acceptance decision andSTOP. No secondcandidate or optimization.
+
+Evidence:[staged report](../qa/staged-smoke-preload/REPORT.md),deployment.json,public-summary.json,comparison.json,preservation.json,finalchecks andpublicfunctional logs.

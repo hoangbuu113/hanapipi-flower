@@ -156,13 +156,16 @@ test('clicked petal dissolves independently and returns only on its next fall cy
 })
 
 test('native scroll keeps image and copy synchronized, handles resize and releases listeners', async () => {
-  const originals = { window: globalThis.window, observer: globalThis.ResizeObserver, act: globalThis.IS_REACT_ACT_ENVIRONMENT }
+  const originals = { window: globalThis.window, document: globalThis.document, observer: globalThis.ResizeObserver, act: globalThis.IS_REACT_ACT_ENVIRONMENT }
   const listeners = new Map(), frames = new Map()
   const dispatch = type => listeners.get(type)?.forEach(fn => fn())
   let clock = 0, nextFrame = 0, height = SCROLL.desktop * 10, top = -(height - 1000) * .5, disconnected = 0
   let reduced = false, renderer, staticFrameProps
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   globalThis.window = {
+    location: { search: "" },
+    requestIdleCallback: () => 1,
+    cancelIdleCallback() {},
     innerHeight: 1000,
     matchMedia: query => ({ matches: query.includes('reduced-motion') && reduced, addEventListener() {}, removeEventListener() {} }),
     addEventListener: (type, handler) => { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(handler) },
@@ -170,6 +173,7 @@ test('native scroll keeps image and copy synchronized, handles resize and releas
     requestAnimationFrame: handler => { frames.set(++nextFrame, handler); return nextFrame },
     cancelAnimationFrame: id => frames.delete(id),
   }
+  globalThis.document = { readyState: "complete", querySelector: () => null, fonts: { ready: Promise.resolve() } }
   globalThis.ResizeObserver = class { observe() {} disconnect() { disconnected++ } }
   const flush = () => {
     for (let count = 0; frames.size && count < 120; count++) {
@@ -227,6 +231,7 @@ test('native scroll keeps image and copy synchronized, handles resize and releas
   } finally {
     if (renderer) await act(async () => renderer.unmount())
     globalThis.window = originals.window
+    globalThis.document = originals.document
     globalThis.ResizeObserver = originals.observer
     globalThis.IS_REACT_ACT_ENVIRONMENT = originals.act
   }
