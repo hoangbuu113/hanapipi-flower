@@ -27,3 +27,6 @@ backups/
 *.njsproj
 *.sln
 *.sw?
+
+# Generated cinematic investigation evidence (authoritative summaries live in docs).
+qa/

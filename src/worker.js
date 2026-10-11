@@ -1,3 +1,4 @@
+import { serveCinematicMedia } from './server/cinematicMedia.js'
 import {
   createApiRouter,
   isApiPath,
@@ -43,9 +44,18 @@ export function createWorker(options = {}) {
   return {
     async fetch(request, env = {}, context) {
       const url = new URL(request.url)
+      const cinematicMedia = await serveCinematicMedia(request, env)
+      if (cinematicMedia) return cinematicMedia
       if (!isApiPath(url.pathname)) {
         try {
-          return withBaselineSecurityHeaders(await serveStaticRequest(request, env), request)
+          const response = withBaselineSecurityHeaders(await serveStaticRequest(request, env), request)
+          if (url.pathname === '/cinematic-lab' || url.pathname === '/cinematic-lab/') {
+            const headers = new Headers(response.headers)
+            const csp = headers.get('Content-Security-Policy')
+            if (csp) headers.set('Content-Security-Policy', csp.replace(/img-src([^;]*)/u, directive => directive + ' data:'))
+            return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+          }
+          return response
         } catch {
           return withBaselineSecurityHeaders(new Response('Dịch vụ hiện chưa sẵn sàng.', {
             status: 500,

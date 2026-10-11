@@ -1,0 +1,171 @@
+.film-page { background: var(--active-base, #d7d3cc); }
+.film-page .lab-scroll-region { height: var(--cinematic-scroll-height, 660svh); }
+.film-page .lab-stage { min-height: 0; background: var(--active-base, #d7d3cc); }
+.film-page .lab-stage::after { border: 0; }
+.film-page .lab-stage::before { display: none; }
+.chapter-images, .chapter-image-scene, .chapter-world { position: absolute; inset: 0; }
+.chapter-images { z-index: 0; pointer-events: none; }
+.chapter-image-scene[hidden], .film-page .lab-copy[hidden] { display: none; }
+.chapter-world { overflow: hidden; isolation: isolate; background: var(--chapter-tone); }
+
+/* Exact source aspect fixes the previous cover crop. Feather background margins, retaining the lower source silhouette. */
+.chapter-hero { position: absolute; width: min(var(--hero-width), calc(var(--hero-height) * var(--hero-aspect))); aspect-ratio: var(--hero-aspect); top: var(--hero-y); left: var(--hero-x); transform: translate(-50%, -50%); mask-image: var(--subject-mask); mask-composite: intersect; mask-size: 100% 100%; mask-repeat:no-repeat; }
+.chapter-photo { position: absolute; inset: 0; }
+.chapter-photo picture { display: contents; }
+.chapter-photo img { display: block; width: 100%; height: 100%; transform: scale(var(--hero-scale)); }
+.chapter-image-error { position: absolute; top: 45%; left: 10%; width: 80%; text-align: center; color: #827474; font-size: 13px; }
+.film-page .lab-copy { top: 50%; left: 4vw; right: auto; width: 24vw; max-width: 24vw; transform: translateY(-42%); text-align: left; text-shadow: 0 1px 18px #fbf7f1; }
+.film-page .lab-copy--two { left: auto; right: 4vw; bottom: auto; text-align: right; }
+.film-page .lab-copy .lab-kicker { justify-content: flex-start; line-height: 1.6; gap: 9px; }
+.film-page .lab-copy--two .lab-kicker { justify-content: flex-end; }
+.film-page .lab-copy h1, .film-page .lab-copy h2 { font-size: clamp(36px, 3.7vw, 60px); line-height: 1.15; }
+.film-page .lab-copy { --cloud-color: color-mix(in oklab, var(--copy-light) 65%, var(--copy-base)); isolation:isolate; color:#382f2c; text-shadow:none; }
+.film-page .lab-copy em { color:var(--copy-accent); }
+.film-page .lab-copy-content::before { position:absolute; content:''; inset:-34% -28%; z-index:-1; pointer-events:none; background:radial-gradient(ellipse 38% 36% at 30% 37%,color-mix(in srgb,var(--cloud-color) 19%,transparent),transparent 92%),radial-gradient(ellipse 44% 38% at 59% 43%,color-mix(in srgb,var(--cloud-color) 18%,transparent),transparent 95%),radial-gradient(ellipse 37% 31% at 49% 69%,color-mix(in srgb,var(--cloud-color) 15%,transparent),transparent 95%),radial-gradient(ellipse 27% 35% at 76% 62%,color-mix(in srgb,var(--cloud-color) 14%,transparent),transparent 94%),radial-gradient(ellipse 26% 27% at 19% 67%,color-mix(in srgb,var(--cloud-color) 12%,transparent),transparent 96%); }
+.film-page .lab-cta { gap: 24px; }
+.film-page .lab-copy--four { top: 63%; bottom: auto; left: 50%; right: auto; width: min(68vw, 660px); max-width: none; transform: translate(-50%, -50%); text-align: center; color: #382e2d; text-shadow: 0 1px 10px rgb(255 250 246 / 45%); }
+.film-page .lab-copy--four .lab-copy-content::before { inset:-48% -18%; }
+.film-page .lab-copy--four h2 em { color: var(--copy-accent); }
+.film-page .lab-copy--four .lab-cta { color: #382e2d; background: color-mix(in srgb,var(--cloud-color) 70%,transparent); border-color: #a77a84; }
+.film-page .lab-copy--four .lab-kicker { justify-content: center; margin-bottom: 10px; }
+.film-page .lab-copy--four h2 { font-size: clamp(34px, 2.8vw, 44px); }
+.film-page .lab-copy--four .lab-cta { margin-top: 16px; min-height: 46px; }
+@media (max-width: 900px) {
+  .chapter-hero { width: min(var(--mobile-hero-width), calc(var(--mobile-hero-height) * var(--hero-aspect))); top: 32%; left: 50%; }
+  .film-page .lab-copy, .film-page .lab-copy--two, .film-page .lab-copy--three { top: auto; bottom: 11%; right: 28px; left: 28px; width: auto; max-width: none; transform: none; text-align: left; }
+  .film-page .lab-copy .lab-kicker { justify-content: flex-start; }
+  .film-page .lab-copy h1, .film-page .lab-copy h2 { font-size: clamp(38px, 7vw, 60px); }
+  .film-page .lab-copy--four { top: 59%; bottom: auto; right: 12px; left: 12px; width: auto; max-width: none; transform: translateY(-50%); text-align: center; }
+  .film-page .lab-copy--four .lab-copy-content::before { inset: -45px -15px; }
+  .film-page .lab-copy--four .lab-kicker { justify-content: center; }
+  .film-page .lab-copy--four h2 { font-size: clamp(30px, 5vw, 40px); }
+}
+@media (max-width: 700px) {
+  .chapter-hero { top: var(--mobile-hero-y); }
+  .film-page .lab-copy h1, .film-page .lab-copy h2 { font-size: clamp(36px, 10vw, 46px); }
+  .film-page .lab-copy--four h2 { font-size: clamp(29px, 8vw, 36px); }
+}
+@media (max-height: 620px) and (max-width: 900px) {
+  .chapter-hero { --mobile-hero-height: var(--short-hero-height) !important; top: 30%; }
+  .film-page .lab-copy h1, .film-page .lab-copy h2 { font-size: 34px; }
+  .film-page .lab-copy--four h2 { font-size: 28px; }
+  .film-page .lab-kicker { margin-bottom: 10px; }
+  .film-page .lab-cta { margin-top: 15px; min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .film-page .lab-stage { min-height: 900px; }
+  .film-page .lab-copy, .film-page .lab-copy--two, .film-page .lab-copy--three, .film-page .lab-copy--four { position: relative; inset: auto; max-width: 680px; width: auto; transform: none; margin: 0 auto 75px; text-align: left; }
+  .film-page .lab-copy .lab-kicker { justify-content: flex-start; }
+  .film-page .lab-copy--four { text-align: center; }
+
+  .film-page .lab-copy--four .lab-kicker { justify-content: center; }
+  .film-page .lab-copy--one { margin-top: 0; }
+  .film-page .lab-copy .chapter-hero { position: relative; inset: auto; margin: 0 auto 28px; transform: none; --mobile-hero-height: 42svh; width: min(90vw, calc(42svh * var(--hero-aspect))); }
+}
+
+.chapter-experience { position: absolute; inset: 0; pointer-events: none; }
+
+
+/* Breathing Light Field: one ambient direction, two broad color fields. */
+.chapter-world::after { content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 65% 85% at 20% 40%,rgb(255 246 234 / 3%),transparent);animation:hanapipi-light-breathe 20s ease-in-out infinite; }
+@keyframes hanapipi-light-breathe { 0%, 100% { transform: translate3d(-1vw, .6vh, 0) scale(1); } 50% { transform: translate3d(1vw, -.6vh, 0) scale(1.025); } }
+@media (max-height: 620px) and (max-width: 900px) { .film-page .lab-copy--four { top: 60%; } .film-page .lab-copy--four h2 { font-size: 26px; } .film-page .lab-copy--four .lab-kicker { font-size: 8px; gap: 8px; } }
+@media (prefers-reduced-motion: reduce) { .chapter-world::after { animation: none; } .film-page .lab-copy--four { inset: auto; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .film-page.lab-page--reduced .lab-scroll-region { height: auto; }
+  .film-page.lab-page--reduced .lab-copy { isolation: isolate; }
+  .film-page.lab-page--reduced .lab-copy .chapter-world { z-index: -2; inset: -50px -30px; mask-image: linear-gradient(to bottom, transparent, black 12%, black 85%, transparent); }
+}
+
+.film-page .lab-copy-content { position:relative; isolation:isolate; }
+
+/* Overscan one photograph so its feather cannot leave white side gutters.
+   Use the existing panorama on landscape desktops, with the base anchored low. */
+@media (min-width: 901px) and (prefers-reduced-motion: no-preference) {
+  .chapter-hero--one, .chapter-hero--two, .chapter-hero--three { width: max(106vw, 143svh); mask-image: none; }
+  .chapter-hero--three { top: 70%; transform: translate(-50%, -70%); }
+}
+@media (min-width: 901px) and (min-aspect-ratio: 3/2) and (prefers-reduced-motion: no-preference) {
+  .chapter-hero { width: max(106vw, 312svh); aspect-ratio: 3; top: 50%; left: 50%; }
+  .chapter-hero--three { top: 70%; transform: translate(-50%, -70%); }
+}
+
+/* Photographs remain stationary beneath the transition materials. */
+.chapter-scene-content { position: absolute; inset: 0; }
+/* One isolated viewport surface prevents photo swaps from invalidating the iris.
+   Keep petals and pigment in that surface without per-petal layer promotion. */
+.chapter-bloom-iris { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: hidden; pointer-events: none; contain: paint; isolation: isolate; transform: translateZ(0); will-change: transform; }
+.chapter-bloom-base { position: absolute; inset: 0; width: 100%; height: 100%; }
+.chapter-bloom-petal { position: absolute; left: 50%; top: 50%; }
+.chapter-bloom-base > svg, .chapter-bloom-petal > svg, .chapter-bloom-pigment > svg { display: block; width: 100%; height: 100%; }
+.chapter-bloom-pigment { position: absolute; inset: 0; pointer-events: none; }
+
+@media (min-width: 901px) and (min-aspect-ratio: 3/2) and (prefers-reduced-motion: no-preference) {
+  .chapter-hero--four { width: min(max(112vw, 336svh), 397.6svh); }
+}
+
+/* Sheer ivory panels part at the center only during the final handoff. */
+.chapter-sheer-curtains { position: absolute; inset: 0; z-index: 3; overflow: clip; pointer-events: none; }
+.chapter-sheer-curtain { position: absolute; top: 0; bottom: 0; width: 50%; }
+.chapter-sheer-curtain--left { left: 0; }
+.chapter-sheer-curtain--right { right: 0; }
+
+/* Both sides meet from top to bottom, with the trailing hems swept outward. */
+.chapter-silk-drape { position: absolute; inset: 0; width: 100%; height: 100%; }
+.chapter-sheer-curtain--right .chapter-silk-drape { transform: scaleX(-1); }
+
+/* Pigment and paper cover the scene before the new photograph is revealed. */
+.chapter-paint-wash { position: absolute; inset: 0; z-index: 2; pointer-events: none; mask-repeat: no-repeat; mask-position: center; background: var(--paint-0); overflow: hidden; }
+.chapter-paint-pigment { display: block; width: 100%; height: 100%; }
+.chapter-paint-drag--left { transform: translate(calc(var(--paint-drag) * -90px), calc(var(--paint-drag) * -20px)); }
+.chapter-paint-drag--right { transform: translate(calc(var(--paint-drag) * 90px), calc(var(--paint-drag) * 20px)); }
+
+
+/* A few photographic petals drift only over the final settled scene, below the copy. */
+.chapter-final-petals { position: absolute; inset: 0; z-index: 2; overflow: clip; pointer-events: none; perspective: 700px; }
+.chapter-final-petal { position: absolute; top: -80px; left: var(--petal-x); width: var(--petal-size); aspect-ratio: 1; pointer-events: none; cursor: pointer; opacity: 0; animation: chapter-petal-fall 26s linear var(--petal-delay) infinite; }
+.chapter-final-petal-sprite { display: block; width: 100%; height: 100%; pointer-events: inherit; background: url('/media/hanapipi/petals/bouquet-04-petal-atlas.png') no-repeat; background-size: 200% 200%; }
+
+/* A touched petal dissolves into a quiet rose halo and six tiny luminous motes. */
+.chapter-final-petal[data-dissolving] .chapter-final-petal-sprite { pointer-events: none; animation: chapter-petal-dissolve 1.3s ease-out forwards; }
+.chapter-petal-glow, .chapter-petal-dust { position: absolute; top: 50%; left: 50%; opacity: 0; pointer-events: none; }
+.chapter-petal-glow { width: 76%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(ellipse, rgb(255 238 225 / 65%), rgb(207 151 162 / 28%) 38%, transparent 72%); }
+.chapter-petal-dust { width: var(--dust-size); aspect-ratio: 1; border-radius: 50%; background: #fff0dd; box-shadow: 0 0 4px rgb(194 123 142 / 65%); }
+.chapter-final-petal[data-dissolving] .chapter-petal-glow { animation: chapter-petal-glow 1.3s ease-out forwards; }
+.chapter-final-petal[data-dissolving] .chapter-petal-dust { animation: chapter-petal-dust 1.1s ease-out var(--dust-delay) forwards; }
+@keyframes chapter-petal-dissolve {
+  0% { opacity: 1; filter: brightness(1) blur(0); transform: scale(1); }
+  25% { opacity: .85; filter: brightness(1.12) blur(.4px); transform: scale(1.04); }
+  65% { opacity: .24; filter: brightness(1.15) blur(1.5px); transform: scale(.9) rotate(8deg); }
+  100% { opacity: 0; filter: brightness(1.15) blur(2px); transform: scale(.75) rotate(12deg); }
+}
+@keyframes chapter-petal-glow {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.55); }
+  25% { opacity: .65; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.65); }
+}
+@keyframes chapter-petal-dust {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.3); }
+  20% { opacity: .8; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dust-x)), calc(-50% + var(--dust-y))) scale(.3); }
+}
+
+@keyframes chapter-petal-fall {
+  0% { opacity: 0; pointer-events: none; transform: translate3d(0, -8svh, 0) rotateZ(var(--petal-turn)) rotateY(15deg); }
+  4% { opacity: .94; pointer-events: auto; }
+  12% { transform: translate3d(calc(var(--petal-drift) * .15), 14svh, 0) rotateZ(calc(var(--petal-turn) + 28deg)) rotateY(-20deg); }
+  28% { transform: translate3d(calc(var(--petal-drift) * .4), 44svh, 0) rotateZ(calc(var(--petal-turn) - 12deg)) rotateY(35deg); }
+  46% { transform: translate3d(calc(var(--petal-drift) * .85), 79svh, 0) rotateZ(calc(var(--petal-turn) + 48deg)) rotateY(-26deg); }
+  52% { opacity: .86; pointer-events: auto; }
+  58%, 100% { opacity: 0; pointer-events: none; transform: translate3d(var(--petal-drift), 112svh, 0) rotateZ(calc(var(--petal-turn) + 70deg)) rotateY(15deg); }
+}
+@media (max-width: 900px) { .chapter-final-petal { width: 48px; } .chapter-final-petal:nth-child(n + 5) { display: none; } }
+@media (prefers-reduced-motion: reduce) { .chapter-final-petals { display: none; } .chapter-final-petal { animation: none; } }
+
+/* Preserve chapter animation state while the opaque sequence completely covers it. */
+.chapter-experience[data-sequence-covered] *, .chapter-experience[data-sequence-covered] ::after { animation-play-state: paused !important; }
+
+/* Profiled isolation: changing pigment/masks must not invalidate the stationary
+   photograph surface. Only the two transient viewport effects own these layers. */
+.chapter-paint-wash, .chapter-sheer-curtains { contain: paint; isolation: isolate; transform: translateZ(0); }
