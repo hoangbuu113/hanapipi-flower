@@ -27,3 +27,11 @@ qa/phase9–phase13 are unrelated commerce evidence: KEEP. Existing dirty tempor
 ## Release / cleanup result
 
 Pending final public verification. Branch/service retirement occurs only afterward. Preview aliases are version URL access on ONE Worker, not separate services; disable preview URLs, retain historical versions and MAIN hostname. Dormant prod/staging service reservations and unrelated Worker retained.
+
+## Completed result — 2026-10-11T01:40:27.176Z
+
+Removed4,832 reviewed files (4,828 QA files +4 obsolete untracked source/document/test files),7,303,808,212 bytes (~7.30GB),43 historical cinematic QA subtrees. Extras: CloudHandoff.jsx,cinematic README.md,cinematic-react-smoke.test.js,cinematic-soft-smoke.test.js; no current consumers. Individual-path deletion verified workspace boundaries,size,regular-file status; no recursion through junctions.
+
+Preserved qa/phase9–phase13; five qa/temp worktrees (Windows denied moves; four dirty),all current production assets,R2 media,required tests,37 unrelated changed-line deltas and unknown offline authoring/media. No Blender/VDB/source-copy restore. Root on active development branch with original user edits unstaged; clean release worktree used for every commit/deploy.
+
+Retired three local cinematic branches; two corresponding remote branches (third remote never existed). ONE archive and ONE active cinematic development branch remain; unrelated MAIN/Smart Bouquet references retained. Known generated raw evidence removed; locked/unknown worktrees explicitly retained rather than claimed deleted.

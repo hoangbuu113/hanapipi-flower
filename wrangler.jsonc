@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "hanapipi-flower-prod",
+  "preview_urls": false,
   "main": "./src/worker.js",
   "compatibility_date": "2026-05-22",
   "secrets": {

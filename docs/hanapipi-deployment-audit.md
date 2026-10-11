@@ -46,3 +46,14 @@ There are no separate cinemalab/smoke Worker services to delete. Safe intended m
 ## Release receipt
 
 Pending route verification and exact pushed-commit deployment. Do not retire aliases until this receipt records successful MAIN and cinematic checks.
+
+## Completed checkpoint — 2026-10-11T01:40:27.176Z
+
+- Exact pushed/verified runtime development/cinematic-lab@40c30a532fc7ab402d73f484168f2bac36a4a472 deployed to existing hanapipi-flower version2bfc6ad7-b489-4954-879e-00126a8d5c3f at100%. No new Worker. Subsequent receipt/config commit adds no runtime or media change.
+- MAIN desktop1440×900/mobile390×844 text/links/image assets/geometry match baseline; screenshot review matches. No cinematic heavy requests on root. Cinematic direct/refresh PASS,0runtime errors,smoke draw/re-entry31/31,forward+reverse RIFE readyState3. Public initial bundle asset hashes equal the verified build.
+- Existing API vars and D1/R2 bindings exactly match protected af3f7932 version (22 bindings). Root CSP unchanged; image-data mask allowance scoped only to cinematic navigation. RIFE Range mapping/objects unchanged.452 protected source/media files equal archive Git identities.
+- Workers.dev enabled:true,previews_enabled:false verified via API. All three aliases and immutable version preview returned404; MAIN / and /cinematic-lab returned200. Historical versions retained,unrelated Worker untouched. Dormant prod/staging records remain without executable script/hostname/routes.
+- Local cinemalab,experiment/hut-flower-3d,test/smoke-progressive-readiness retired after ancestry/remote archive checks. Remote experiment/hut-flower-3d and test/smoke-progressive-readiness retired with exact-SHA leases; cinemalab remote did not exist. MAIN/Smart Bouquet references retained for their unrelated production lineage.
+- Active checkout now development/cinematic-lab;37 original user changed-line deltas match the preserved pre-switch patch exactly,none staged/pushed/deployed. One small router conflict resolved by retaining public lazy import and existing user copy edits.
+- Remaining cleanup constraint: all five qa/temp registered worktree moves were denied by Windows. Four are dirty; keep all unchanged/ignored,not force-deleted. Unknown local authoring/media and unrelated phase9–13 preserved.
+- preview_urls:false recorded in existing Wrangler config so future deployments do not re-enable duplicate public previews. Deployment commands continue to target verified staging-generated name hanapipi-flower.

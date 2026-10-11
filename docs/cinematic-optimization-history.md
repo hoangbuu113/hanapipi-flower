@@ -26,3 +26,10 @@ SVG/art unchanged; entry1150ms, label220ms, headline380ms. Watchdog1500ms recove
 |2026-10-11|Single-domain consolidation|Archive clean/pushed; route integration from MAIN Smart Bouquet lineage. No new visual/optimization; cleanup/release pending|Only routing/deploy/cleanup in this task|
 
 No rejected QA cache/layer/opacity code is production. No quality reduction, new transition, smoke/RIFE/Bloom tuning. Raw traces/scripts/screenshots are generated evidence, not active application dependencies. Full historical narrative remains in the one archive branch.
+
+## 2026-10-11T01:40:27.176Z — Single-domain release and safe cleanup
+
+- Pushed/verified runtime40c30a5,Worker2bfc6ad7 at100%; MAIN root preserved on1440/390,0heavy cinematic requests at /. /cinematic-lab direct/refresh,smoke/RIFE,re-entry31/31 PASS.800 tests,build,lint/diff PASS; one pre-existing CheckoutSuccessPage lint warning. No new performance conclusion.
+- Archivefb84cac clean126 tests/build/lint.43 reviewed QA subtrees/4,832files/~7.30GB removed; raw history compacted. Three old local cinematic branches retired,two remotes retired; cinemalab remote absent. Preview access disabled (aliases+immutable404); MAIN URLs200. No Worker/version deletion.
+- Root active development/cinematic-lab,37 unrelated user edits preserved/excluded. Five locked qa/temp worktrees kept unchanged/ignored; four dirty. Unknown authoring/media/unrelated phase9–13 kept. Existing preview_urls:false prevents future preview resurrection; metadata/receipt changes only.
+- Performance remains PARTIAL; staged physical gate and residual reverse hitch unresolved. No new transition or smoke/RIFE/Bloom optimization. NEXT: ready to build the new lightweight transition/loading architecture; implementation requires a separate task.
